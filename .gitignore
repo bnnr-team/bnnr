@@ -40,7 +40,9 @@ dashboard_web/dist/
 
 # Runtime outputs
 checkpoints/
+checkpoints_*/
 reports/
+reports_*/
 *.pt
 *.pth
 *.log
