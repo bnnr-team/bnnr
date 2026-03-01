@@ -1,0 +1,30 @@
+# BNNR STL-10 comprehensive showcase config
+m_epochs: 15
+max_iterations: 10
+metrics:
+  - accuracy
+  - f1_macro
+  - loss
+selection_metric: accuracy
+selection_mode: max
+checkpoint_dir: checkpoints_stl10
+report_dir: reports_stl10
+xai_enabled: true
+xai_samples: 4
+xai_method: opticam
+dual_xai_report: true
+device: auto
+seed: 42
+save_checkpoints: true
+verbose: true
+early_stopping_patience: 3
+xai_cache_dir: checkpoints_stl10/xai_cache
+xai_cache_samples: 0  # 0 = cache entire dataset (lazy caching fills gaps)
+report_preview_size: 512
+report_xai_size: 512
+event_log_enabled: true
+event_sample_every_epochs: 5
+event_xai_every_epochs: 5
+candidate_pruning_enabled: true
+candidate_pruning_relative_threshold: 0.8
+candidate_pruning_warmup_epochs: 3

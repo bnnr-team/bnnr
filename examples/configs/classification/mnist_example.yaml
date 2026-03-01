@@ -1,0 +1,20 @@
+m_epochs: 5
+max_iterations: 5
+metrics:
+  - accuracy
+  - f1_macro
+  - loss
+selection_metric: accuracy
+selection_mode: max
+checkpoint_dir: checkpoints
+report_dir: reports
+xai_enabled: true
+xai_samples: 4
+xai_method: opticam
+device: auto
+seed: 42
+save_checkpoints: true
+verbose: true
+early_stopping_patience: 2
+xai_cache_dir: checkpoints/xai_cache
+xai_cache_samples: 0  # 0 = cache entire dataset (lazy caching fills gaps)
