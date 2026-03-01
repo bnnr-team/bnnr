@@ -52,8 +52,8 @@ from bnnr import (
     albumentations_available,
     kornia_available,
     load_report,
-    replay_events,
 )
+from bnnr.events import load_events
 from bnnr.augmentations import BaseAugmentation
 from bnnr.icd import AICD, ICD
 from bnnr.xai_cache import XAICache
@@ -355,7 +355,7 @@ def main() -> None:
 
     # ── Results ──────────────────────────────────────────────────────────
     events_path = result.report_json_path.parent / "events.jsonl"
-    events = replay_events(events_path) if events_path.exists() else []
+    events = load_events(events_path) if events_path.exists() else []
 
     print()
     print("=" * 64)
@@ -382,7 +382,7 @@ def main() -> None:
     print(f"  ✓ {len(ckpts)} checkpoint(s) saved")
 
     if events:
-        event_types = {e["event"] for e in events}
+        event_types = {e["type"] for e in events}
         print(f"  ✓ Event types: {sorted(event_types)}")
 
     print()
