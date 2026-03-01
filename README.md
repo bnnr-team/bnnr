@@ -3,9 +3,9 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/bnnr/"><img src="https://img.shields.io/pypi/v/bnnr" alt="PyPI"></a>
-  <a href="https://pypi.org/project/bnnr/"><img src="https://img.shields.io/pypi/pyversions/bnnr" alt="Python"></a>
-  <a href="https://github.com/bnnr-team/bnnr/blob/main/LICENSE"><img src="https://img.shields.io/github/license/bnnr-team/bnnr" alt="License"></a>
+  <a href="https://pypi.org/project/bnnr/"><img src="https://img.shields.io/pypi/v/bnnr?v=1" alt="PyPI"></a>
+  <a href="https://pypi.org/project/bnnr/"><img src="https://img.shields.io/pypi/pyversions/bnnr?v=1" alt="Python"></a>
+  <a href="https://github.com/bnnr-team/bnnr/blob/main/LICENSE"><img src="https://img.shields.io/github/license/bnnr-team/bnnr?v=1" alt="License"></a>
   <a href="https://github.com/bnnr-team/bnnr/actions/workflows/ci.yml"><img src="https://github.com/bnnr-team/bnnr/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
