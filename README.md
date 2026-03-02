@@ -11,7 +11,7 @@
 
 # BNNR (Bulletproof Neural Network Recipe)
 
-BNNR is a PyTorch library and CLI that evaluates augmentation candidates, keeps the best-performing branch by metric, and writes run artifacts for replay in a live dashboard.
+BNNR is a PyTorch toolkit that makes vision models production-ready through a closed loop: train a model, explain its decisions with XAI, improve it with intelligent augmentation, and prove the result with structured reports and a live dashboard.
 
 Supported tasks in code:
 - Classification (`task: classification`)
