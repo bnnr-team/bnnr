@@ -119,8 +119,9 @@ export function AccuracyGainRate({ timeline, selectedPath, task }: Props) {
             />
             <Tooltip
               contentStyle={{ background: cc.tooltipBg, border: `1px solid ${cc.tooltipBorder}`, borderRadius: 8 }}
-              formatter={(value: number, _name: string, props: { payload: typeof bars[number] }) => {
+              formatter={(value: number, _name: string, props) => {
                 const d = props.payload;
+                if (!d) return [String(value), "Gain"];
                 return [
                   `${value > 0 ? "+" : ""}${value.toFixed(2)}pp (${d.start_acc.toFixed(1)}% → ${d.end_acc.toFixed(1)}%)`,
                   "Gain",
