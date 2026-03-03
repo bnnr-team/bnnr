@@ -92,6 +92,14 @@ What you should see in terminal:
 
 Important: in live dashboard mode, process stays alive after training to keep server running. Stop with `Ctrl+C` after your checks.
 
+When using the Python API (not CLI), call `start_dashboard()` **before** `trainer.run()` so the dashboard captures all events from the start:
+
+```python
+from bnnr.dashboard.serve import start_dashboard
+start_dashboard(config.report_dir)
+result = trainer.run()
+```
+
 ## 6) Open dashboard on desktop and mobile
 
 ### Desktop
