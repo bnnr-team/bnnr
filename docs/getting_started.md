@@ -64,6 +64,8 @@ candidate_pruning_enabled: false
 YAML
 ```
 
+For multi-label classification, set `task: multilabel` and use `nn.BCEWithLogitsLoss` as criterion. See [configuration.md](configuration.md) and [golden_path.md](golden_path.md) for full multilabel setup.
+
 ## 5) First run in live dashboard mode (recommended)
 
 Run with dashboard enabled (`--with-dashboard` is default):
