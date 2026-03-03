@@ -299,6 +299,7 @@ def run_data_quality_analysis(
     is_detection: bool = False,
     save_dir: Path | None = None,
     run_dir: Path | None = None,
+    duplicate_threshold: int = DUPLICATE_HAMMING_THRESHOLD,
 ) -> dict[str, Any]:
     """Run duplicate detection + image quality checks.
 
@@ -386,7 +387,7 @@ def run_data_quality_analysis(
         combined_indices = np.concatenate(all_indices)
         duplicate_pairs = find_near_duplicates(
             combined_hashes, combined_indices,
-            threshold=DUPLICATE_HAMMING_THRESHOLD,
+            threshold=duplicate_threshold,
         )
 
     # --- Group duplicates into clusters ---

@@ -84,6 +84,7 @@ class BNNRConfig(BaseModel):
     xai_pruning_threshold: float = 0.0
     adaptive_icd_threshold: bool = False
     xai_cache_force_recompute: bool = False
+    duplicate_hamming_threshold: int = 10
     xai_cache_progress: bool = True
     event_log_enabled: bool = True
     event_sample_every_epochs: int = 1
@@ -2802,6 +2803,7 @@ class BNNRTrainer:
                 is_detection=self._is_detection,
                 save_dir=dq_save_dir,
                 run_dir=dq_run_dir,
+                duplicate_threshold=self.config.duplicate_hamming_threshold,
             )
             profile.update(quality_result)
             dq = quality_result.get("data_quality", {})
