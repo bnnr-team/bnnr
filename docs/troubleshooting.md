@@ -187,3 +187,20 @@ Common choices:
 - ResNet: `model.layer4[-1]`
 - EfficientNet: `model.features[-1][0]`
 - ViT: last attention block (may require custom wrapper)
+
+## 15) Windows: `RuntimeError: An attempt has been made to start a new process`
+
+Cause:
+
+- PyTorch `DataLoader` with `num_workers > 0` on Windows requires `if __name__ == "__main__":` guard.
+
+Fix:
+
+- wrap your training script entry point:
+
+```python
+if __name__ == "__main__":
+    main()
+```
+
+- or set `num_workers=0` in your DataLoader.
