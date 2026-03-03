@@ -173,7 +173,25 @@ python -m bnnr train \
 
 `--without-dashboard` disables only live server. Event logging remains enabled by CLI for post-run replay/export.
 
-## 12) Next pages
+## 12) Loading trained model for inference
+
+After training, load the best checkpoint for inference:
+
+```python
+import torch
+
+ckpt = torch.load(
+    "checkpoints/iter_1_augname.pt",
+    map_location="cpu",
+    weights_only=False,
+)
+model.load_state_dict(ckpt["model_state"])
+model.eval()
+```
+
+See [troubleshooting.md](troubleshooting.md) section 13 for details on checkpoint keys and PyTorch version notes.
+
+## 13) Next pages
 
 - `dashboard.md`
 - `examples.md`

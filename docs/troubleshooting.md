@@ -144,3 +144,23 @@ Fix:
 2. open Network URL manually on phone (not only QR scan),
 3. test with explicit port, e.g. `--dashboard-port 8080`,
 4. allow Python/server traffic for that port in firewall settings.
+
+## 13) Loading BNNR checkpoints for inference
+
+BNNR checkpoints include RNG state for deterministic resume. When loading
+for inference with PyTorch >= 2.6, pass `weights_only=False`:
+
+```python
+import torch
+
+ckpt = torch.load(
+    "checkpoints/iter_1_augname.pt",
+    map_location="cpu",
+    weights_only=False,
+)
+model.load_state_dict(ckpt["model_state"])
+model.eval()
+```
+
+Checkpoint keys: `model_state`, `iteration`, `augmentation_name`, `metrics`,
+`config_snapshot`, `rng_state` (safe to ignore for inference).
