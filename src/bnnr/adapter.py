@@ -56,7 +56,7 @@ class SimpleTorchAdapter:
     ) -> None:
         self.device = str(get_device(device))
         self.model = model.to(self.device)
-        self.criterion = criterion
+        self.criterion = criterion.to(self.device)
         self.optimizer = optimizer
         self.target_layers = target_layers or self._auto_target_layers(model)
         self.multilabel = multilabel
