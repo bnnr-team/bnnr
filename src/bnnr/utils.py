@@ -86,6 +86,8 @@ def set_seed(seed: int, *, deterministic: bool = True) -> None:
 
 
 def get_device(device: str = "auto") -> torch.device:
+    if isinstance(device, torch.device):
+        return device
     device = device.lower()
     if device == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
