@@ -164,3 +164,26 @@ model.eval()
 
 Checkpoint keys: `model_state`, `iteration`, `augmentation_name`, `metrics`,
 `config_snapshot`, `rng_state` (safe to ignore for inference).
+
+## 14) Choosing XAI target layers for SimpleTorchAdapter
+
+By default, `SimpleTorchAdapter` picks the last `Conv2d` layer for XAI.
+To override, pass `target_layers` explicitly:
+
+```python
+# Example: EfficientNet-B0
+target_layer = model.features[-1][0]  # last MBConv block
+
+adapter = SimpleTorchAdapter(
+    model=model,
+    criterion=criterion,
+    optimizer=optimizer,
+    target_layers=[target_layer],
+)
+```
+
+Common choices:
+
+- ResNet: `model.layer4[-1]`
+- EfficientNet: `model.features[-1][0]`
+- ViT: last attention block (may require custom wrapper)
