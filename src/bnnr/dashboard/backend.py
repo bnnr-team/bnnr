@@ -109,10 +109,16 @@ def _resolve_run_dir(run_root: Path, run_id: str) -> Path:
 
 
 def _safe_artifact_path(run_root: Path, path: str) -> Path:
+    resolved_root = run_root.resolve()
     candidate = (run_root / path).resolve()
-    if run_root.resolve() not in candidate.parents:
+    if resolved_root not in candidate.parents:
         raise HTTPException(status_code=400, detail="Invalid artifact path")
     if not candidate.exists() or not candidate.is_file():
+        parts = Path(path).parts
+        if len(parts) > 1:
+            alt = (run_root / Path(*parts[1:])).resolve()
+            if alt.exists() and alt.is_file() and resolved_root in alt.parents:
+                return alt
         raise HTTPException(status_code=404, detail="Artifact not found")
     return candidate
 
