@@ -86,6 +86,9 @@ export type PerClassRow = {
   branch: string;
   accuracy: number;
   support: number;
+  precision?: number;
+  recall?: number;
+  f1?: number;
   xai_insight?: string;
   severity?: "ok" | "warning" | "critical" | "";
   quality_score?: number;

@@ -140,7 +140,7 @@ export function NodeDetailPanel({ node, state, activeRun, offline, onClose }: Pr
         {/* Per-class accuracy */}
         {Object.keys(perClassForBranch).length > 0 && (
           <div className="detail-section">
-            <h4>{runTask === "detection" ? "Per-Class AP" : "Per-Class Accuracy"}</h4>
+            <h4>{runTask === "detection" ? "Per-Class AP" : runTask === "multilabel" ? "Per-Label F1" : "Per-Class Accuracy"}</h4>
             <div className="class-bars">
               {Object.entries(perClassForBranch)
                 .sort(([a], [b]) => Number(a) - Number(b))

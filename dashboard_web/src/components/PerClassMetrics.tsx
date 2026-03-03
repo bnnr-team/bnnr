@@ -26,7 +26,7 @@ interface Props {
 export function PerClassMetrics({ perClassTimeline, task = "classification", classNames }: Props) {
   const cc = useChartColors();
   const isDetection = task === "detection";
-  const yLabel = isDetection ? "AP@0.5 %" : "Accuracy %";
+  const yLabel = isDetection ? "AP@0.5 %" : task === "multilabel" ? "F1 %" : "Accuracy %";
 
   const classKeys = useMemo(
     () => Object.keys(perClassTimeline).sort((a, b) => Number(a) - Number(b)),

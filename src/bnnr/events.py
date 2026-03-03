@@ -365,8 +365,11 @@ def _apply_events_to_state(
                             "iteration": row["iteration"],
                             "epoch": row["epoch"],
                             "branch": row["branch"],
-                            "accuracy": float(metric_row.get("accuracy", 0.0)),
+                            "accuracy": float(metric_row.get("accuracy", metric_row.get("f1", 0.0))),
                             "support": int(metric_row.get("support", 0)),
+                            "precision": float(metric_row.get("precision", 0.0)),
+                            "recall": float(metric_row.get("recall", 0.0)),
+                            "f1": float(metric_row.get("f1", 0.0)),
                         }
                         # Attach per-class XAI insight text if present
                         insight = metric_row.get("xai_insight") or (xai_insights_raw.get(str(cls)) if isinstance(xai_insights_raw, dict) else None)
