@@ -404,6 +404,15 @@ class BNNRTrainer:
                     UserWarning,
                     stacklevel=2,
                 )
+            if criterion_name == "BCELoss":
+                import warnings as _w
+                _w.warn(
+                    f"task='multilabel' with BCELoss detected. BCELoss requires "
+                    f"sigmoid-activated inputs but the adapter passes raw logits. "
+                    f"Use nn.BCEWithLogitsLoss instead for numerical stability.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
     @property
     def _xai_enabled(self) -> bool:
