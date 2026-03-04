@@ -1,0 +1,44 @@
+# BNNR config for CLI ImageFolder datasets (your own data)
+# Usage: bnnr train -c examples/configs/classification/imagefolder_example.yaml \
+#          --dataset imagefolder --data-path /path/to/your/dataset
+#
+# Your dataset directory should look like:
+#   /path/to/your/dataset/
+#   ├── train/
+#   │   ├── class_a/
+#   │   ├── class_b/
+#   │   └── ...
+#   └── val/ (or test/ or validation/)
+#       ├── class_a/
+#       ├── class_b/
+#       └── ...
+
+m_epochs: 5
+max_iterations: 4
+metrics:
+  - accuracy
+  - f1_macro
+  - loss
+selection_metric: accuracy
+selection_mode: max
+
+checkpoint_dir: checkpoints
+report_dir: reports
+
+xai_enabled: true
+xai_samples: 4
+xai_method: opticam
+device: auto
+seed: 42
+
+save_checkpoints: true
+verbose: true
+early_stopping_patience: 2
+
+event_log_enabled: true
+event_sample_every_epochs: 2
+event_xai_every_epochs: 2
+
+candidate_pruning_enabled: true
+candidate_pruning_relative_threshold: 0.8
+candidate_pruning_warmup_epochs: 2

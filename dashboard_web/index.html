@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/logo_dark.png" />
+    <title>BNNR Dashboard</title>
+    <style>
+      /* Prevent flash of wrong theme */
+      html[data-theme="dark"] body { background: #080810; }
+    </style>
+    <script>
+      // Restore persisted theme before first paint
+      (function() {
+        try {
+          var t = localStorage.getItem('bnnr-dashboard-theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t);
+          }
+        } catch(e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

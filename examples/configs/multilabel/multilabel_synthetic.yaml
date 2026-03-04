@@ -1,0 +1,39 @@
+# BNNR multi-label classification config
+# For use with: examples/multilabel/multilabel_demo.py
+#
+# task: "multilabel" auto-sets:
+#   selection_metric → f1_samples
+#   metrics → [f1_samples, f1_macro, accuracy, loss]
+#
+# Here we override with fbeta_2 (recall-heavy F-beta), which is very
+# useful in multi-label settings where missing a label is costly.
+# Other options: fbeta_0.5 (precision-heavy), jaccard_samples, etc.
+# See docs/configuration.md for the full metric list.
+task: multilabel
+m_epochs: 5
+max_iterations: 4
+selection_metric: fbeta_2
+metrics:
+  - fbeta_2
+  - f1_samples
+  - f1_macro
+  - accuracy
+  - loss
+checkpoint_dir: multilabel_demo_output/checkpoints
+report_dir: multilabel_demo_output/reports
+xai_enabled: true
+xai_samples: 2
+xai_method: opticam
+device: auto
+seed: 42
+save_checkpoints: true
+verbose: true
+early_stopping_patience: 3
+xai_cache_dir: multilabel_demo_output/xai_cache
+xai_cache_samples: 0
+report_preview_size: 128
+report_xai_size: 128
+event_log_enabled: true
+candidate_pruning_enabled: true
+candidate_pruning_relative_threshold: 0.5
+candidate_pruning_warmup_epochs: 1

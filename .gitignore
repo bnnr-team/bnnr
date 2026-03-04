@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Build & packaging
+build/
+/dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# mypy
+.mypy_cache/
+
+# ruff
+.ruff_cache/
+
+# Node (dashboard_web)
+node_modules/
+dashboard_web/dist/
+
+# Runtime outputs
+checkpoints/
+checkpoints_*/
+reports/
+reports_*/
+*.pt
+*.pth
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data (downloaded datasets)
+data/
