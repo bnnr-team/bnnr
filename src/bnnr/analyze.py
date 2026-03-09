@@ -20,9 +20,17 @@ from bnnr.analysis.class_diagnostics import (
     build_distribution_summary,
     compute_class_diagnostics,
 )
+from bnnr.analysis.cross_validation import run_cross_validation_from_predictions
 from bnnr.analysis.findings import build_findings
-from bnnr.analysis.recommendations import build_recommendations as build_recommendations_structured
-from bnnr.analysis.schema import REPORT_SCHEMA_VERSION, serialize_for_json
+from bnnr.analysis.recommendations import (
+    build_recommendations as build_recommendations_structured,
+)
+from bnnr.analysis.schema import (
+    REPORT_SCHEMA_VERSION,
+    ClusterView,
+    XAIClassSummary,
+    serialize_for_json,
+)
 from bnnr.evaluation import collect_eval_predictions, run_evaluation
 from bnnr.utils import ensure_dir
 from bnnr.xai import generate_saliency_maps
@@ -53,6 +61,12 @@ class AnalysisReport:
     pred_distribution: dict[str, int] = field(default_factory=dict)
     distribution_summary: dict[str, Any] = field(default_factory=dict)
     failure_patterns_extended: list[dict[str, Any]] = field(default_factory=list)
+    # Optional extended sections (classification-focused)
+    xai_quality_per_class: dict[str, Any] = field(default_factory=dict)
+    xai_examples_per_class: dict[str, Any] = field(default_factory=dict)
+    data_quality_summary: dict[str, Any] = field(default_factory=dict)
+    cv_results: dict[str, Any] = field(default_factory=dict)
+    cluster_views: list[dict[str, Any]] = field(default_factory=list)
 
     def save(self, output_dir: Path | str) -> Path:
         """Write analysis_report.json and optional artifact dirs under output_dir."""
@@ -78,6 +92,11 @@ class AnalysisReport:
             "pred_distribution": self.pred_distribution,
             "distribution_summary": self.distribution_summary,
             "failure_patterns_extended": self.failure_patterns_extended,
+            "xai_quality_per_class": self.xai_quality_per_class,
+            "xai_examples_per_class": self.xai_examples_per_class,
+            "data_quality_summary": self.data_quality_summary,
+            "cv_results": self.cv_results,
+            "cluster_views": self.cluster_views,
         }
         json_path = out / "analysis_report.json"
         json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -113,6 +132,7 @@ def analyze_model(
     xai_method: str = "opticam",
     xai_enabled: bool = True,
     data_quality_max_samples: int = 5000,
+    cv_folds: int = 0,
 ) -> AnalysisReport:
     """Run full analysis on a model (adapter) and validation loader.
 
@@ -150,6 +170,15 @@ def analyze_model(
         report.failure_patterns = _build_failure_patterns(report)
         report.recommendations = _build_recommendations(report)
         _build_extended_analysis(report)
+
+        if cv_folds and cv_folds > 1:
+            _run_cross_validation(
+                adapter=adapter,
+                val_loader=val_loader,
+                config=config,
+                report=report,
+                n_folds=cv_folds,
+            )
 
     if run_data_quality:
         _run_data_quality(val_loader, config, report, output_dir, data_quality_max_samples)
@@ -203,21 +232,35 @@ def _run_xai(
     )
     report.xai_insights = insights
     report.xai_diagnoses = diagnoses
-    if batch_stats:
-        from bnnr.xai_analysis import compute_xai_quality_score
-
-        qualities = []
-        for cls_id, stats_list in batch_stats.items():
-            correct = [
-                true_labels[i] == preds[i]
-                for i in range(len(true_labels))
-                if int(true_labels[i]) == int(cls_id)
-            ]
-            if stats_list and len(correct) == len(stats_list):
-                q, _ = compute_xai_quality_score(stats_list, correct)
-                qualities.append(q)
+    # Global XAI quality summary (mean over per-class scores) and per-class summaries.
+    per_class: dict[str, Any] = {}
+    per_class_scores: list[float] = []
+    for cls_id_str, diag in diagnoses.items():
+        q = diag.get("quality_score")
+        if q is None:
+            continue
+        stats_list = batch_stats.get(cls_id_str, [])
+        flags: list[str] = []
+        severity = diag.get("severity")
+        if severity and severity != "ok":
+            flags.append(f"severity:{severity}")
+        trend = diag.get("trend")
+        if isinstance(trend, str) and trend in {"improving", "declining"}:
+            flags.append(f"trend:{trend}")
+        if diag.get("confused_with"):
+            flags.append("confused_with")
+        summary = XAIClassSummary(
+            class_id=str(cls_id_str),
+            mean_quality=float(q),
+            sample_count=len(stats_list),
+            flags=flags,
+        )
+        per_class[cls_id_str] = serialize_for_json(summary)
+        per_class_scores.append(float(q))
+    report.xai_quality_per_class = per_class
+    if per_class_scores:
         report.xai_quality_summary = {
-            "mean_quality_score": float(np.mean(qualities)) if qualities else 0.0,
+            "mean_quality_score": float(np.mean(per_class_scores)),
         }
 
 
@@ -243,14 +286,218 @@ def _run_failure_analysis(
     worst_list: list[dict[str, Any]] = []
     for i in range(n):
         idx = int(order[i])
-        worst_list.append({
-            "index": int(indices[idx]),
-            "true_label": int(labels[idx]),
-            "pred_label": int(preds[idx]),
-            "confidence": float(confidences[idx]),
-            "loss": float(losses[idx]),
-        })
+        worst_list.append(
+            {
+                "index": int(indices[idx]),
+                "true_label": int(labels[idx]),
+                "pred_label": int(preds[idx]),
+                "confidence": float(confidences[idx]),
+                "loss": float(losses[idx]),
+            }
+        )
     report.worst_predictions = worst_list
+
+    # Optional: build XAI example cards for worst cases (per-class) when XAI is enabled.
+    if xai_enabled and isinstance(adapter, XAICapableModel) and output_dir is not None:
+        _build_xai_examples_for_worst_cases(
+            adapter=adapter,
+            val_loader=val_loader,
+            report=report,
+            preds=preds,
+            labels=labels,
+            indices=indices,
+            confidences=confidences,
+            xai_method=xai_method,
+            output_dir=Path(output_dir),
+        )
+
+
+def _build_xai_examples_for_worst_cases(
+    *,
+    adapter: XAICapableModel,
+    val_loader: Any,
+    report: AnalysisReport,
+    preds: np.ndarray,
+    labels: np.ndarray,
+    indices: np.ndarray,
+    confidences: np.ndarray,
+    xai_method: str,
+    output_dir: Path,
+    max_examples_per_class: int = 8,
+    max_classes: int = 10,
+) -> None:
+    """Generate XAI overlays for high-confidence wrong cases per class and attach to report.
+
+    This focuses on classification worst cases and writes overlays under
+    ``output_dir / artifacts / xai_examples``.
+    """
+    try:
+        from bnnr.xai import generate_saliency_maps, save_xai_visualization
+    except Exception:
+        # XAI backend not available; skip example generation.
+        return
+
+    dataset = getattr(val_loader, "dataset", None)
+    if dataset is None:
+        return
+
+    # Group candidate indices by true class, prioritising high-confidence wrong predictions.
+    num_samples = len(preds)
+    by_class: dict[int, list[int]] = defaultdict(list)
+    for i in range(num_samples):
+        true_c = int(labels[i])
+        is_wrong = int(preds[i]) != true_c
+        if not is_wrong:
+            continue
+        by_class[true_c].append(i)
+
+    if not by_class:
+        return
+
+    classes_sorted = sorted(
+        by_class.keys(),
+        key=lambda c: -len(by_class[c]),
+    )[:max_classes]
+
+    images: list[Tensor] = []
+    label_tensors: list[Tensor] = []
+    meta: list[dict[str, Any]] = []
+    for cls in classes_sorted:
+        for idx_in_array in by_class[cls][:max_examples_per_class]:
+            ds_index = int(indices[idx_in_array])
+            try:
+                sample = dataset[ds_index]
+            except Exception:
+                continue
+            if isinstance(sample, (list, tuple)):
+                img = sample[0]
+                label = sample[1]
+            else:
+                img = sample
+                label = labels[idx_in_array]
+            if not isinstance(img, Tensor):
+                continue
+            if isinstance(label, Tensor):
+                lbl_val = int(label.item())
+            else:
+                lbl_val = int(labels[idx_in_array])
+            images.append(img.unsqueeze(0))
+            label_tensors.append(torch.tensor(lbl_val).view(1))
+            meta.append(
+                {
+                    "index": ds_index,
+                    "true_label": int(labels[idx_in_array]),
+                    "pred_label": int(preds[idx_in_array]),
+                    "confidence": float(confidences[idx_in_array]),
+                }
+            )
+
+    if not images:
+        return
+
+    images_batch = torch.cat(images, dim=0)  # [B, C, H, W]
+    labels_batch = torch.cat(label_tensors, dim=0)
+
+    model = adapter.get_model()
+    target_layers = adapter.get_target_layers()
+    device = next(model.parameters()).device
+    model.eval()
+    # Compute logits for cluster embeddings (no grad) and saliency maps for XAI overlays.
+    with torch.no_grad():
+        logits = model(images_batch.to(device))
+    maps = generate_saliency_maps(
+        model,
+        images_batch.to(device),
+        labels_batch.to(device),
+        target_layers,
+        method=xai_method,
+    )
+
+    # Convert images to uint8 HWC for visualisation.
+    imgs_np: list[np.ndarray] = []
+    for img in images_batch:
+        img_cpu = img.detach().cpu().float()
+        # [C, H, W] -> [H, W, C]
+        hwc = img_cpu.permute(1, 2, 0).numpy()
+        # Normalise to [0, 255]
+        mn = float(hwc.min())
+        mx = float(hwc.max())
+        if mx > mn:
+            hwc = (hwc - mn) / (mx - mn)
+        hwc = np.clip(hwc * 255.0, 0.0, 255.0).astype(np.uint8)
+        imgs_np.append(hwc)
+    images_np = np.stack(imgs_np, axis=0)
+
+    save_dir = output_dir / "artifacts" / "xai_examples"
+    paths = save_xai_visualization(images_np, maps, save_dir, prefix="xai_example")
+
+    per_class_examples: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for info, path in zip(meta, paths):
+        cls_id = str(info["true_label"])
+        ex = {
+            "index": info["index"],
+            "true_label": info["true_label"],
+            "pred_label": info["pred_label"],
+            "confidence": info["confidence"],
+            "image_path": str(path),
+            "overlay_path": str(path),
+        }
+        per_class_examples[cls_id].append(ex)
+
+    report.xai_examples_per_class = {k: v for k, v in per_class_examples.items()}
+
+    # Build a simple 2D cluster view from logits for these worst predictions.
+    try:
+        feats = logits.detach().cpu().numpy()
+        if feats.ndim == 2 and feats.shape[0] >= 2:
+            # PCA to 2D via SVD
+            x = feats.astype(np.float32)
+            x = x - x.mean(axis=0, keepdims=True)
+            u, s, vt = np.linalg.svd(x, full_matrices=False)
+            components = vt[:2].T  # [D, 2]
+            coords = x @ components  # [N, 2]
+            points: list[dict[str, Any]] = []
+            for i, info in enumerate(meta):
+                px = float(coords[i, 0])
+                py = float(coords[i, 1])
+                points.append(
+                    {
+                        "x": px,
+                        "y": py,
+                        "index": info["index"],
+                        "true_label": info["true_label"],
+                        "pred_label": info["pred_label"],
+                        "confidence": info["confidence"],
+                    }
+                )
+            view = ClusterView(
+                name="worst_predictions_2d",
+                description="2D projection of high-confidence wrong predictions based on logits.",
+                points=points,
+            )
+            report.cluster_views = [serialize_for_json(view)]
+    except Exception:
+        # Cluster view is optional; ignore failures.
+        return
+
+
+def _run_cross_validation(
+    *,
+    adapter: Any,
+    val_loader: Any,
+    config: Any,
+    report: AnalysisReport,
+    n_folds: int,
+) -> None:
+    """Run lightweight k-fold CV on cached predictions to populate report.cv_results."""
+    from bnnr.evaluation import collect_eval_predictions
+
+    out = collect_eval_predictions(adapter, val_loader, config)
+    if out is None:
+        return
+    preds, labels, _indices, _confidences, _losses = out
+    cv = run_cross_validation_from_predictions(preds, labels, n_folds)
+    report.cv_results = serialize_for_json(cv)
 
 
 def _build_failure_patterns(report: AnalysisReport) -> list[dict[str, Any]]:
@@ -442,7 +689,11 @@ def _run_data_quality(
         is_detection=is_detection,
         save_dir=save_dir,
     )
-    report.data_quality_result = result.get("data_quality", result)
+    data_quality = result.get("data_quality", result)
+    report.data_quality_result = data_quality
+    # Mirror into structured summary field for report schema consumers.
+    if isinstance(data_quality, dict):
+        report.data_quality_summary = data_quality
 
 
 def _render_analysis_html(report: AnalysisReport) -> str:

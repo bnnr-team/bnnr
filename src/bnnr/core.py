@@ -28,6 +28,7 @@ from bnnr.adapter import (  # noqa: F401 — re-exported for backward compat
 from bnnr.augmentation_runner import AugmentationRunner
 from bnnr.augmentations import BaseAugmentation
 from bnnr.data_quality import run_data_quality_analysis
+from bnnr.evaluation import run_evaluation
 from bnnr.icd import AICD, ICD
 from bnnr.utils import set_seed, setup_logging
 from bnnr.xai import generate_saliency_maps, save_xai_visualization
@@ -388,6 +389,8 @@ class BNNRTrainer:
         # Cache for merged _evaluate + _compute_eval_class_details (classification only)
         self._last_eval_preds: np.ndarray | None = None
         self._last_eval_labels: np.ndarray | None = None
+        self._last_eval_per_class: dict[str, dict[str, float | int]] = {}
+        self._last_eval_confusion: dict[str, Any] = {}
         self.logger = setup_logging("bnnr", config.log_file, json_format=True)
         self._custom_metrics: dict[str, Any] = custom_metrics or {}
 
@@ -662,108 +665,30 @@ class BNNRTrainer:
     def _evaluate(self, loader: DataLoader, *, cache_predictions: bool = False) -> dict[str, float]:
         """Evaluate the model on *loader*.
 
-        Parameters
-        ----------
-        cache_predictions : bool
-            When ``True`` **and** the task is classification **and** the
-            model exposes ``get_model()`` (i.e. is :class:`XAICapableModel`),
-            raw per-sample predictions and labels are cached in
-            ``self._last_eval_preds`` / ``self._last_eval_labels`` so that
-            :meth:`_compute_eval_class_details` can reuse them without a
-            second forward pass.
+        Uses shared :func:`bnnr.evaluation.run_evaluation` and caches
+        per_class/confusion for :meth:`_compute_eval_class_details`.
+        When cache_predictions is True (or detection), preds/labels are cached.
         """
-        all_metrics: list[dict[str, float]] = []
-
-        # Determine whether we can cache predictions in this call.
-        can_cache = (
-            cache_predictions
-            and not self._is_detection
-            and isinstance(self.model, XAICapableModel)
+        return_preds = cache_predictions if not self._is_detection else False
+        metrics, per_class, confusion, preds, labels = run_evaluation(
+            self.model,
+            loader,
+            self.config,
+            custom_metrics=None,
+            return_preds_labels=return_preds,
         )
-        preds_rows: list[torch.Tensor] = []
-        label_rows: list[torch.Tensor] = []
+        self._last_eval_per_class = per_class
+        self._last_eval_confusion = confusion
+        self._last_eval_preds = preds
+        self._last_eval_labels = labels
 
-        # Use a forward hook to capture logits from eval_step's own forward
-        # pass, eliminating the need for a separate (second) forward pass.
-        _captured_logits: list[torch.Tensor] = []
-        _hook_handle = None
-        if can_cache:
-            model_impl = self.model.get_model()  # type: ignore[attr-defined]  # XAICapableModel checked via can_cache
-            model_impl.eval()
-
-            def _capture_hook(_module: Any, _inp: Any, output: Any) -> None:
-                _captured_logits.append(output.detach())
-
-            _hook_handle = model_impl.register_forward_hook(_capture_hook)
-
-        try:
-            for raw_batch in loader:
-                # ── Detection path ─────────────────────────────────────
-                if self._is_detection:
-                    if len(raw_batch) == 3:
-                        images, targets, _ = raw_batch
-                    else:
-                        images, targets = raw_batch
-                    batch: Any = (images, targets)
-                    all_metrics.append(self.model.eval_step(batch))
-                    continue
-
-                # ── Classification path ────────────────────────────────
-                if len(raw_batch) == 3:
-                    images, labels, _ = raw_batch
-                    batch = (images, labels)
-                else:
-                    batch = raw_batch
-                    images, labels = raw_batch[0], raw_batch[1]
-
-                _captured_logits.clear()
-                all_metrics.append(self.model.eval_step(batch))
-
-                # Extract predictions from the logits captured by the hook
-                # during eval_step — no second forward pass needed.
-                if can_cache and _captured_logits:
-                    logits = _captured_logits[-1]
-                    if self._is_multilabel:
-                        preds_rows.append(
-                            (torch.sigmoid(logits) >= self.config.multilabel_threshold).int().cpu()
-                        )
-                    else:
-                        preds_rows.append(torch.argmax(logits, dim=1).cpu())
-                    label_rows.append(labels.cpu())
-        finally:
-            if _hook_handle is not None:
-                _hook_handle.remove()
-
-        # Store cached predictions so _compute_eval_class_details can reuse.
-        if can_cache and preds_rows:
-            self._last_eval_preds = torch.cat(preds_rows).numpy().astype(np.int64)
-            self._last_eval_labels = torch.cat(label_rows).numpy().astype(np.int64)
-        else:
-            self._last_eval_preds = None
-            self._last_eval_labels = None
-
-        # For detection: call epoch_end_eval to compute mAP over all batches
-        epoch_end_eval_fn = getattr(self.model, "epoch_end_eval", None)
-        if self._is_detection and callable(epoch_end_eval_fn):
-            epoch_level_metrics = epoch_end_eval_fn()
-            # Merge epoch-level metrics; remove the dummy loss=0.0 from
-            # eval_step since detection models don't produce eval loss —
-            # the real training loss comes from train_metrics.
-            avg = self._average_metrics(all_metrics)
-            avg.pop("loss", None)  # remove dummy eval loss
-            avg.update(epoch_level_metrics)
-            result = avg
-        else:
-            result = self._average_metrics(all_metrics)
-
-        # ── Custom callable metrics ──────────────────────────────────
+        result = metrics
         if self._custom_metrics and self._last_eval_preds is not None and self._last_eval_labels is not None:
             for name, fn in self._custom_metrics.items():
                 try:
                     result[name] = float(fn(self._last_eval_preds, self._last_eval_labels))
                 except Exception as exc:  # noqa: BLE001
                     self._log(f"Custom metric '{name}' failed: {exc}")
-
         return result
 
     def _save_checkpoint(
@@ -1687,37 +1612,8 @@ class BNNRTrainer:
         return preds, labels
 
     def _compute_eval_class_details(self) -> tuple[dict[str, dict[str, float | int]], dict[str, Any]]:
-        # ── Detection path ──────────────────────────────────────────────
-        if self._is_detection:
-            return self._compute_eval_class_details_detection()
-
-        # ── Multi-label path ────────────────────────────────────────────
-        if self._is_multilabel:
-            return self._compute_eval_class_details_multilabel()
-
-        # ── Classification path ─────────────────────────────────────────
-        result = self._collect_val_logits(post_process="argmax")
-        if result is None:
-            return {}, {}
-        preds, labels = result
-
-        n_classes = int(max(int(np.max(preds)), int(np.max(labels)))) + 1
-        per_class: dict[str, dict[str, float | int]] = {}
-        for class_id in range(n_classes):
-            mask = labels == class_id
-            support = int(np.sum(mask))
-            if support == 0:
-                continue
-            acc = float(np.mean(preds[mask] == labels[mask]))
-            per_class[str(class_id)] = {"accuracy": acc, "support": support}
-        matrix = np.zeros((n_classes, n_classes), dtype=int)
-        for true_label, pred_label in zip(labels.tolist(), preds.tolist()):
-            matrix[int(true_label), int(pred_label)] += 1
-        confusion = {
-            "labels": list(range(n_classes)),
-            "matrix": matrix.tolist(),
-        }
-        return per_class, confusion
+        """Return per-class metrics and confusion from last _evaluate (run_evaluation)."""
+        return (self._last_eval_per_class, self._last_eval_confusion)
 
     def _compute_eval_class_details_multilabel(self) -> tuple[dict[str, dict[str, float | int]], dict[str, Any]]:
         """Compute per-label precision/recall/f1 for multi-label classification.
@@ -3086,15 +2982,12 @@ class BNNRTrainer:
                     candidate_best_epochs[augmentation.name] = cand_best_epoch
 
                     # Restore best-epoch state to compute per-class details at that point.
-                    # Clear cached eval data so _compute_eval_class_details_detection
-                    # runs a fresh (single) forward pass with the best-epoch weights.
+                    # Clear cached eval data so run_evaluation runs a fresh pass.
                     self.model.load_state_dict(cand_best_state)
                     if hasattr(self.model, "last_eval_preds"):
                         self.model.last_eval_preds = []  # type: ignore[attr-defined]  # duck-typed attr on DetectionAdapter
                         self.model.last_eval_targets = []  # type: ignore[attr-defined]  # duck-typed attr on DetectionAdapter
-                    # Invalidate classification prediction cache (state changed)
-                    self._last_eval_preds = None
-                    self._last_eval_labels = None
+                    self._evaluate(self.val_loader, cache_predictions=True)
                     per_class_candidate, confusion_candidate = self._compute_eval_class_details()
                     per_class_by_candidate[augmentation.name] = per_class_candidate
 

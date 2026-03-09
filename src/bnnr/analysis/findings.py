@@ -27,6 +27,7 @@ def build_findings(
     labels_list = confusion.get("labels", [])
     xai_diagnoses = getattr(report, "xai_diagnoses", {}) or {}
     metrics = getattr(report, "metrics", {}) or {}
+    worst_predictions = getattr(report, "worst_predictions", []) or []
 
     # --- Zero / near-zero recall classes ---
     for d in class_diagnostics:
@@ -191,6 +192,215 @@ def build_findings(
                     count=pred_max,
                     class_a=dominant_class,
                     metadata={"pred_max": pred_max, "total_pred": total_pred},
+                )
+            )
+
+    # --- Dominant prediction bias (over-predicted classes) ---
+    for cls_id, pred_count in pred_dist.items():
+        true_count = true_dist.get(cls_id, 0)
+        if pred_count >= 20 and pred_count > true_count * 3:
+            findings.append(
+                Finding(
+                    title=f"Class {cls_id} is heavily over-predicted",
+                    finding_type="dominant_prediction_bias",
+                    description=(
+                        f"Class {cls_id} appears in predictions far more often than in ground truth."
+                    ),
+                    evidence=[
+                        f"Pred count: {pred_count}",
+                        f"True count: {true_count}",
+                    ],
+                    interpretation=(
+                        "Model may rely on generic background cues or biased features "
+                        "that trigger this class too often."
+                    ),
+                    severity="high",
+                    confidence="medium",
+                    class_ids=[cls_id],
+                    recommended_action=(
+                        "Inspect XAI overlays and samples predicted as this class; "
+                        "consider rebalancing data or adjusting decision thresholds."
+                    ),
+                )
+            )
+            patterns.append(
+                FailurePattern(
+                    pattern_type="dominant_prediction_bias",
+                    description=f"Class {cls_id} strongly over-predicted.",
+                    severity="high",
+                    count=pred_count,
+                    class_a=cls_id,
+                    metadata={"pred_count": pred_count, "true_count": true_count},
+                )
+            )
+
+    # --- Minority class suppression (rare + low recall) ---
+    for d in class_diagnostics:
+        if d.support > 0 and d.support <= max(5, int(0.01 * total_true)) and d.recall < 0.5:
+            findings.append(
+                Finding(
+                    title=f"Minority class {d.class_id} is suppressed",
+                    finding_type="minority_class_suppression",
+                    description=(
+                        f"Class {d.class_id} is rare in the dataset and has low recall ({d.recall:.0%})."
+                    ),
+                    evidence=[f"Support: {d.support}", f"Recall: {d.recall:.2f}"],
+                    interpretation=(
+                        "Rare classes are not being learned reliably; the model may prioritise majority classes."
+                    ),
+                    severity="high",
+                    confidence="medium",
+                    class_ids=[d.class_id],
+                    recommended_action=(
+                        "Consider oversampling, class-balanced loss, or targeted augmentation "
+                        "for this minority class."
+                    ),
+                )
+            )
+            patterns.append(
+                FailurePattern(
+                    pattern_type="minority_class_suppression",
+                    description=f"Minority class {d.class_id} underperforming.",
+                    severity="high",
+                    count=d.support,
+                    class_a=d.class_id,
+                    metadata={"recall": d.recall, "support": d.support},
+                )
+            )
+
+    # --- High-confidence wrong vs low-confidence ambiguous (global) ---
+    if worst_predictions:
+        high_conf_wrong = [
+            p for p in worst_predictions if p.get("confidence", 0.0) >= 0.8
+        ]
+        low_conf_wrong = [
+            p
+            for p in worst_predictions
+            if 0.2 <= p.get("confidence", 0.0) < 0.8
+        ]
+        if high_conf_wrong:
+            findings.append(
+                Finding(
+                    title="Many high-confidence wrong predictions",
+                    finding_type="high_confidence_wrong",
+                    description=(
+                        f"{len(high_conf_wrong)} of the worst predictions have confidence ≥ 0.8."
+                    ),
+                    evidence=[
+                        f"High-confidence wrong count among worst: {len(high_conf_wrong)}",
+                        f"Total worst inspected: {len(worst_predictions)}",
+                    ],
+                    interpretation=(
+                        "Model is overconfident on some failures; this is risky for production "
+                        "and suggests miscalibration or spurious cues."
+                    ),
+                    severity="high",
+                    confidence="medium",
+                    recommended_action=(
+                        "Inspect these cases with XAI; consider calibration (temperature scaling) "
+                        "and revisiting training data / augmentations."
+                    ),
+                )
+            )
+        if low_conf_wrong:
+            findings.append(
+                Finding(
+                    title="Ambiguous low-confidence errors",
+                    finding_type="low_confidence_ambiguity",
+                    description=(
+                        f"{len(low_conf_wrong)} of the worst predictions have intermediate confidence."
+                    ),
+                    evidence=[
+                        f"Low-confidence wrong count among worst: {len(low_conf_wrong)}",
+                        f"Total worst inspected: {len(worst_predictions)}",
+                    ],
+                    interpretation=(
+                        "These cases may be inherently ambiguous or poorly represented; "
+                        "manual review can reveal labelling issues or missing subclasses."
+                    ),
+                    severity="medium",
+                    confidence="medium",
+                    recommended_action=(
+                        "Perform targeted error analysis and potential relabelling for these samples."
+                    ),
+                )
+            )
+
+    # --- Background / artefact focus suspected from XAI breakdown ---
+    for cls_id, diag in xai_diagnoses.items():
+        breakdown = diag.get("quality_breakdown") or {}
+        edge_score = breakdown.get("edge")
+        coverage_score = breakdown.get("coverage")
+        focus_score = breakdown.get("focus")
+        if edge_score is not None and edge_score < 0.4:
+            findings.append(
+                Finding(
+                    title=f"Background focus suspected for class {cls_id}",
+                    finding_type="background_focus_suspected",
+                    description=(
+                        f"XAI suggests high border/edge activation for class {cls_id}."
+                    ),
+                    evidence=[f"edge_score={edge_score:.2f}"],
+                    interpretation=(
+                        "Model may rely on padding or background artefacts instead of the object."
+                    ),
+                    severity="high",
+                    confidence="medium",
+                    class_ids=[str(cls_id)],
+                    recommended_action=(
+                        "Review overlays; consider random crop/padding changes and ICD/AICD augmentations."
+                    ),
+                )
+            )
+            patterns.append(
+                FailurePattern(
+                    pattern_type="background_focus_suspected",
+                    description=f"Border-focused saliency for class {cls_id}",
+                    severity="high",
+                    class_a=str(cls_id),
+                    metadata={"edge_score": edge_score},
+                )
+            )
+        if (
+            focus_score is not None
+            and coverage_score is not None
+            and focus_score < 0.3
+            and coverage_score > 0.4
+        ):
+            findings.append(
+                Finding(
+                    title=f"Diffuse attention pattern for class {cls_id}",
+                    finding_type="artifact_focus_suspected",
+                    description=(
+                        f"Attention for class {cls_id} is broad and unfocused (low focus, high coverage)."
+                    ),
+                    evidence=[
+                        f"focus_score={focus_score:.2f}",
+                        f"coverage_score={coverage_score:.2f}",
+                    ],
+                    interpretation=(
+                        "Model may be picking up multiple spurious regions; features are not clearly "
+                        "tied to the object."
+                    ),
+                    severity="medium",
+                    confidence="medium",
+                    class_ids=[str(cls_id)],
+                    recommended_action=(
+                        "Use stronger object-focused augmentations and ensure training data contains "
+                        "clean, centered examples."
+                    ),
+                )
+            )
+            patterns.append(
+                FailurePattern(
+                    pattern_type="artifact_focus_suspected",
+                    description=f"Diffuse focus for class {cls_id}",
+                    severity="medium",
+                    class_a=str(cls_id),
+                    metadata={
+                        "focus_score": focus_score,
+                        "coverage_score": coverage_score,
+                    },
                 )
             )
 

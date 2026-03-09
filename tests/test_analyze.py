@@ -111,7 +111,7 @@ def test_analyze_model_extended_report_fields(model_adapter, tmp_path: Path) -> 
 
 
 def test_analysis_report_html_sections(tmp_path: Path) -> None:
-    """HTML report contains Executive summary, Findings, Recommendations, Class diagnostics, Method."""
+    """HTML report contains key sections and text labels."""
     report = AnalysisReport(
         metrics={"accuracy": 0.85, "loss": 0.4},
         executive_summary={"health_status": "needs_attention", "key_findings": ["Low accuracy"]},
@@ -125,6 +125,9 @@ def test_analysis_report_html_sections(tmp_path: Path) -> None:
     assert "Executive summary" in html
     assert "Class diagnostics" in html
     assert "Findings" in html
+    assert "Dataset health" in html
+    assert "Cross-validation" in html
+    assert "XAI insights" in html
     assert "Recommendations" in html
     assert "Method & caveats" in html
     assert "needs_attention" in html or "Low accuracy" in html
@@ -147,6 +150,28 @@ def test_analyze_model_with_xai(model_adapter, tmp_path: Path) -> None:
     assert isinstance(report.xai_diagnoses, dict)
     if report.xai_quality_summary:
         assert "mean_quality_score" in report.xai_quality_summary
+    # Cluster views and XAI per-class structures should be present (even if empty lists/dicts).
+    assert isinstance(report.xai_quality_per_class, dict)
+    assert isinstance(report.xai_examples_per_class, dict)
+    assert isinstance(report.cluster_views, list)
+
+
+def test_analyze_model_with_cv_and_cluster(model_adapter, tmp_path: Path) -> None:
+    """analyze_model can run lightweight CV and populate cv_results."""
+    loader = _make_indexed_loader()
+    config = BNNRConfig(device="cpu", task="classification")
+    report = analyze_model(
+        model_adapter,
+        loader,
+        config=config,
+        output_dir=None,
+        run_data_quality=False,
+        xai_enabled=False,
+        cv_folds=3,
+    )
+    assert isinstance(report.cv_results, dict)
+    if report.cv_results:
+        assert report.cv_results.get("n_folds", 0) >= 1
 
 
 def test_run_evaluation_standalone(model_adapter) -> None:

@@ -53,6 +53,15 @@ th { font-weight: 600; color: var(--muted); font-size: 11px; text-transform: upp
 .worst-list { display: grid; gap: 8px; }
 .worst-item { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; padding: 10px; background: var(--bg-subtle); border-radius: 8px; font-size: 13px; }
 .caveats { font-size: 12px; color: var(--muted); padding: 16px; background: var(--bg-subtle); border-radius: var(--radius); }
+.xai-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.xai-card { background: var(--bg-subtle); border-radius: 10px; padding: 14px; border: 1px solid var(--border); }
+.xai-score { font-weight: 700; color: var(--accent); }
+.xai-flags { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.xai-example-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.xai-example-card { background: var(--bg-subtle); border-radius: 10px; padding: 10px; border: 1px solid var(--border); }
+.xai-example-card img { width: 100%; border-radius: 8px; display: block; margin-bottom: 6px; }
+.dq-summary { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.cluster-wrap { margin-top: 8px; }
 """
 
 
@@ -164,6 +173,164 @@ def _worst_predictions_table(worst: list[dict[str, Any]], n: int = 20) -> str:
     return html
 
 
+def _xai_overview_block(
+    summary: dict[str, Any],
+    per_class: dict[str, Any],
+) -> str:
+    if not summary and not per_class:
+        return "<p class='muted'>No XAI summary.</p>"
+    html = "<div class='card'>"
+    if summary:
+        mean_q = summary.get("mean_quality_score")
+        if isinstance(mean_q, (int, float)):
+            html += f"<div><strong>Mean XAI quality:</strong> {mean_q:.3f} (0–1, higher is better)</div>"
+    html += "</div>"
+    if not per_class:
+        return html
+    # Show worst classes by XAI quality
+    items = []
+    for cid, data in per_class.items():
+        if isinstance(data, dict):
+            q = data.get("mean_quality")
+            sc = data.get("sample_count", 0)
+            flags = data.get("flags", [])
+        else:
+            q = None
+            sc = 0
+            flags = []
+        if q is None:
+            continue
+        items.append((float(q), str(cid), sc, flags))
+    if not items:
+        return html
+    items.sort(key=lambda t: t[0])
+    html += "<div class='xai-grid'>"
+    for q, cid, sc, flags in items[:8]:
+        html += "<div class='xai-card'>"
+        html += f"<div><strong>Class { _esc(cid) }</strong></div>"
+        html += f"<div class='xai-score'>quality={q:.3f}</div>"
+        html += f"<div class='xai-flags'>samples={sc}"
+        if flags:
+            html += " · " + ", ".join(_esc(str(f)) for f in flags)
+        html += "</div></div>"
+    html += "</div>"
+    return html
+
+
+def _xai_examples_block(examples_per_class: dict[str, Any]) -> str:
+    if not examples_per_class:
+        return "<p class='muted'>No XAI example cards were generated. Enable XAI in analyze to see saliency overlays.</p>"
+    html = "<div class='xai-example-grid'>"
+    # Show up to a few classes with examples
+    shown = 0
+    for cls_id, examples in examples_per_class.items():
+        if not examples:
+            continue
+        if shown >= 6:
+            break
+        ex0 = examples[0]
+        html += "<div class='xai-example-card'>"
+        overlay_path = _esc(str(ex0.get("overlay_path", ex0.get("image_path", ""))))
+        if overlay_path:
+            html += f"<img src=\"{overlay_path}\" alt=\"XAI overlay for class { _esc(str(cls_id)) }\" />"
+        html += f"<div><strong>Class { _esc(str(cls_id)) }</strong></div>"
+        html += "<div style='font-size:12px; color:var(--muted);'>"
+        html += f"Example idx={_esc(str(ex0.get('index', '')))}, true={_esc(str(ex0.get('true_label', '')))}, pred={_esc(str(ex0.get('pred_label', '')))}, conf={float(ex0.get('confidence', 0.0)):.3f}"
+        html += "</div>"
+        html += "</div>"
+        shown += 1
+    html += "</div>"
+    return html
+
+
+def _data_quality_block(data_quality: dict[str, Any]) -> str:
+    if not data_quality:
+        return "<p class='muted'>No data-quality analysis was run.</p>"
+    dq = data_quality
+    scanned = dq.get("scanned_samples")
+    summary = dq.get("summary", "")
+    dup_pairs = dq.get("total_duplicate_pairs", 0)
+    flagged = dq.get("total_flagged_images", 0)
+    warnings = dq.get("warnings", [])
+    html = "<div class='card dq-summary'>"
+    if scanned is not None:
+        html += f"Scanned samples: {scanned}. "
+    if summary:
+        html += _esc(summary)
+    html += "</div>"
+    html += "<div class='card'>"
+    html += f"<div>Duplicate pairs: {dup_pairs}, flagged images: {flagged}</div>"
+    if warnings:
+        html += "<ul style='margin:8px 0 0 18px;'>"
+        for w in warnings[:6]:
+            msg = w.get("message") or ""
+            wtype = w.get("type") or ""
+            count = w.get("count", 0)
+            html += f"<li><strong>{_esc(str(wtype))}</strong>: {_esc(str(msg))} (count={count})</li>"
+        html += "</ul>"
+    html += "</div>"
+    return html
+
+
+def _cv_block(cv_results: dict[str, Any]) -> str:
+    if not cv_results or not cv_results.get("n_folds"):
+        return "<p class='muted'>Cross-validation was not run.</p>"
+    n_folds = cv_results.get("n_folds", 0)
+    global_metrics = cv_results.get("global_metrics", {}) or {}
+    per_fold = cv_results.get("per_fold_metrics", []) or []
+    html = "<div class='card'>"
+    html += f"<div><strong>Folds:</strong> {n_folds}</div>"
+    if global_metrics:
+        parts = []
+        for key in ["mean_accuracy", "std_accuracy", "min_accuracy", "max_accuracy"]:
+            if key in global_metrics:
+                parts.append(f"{key}={global_metrics[key]:.3f}")
+        if parts:
+            html += "<div>Accuracy: " + ", ".join(parts) + "</div>"
+    html += "</div>"
+    if per_fold:
+        html += "<div class='table-wrap'><table><thead><tr><th>Fold</th><th>Accuracy</th><th>Support</th></tr></thead><tbody>"
+        for fm in per_fold:
+            html += f"<tr><td>{fm.get('fold', '')}</td><td>{fm.get('accuracy', 0):.3f}</td><td>{fm.get('support', 0)}</td></tr>"
+        html += "</tbody></table></div>"
+    return html
+
+
+def _cluster_block(cluster_views: list[dict[str, Any]]) -> str:
+    if not cluster_views:
+        return "<p class='muted'>No cluster visualisation was generated.</p>"
+    view = cluster_views[0]
+    points = view.get("points") or []
+    if not points:
+        return "<p class='muted'>No cluster visualisation was generated.</p>"
+    xs = [float(p.get("x", 0.0)) for p in points]
+    ys = [float(p.get("y", 0.0)) for p in points]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    span_x = max(max_x - min_x, 1e-6)
+    span_y = max(max_y - min_y, 1e-6)
+    svg = "<svg width='260' height='260' viewBox='0 0 260 260' style='background: #020617; border-radius: 12px;'>"
+    svg += "<rect x='0' y='0' width='260' height='260' fill='transparent' stroke='rgba(148,163,184,0.35)' />"
+    for p in points:
+        x = float(p.get("x", 0.0))
+        y = float(p.get("y", 0.0))
+        # Normalise to [10, 250]
+        nx = 10 + (x - min_x) / span_x * 240.0
+        ny = 10 + (max_y - y) / span_y * 240.0
+        color = "#f97316"  # accent
+        svg += f"<circle cx='{nx:.1f}' cy='{ny:.1f}' r='4' fill='{color}' />"
+    svg += "</svg>"
+    # Minimal JS to show point details on click (no external deps).
+    # We only show a JSON dump of the first few points.
+    sample_meta = json.dumps(points[:5], indent=2)
+    html = "<div class='cluster-wrap'>"
+    html += svg
+    html += "<div style='font-size:11px; color:var(--muted); margin-top:8px;'>2D projection of worst predictions (relative positions only). Below are a few sample points:</div>"
+    html += "<pre style='font-size:11px; max-height:160px; overflow:auto; margin-top:4px;'>" + _esc(sample_meta) + "</pre>"
+    html += "</div>"
+    return html
+
+
 def _confusion_preview(confusion: dict[str, Any]) -> str:
     if not confusion or not confusion.get("matrix"):
         return "<p class='muted'>No confusion matrix.</p>"
@@ -200,24 +367,54 @@ def render_analysis_html(report: Any) -> str:
     lines.append(_section("Findings", _findings_block(findings)))
 
     # Failure patterns (extended)
-    patterns = getattr(report, "failure_patterns_extended", None) or getattr(report, "failure_patterns", None) or []
+    patterns = (
+        getattr(report, "failure_patterns_extended", None)
+        or getattr(report, "failure_patterns", None)
+        or []
+    )
     if patterns:
-        lines.append(_section("Failure patterns", "<div class='card'><pre style='font-size:12px;'>" + _esc(json.dumps(patterns[:20], indent=2)) + "</pre></div>"))
+        lines.append(
+            _section(
+                "Failure patterns",
+                "<div class='card'><pre style='font-size:12px;'>"
+                + _esc(json.dumps(patterns[:20], indent=2))
+                + "</pre></div>",
+            )
+        )
 
-    # XAI
-    xai = getattr(report, "xai_quality_summary", None) or {}
-    if xai:
-        lines.append(_section("XAI quality", "<div class='card'><pre style='font-size:12px;'>" + _esc(json.dumps(xai, indent=2)) + "</pre></div>"))
-    xai_diag = getattr(report, "xai_diagnoses", None) or {}
-    if xai_diag:
-        lines.append(_section("XAI per-class", "<div class='card'><pre style='font-size:11px; max-height:300px; overflow:auto;'>" + _esc(json.dumps(xai_diag, indent=2)) + "</pre></div>"))
+    # XAI insights (overview + examples)
+    xai_summary = getattr(report, "xai_quality_summary", None) or {}
+    xai_per_class = getattr(report, "xai_quality_per_class", None) or {}
+    xai_examples = getattr(report, "xai_examples_per_class", None) or {}
+    xai_content = _xai_overview_block(xai_summary, xai_per_class) + _xai_examples_block(
+        xai_examples
+    )
+    lines.append(_section("XAI insights", xai_content))
 
     # Worst predictions
     worst = getattr(report, "worst_predictions", None) or []
     lines.append(_section("Worst predictions", _worst_predictions_table(worst)))
 
+    # Dataset health
+    data_quality = getattr(report, "data_quality_summary", None) or getattr(
+        report, "data_quality_result", None
+    ) or {}
+    lines.append(_section("Dataset health", _data_quality_block(data_quality)))
+
+    # Cross-validation
+    cv_results = getattr(report, "cv_results", None) or {}
+    lines.append(_section("Cross-validation", _cv_block(cv_results)))
+
+    # Cluster view
+    cluster_views = getattr(report, "cluster_views", None) or []
+    lines.append(_section("Cluster view (worst predictions)", _cluster_block(cluster_views)))
+
     # Confusion
-    lines.append(_section("Confusion matrix", _confusion_preview(getattr(report, "confusion", {}))))
+    lines.append(
+        _section(
+            "Confusion matrix", _confusion_preview(getattr(report, "confusion", {}))
+        )
+    )
 
     # Recommendations
     recs_struct = getattr(report, "recommendations_structured", None) or []

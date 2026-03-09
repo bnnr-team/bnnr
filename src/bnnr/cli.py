@@ -343,6 +343,169 @@ def report_command(
     typer.echo(rendered)
 
 
+@app.command("analyze")
+def analyze_command(
+    model: Path = typer.Option(..., "--model", "-m", help="Path to model checkpoint (.pt) or state dict"),
+    data: Path = typer.Option(..., "--data", "-d", help="Path to data directory (ImageFolder) or dataset name (e.g. mnist, cifar10)"),
+    output: Path = typer.Option(..., "--output", "-o", help="Output directory for analysis_report.json and report.html"),
+    task: str = typer.Option("classification", "--task", "-t", help="Task: classification, detection, multilabel"),
+    config: Optional[Path] = typer.Option(None, "--config", "-c", help="Optional YAML config (overrides defaults)"),
+    max_worst: int = typer.Option(20, "--max-worst", help="Number of worst predictions to include"),
+    no_xai: bool = typer.Option(False, "--no-xai", help="Disable XAI analysis"),
+    no_data_quality: bool = typer.Option(False, "--no-data-quality", help="Disable data quality checks"),
+    device: Optional[str] = typer.Option(None, "--device", help="Device: cuda, cpu, auto"),
+    batch_size: int = typer.Option(64, "--batch-size", help="Batch size for evaluation"),
+    output_summary: bool = typer.Option(
+        True,
+        "--summary/--no-summary",
+        help="Print executive summary and top findings/recommendations to stdout.",
+    ),
+    cv_folds: int = typer.Option(
+        0,
+        "--cv-folds",
+        help="Optional number of folds for lightweight cross-validation (0 to disable).",
+    ),
+) -> None:
+    """Run model analysis: metrics, XAI, data quality, failure patterns, recommendations."""
+    from bnnr.analyze import analyze_model
+
+    if not model.exists():
+        typer.echo(f"Error: Model path does not exist: {model}", err=True)
+        raise typer.Exit(code=1)
+
+    cfg = load_config(config) if config is not None and config.exists() else None
+    if cfg is None:
+        from bnnr.core import BNNRConfig
+
+        cfg = BNNRConfig(task=task, device=device or "auto", metrics=["accuracy", "f1_macro", "loss"])
+    if device is not None:
+        cfg = cfg.model_copy(update={"device": device})
+
+    data_path = data.resolve() if data.exists() and data.is_dir() else None
+    if data_path is not None:
+        dataset_name = "imagefolder"
+        data_dir = data_path.parent
+    else:
+        dataset_name = str(data).lower().strip()
+        if dataset_name not in ("mnist", "fashion_mnist", "cifar10"):
+            typer.echo(
+                "Error: --data must be an existing directory (ImageFolder) or one of: mnist, fashion_mnist, cifar10.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        data_dir = Path("data")
+
+    try:
+        from bnnr.pipelines import build_pipeline
+
+        adapter, _train_loader, val_loader, _augs = build_pipeline(
+            dataset_name=dataset_name,
+            config=cfg,
+            data_dir=data_dir,
+            batch_size=batch_size,
+            custom_data_path=data_path,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    try:
+        import torch
+
+        ckpt = torch.load(model, map_location="cpu", weights_only=False)
+    except Exception as exc:
+        typer.echo(f"Error loading model: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    state = (
+        ckpt["model_state"]
+        if isinstance(ckpt, dict) and "model_state" in ckpt
+        else ckpt["model"]
+        if isinstance(ckpt, dict) and "model" in ckpt
+        else ckpt
+    )
+    # If state looks like adapter.state_dict() (has "model" and "optimizer"), use state["model"] for raw weights
+    if (
+        isinstance(state, dict)
+        and "model" in state
+        and "optimizer" in state
+    ):
+        state = state["model"]
+    # Load raw model state into adapter's model (BNNR checkpoints use model_state, not full adapter state)
+    model_obj = getattr(adapter, "model", None)
+    if model_obj is not None:
+        model_obj.load_state_dict(state, strict=True)
+    else:
+        adapter.load_state_dict(state)
+
+    output.mkdir(parents=True, exist_ok=True)
+    report = analyze_model(
+        adapter,
+        val_loader,
+        config=cfg,
+        task=task,
+        output_dir=output,
+        run_data_quality=not no_data_quality,
+        max_worst=max_worst,
+        xai_enabled=not no_xai,
+        cv_folds=cv_folds,
+    )
+    report.to_html(output / "report.html")
+    if output_summary:
+        _print_analyze_summary(report, output)
+    else:
+        typer.echo(f"Analysis saved to {output}")
+        typer.echo(f"  {output / 'analysis_report.json'}")
+        typer.echo(f"  {output / 'report.html'}")
+
+
+def _print_analyze_summary(report: Any, output: Path) -> None:
+    """Print concise executive summary and top findings/recommendations for analyze."""
+    typer.echo("")
+    typer.echo("=" * 64)
+    typer.echo("  BNNR ANALYZE SUMMARY")
+    typer.echo("=" * 64)
+    summary = getattr(report, "executive_summary", {}) or {}
+    health = summary.get("health_status", "unknown").upper()
+    score = summary.get("health_score")
+    if isinstance(score, float):
+        score_str = f"{score:.0%}"
+    else:
+        score_str = "n/a"
+    typer.echo(f"  Health      : {health} (score={score_str})")
+    if "severity" in summary:
+        typer.echo(f"  Severity    : {summary['severity']}")
+    acc = report.metrics.get("accuracy", None)
+    f1 = report.metrics.get("f1_macro", None)
+    if acc is not None or f1 is not None:
+        typer.echo("  Metrics     : " + ", ".join(
+            part for part in [
+                f"accuracy={acc:.1%}" if isinstance(acc, float) else None,
+                f"f1_macro={f1:.1%}" if isinstance(f1, float) else None,
+            ] if part is not None
+        ))
+    mean_q = (report.xai_quality_summary or {}).get("mean_quality_score")
+    if isinstance(mean_q, float):
+        typer.echo(f"  XAI quality : mean_quality_score={mean_q:.3f}")
+    key_findings = summary.get("key_findings") or []
+    if key_findings:
+        typer.echo("-" * 64)
+        typer.echo("  Key findings:")
+        for f in key_findings[:5]:
+            typer.echo(f"    • {f}")
+    top_actions = summary.get("top_actions") or []
+    if top_actions:
+        typer.echo("-" * 64)
+        typer.echo("  Top actions:")
+        for a in top_actions[:5]:
+            typer.echo(f"    • {a}")
+    typer.echo("-" * 64)
+    typer.echo("  Artifacts:")
+    typer.echo(f"    • JSON : {output / 'analysis_report.json'}")
+    typer.echo(f"    • HTML : {output / 'report.html'}")
+    typer.echo("=" * 64)
+
+
 @dashboard_app.command("serve")
 def dashboard_serve_command(
     run_dir: Path = typer.Option(Path("reports"), "--run-dir"),

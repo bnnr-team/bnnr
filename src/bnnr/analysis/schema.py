@@ -98,6 +98,73 @@ class FailurePattern:
         return asdict(self)
 
 
+@dataclass
+class XAIClassSummary:
+    """Aggregated XAI quality and flags for a single class."""
+
+    class_id: str
+    mean_quality: float
+    sample_count: int
+    flags: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class XAIExample:
+    """Single XAI example (image + overlay + short explanation)."""
+
+    index: int
+    true_label: int
+    pred_label: int
+    confidence: float
+    image_path: str
+    overlay_path: str
+    text: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class DataQualitySummary:
+    """High-level dataset health summary used by analyze."""
+
+    total_samples_scanned: int
+    duplicate_pairs: int
+    flagged_images: int
+    class_counts: dict[str, int] = field(default_factory=dict)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class CrossValidationResults:
+    """Optional k-fold cross-validation results."""
+
+    n_folds: int
+    global_metrics: dict[str, float] = field(default_factory=dict)
+    per_fold_metrics: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class ClusterView:
+    """Cluster visualisation for confusing examples (projected to 2D/3D)."""
+
+    name: str
+    description: str
+    points: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 def serialize_for_json(obj: Any) -> Any:
     """Convert dataclass/list/dict to JSON-serializable form."""
     if hasattr(obj, "to_dict"):

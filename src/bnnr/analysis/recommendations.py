@@ -25,11 +25,17 @@ def build_recommendations(
     # Map finding types to priority (lower = do first)
     priority_by_type = {
         "zero_recall_class": 1,
-        "class_collapse_suspected": 2,
+        "class_collapse_suspected": 1,
+        "dominant_prediction_bias": 2,
         "low_overall_accuracy": 2,
         "near_zero_recall": 3,
+        "minority_class_suppression": 3,
         "confused_pair": 4,
+        "high_confidence_wrong": 4,
+        "low_confidence_ambiguity": 5,
         "low_xai_quality": 5,
+        "background_focus_suspected": 5,
+        "artifact_focus_suspected": 6,
     }
 
     for i, f in enumerate(findings):
