@@ -3,7 +3,7 @@
 Provides ready-to-use combinations so users can run BNNR directly from
 the command line without writing Python code.
 
-Supported datasets: mnist, fashion_mnist, cifar10, imagefolder, coco_mini, yolo.
+Supported datasets: mnist, fashion_mnist, cifar10, stl10, imagefolder, coco_mini, yolo.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from bnnr.presets import auto_select_augmentations, get_preset
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_DATASETS = ("mnist", "fashion_mnist", "cifar10", "imagefolder", "coco_mini", "yolo")
+_SUPPORTED_DATASETS = ("mnist", "fashion_mnist", "cifar10", "stl10", "imagefolder", "coco_mini", "yolo")
 
 
 def list_datasets() -> list[str]:
@@ -100,6 +100,34 @@ class _CifarCNN(nn.Module):
         x = self.pool(self.relu(self.bn2(self.conv2(x))))
         x = self.pool(self.relu(self.bn3(self.conv3(x))))
         x = x.reshape(-1, 128 * 4 * 4)
+        x = self.dropout(self.relu(self.fc1(x)))
+        return cast(Tensor, self.fc2(x))
+
+
+class _STL10CNN(nn.Module):
+    """VGG-style CNN for STL-10 (3-channel 96x96, ~600K params)."""
+
+    def __init__(self, num_classes: int = 10) -> None:
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(64, 128, 3, padding=1)
+        self.bn2 = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(128, 256, 3, padding=1)
+        self.bn3 = nn.BatchNorm2d(256)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.gap = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc1 = nn.Linear(256, 128)
+        self.fc2 = nn.Linear(128, num_classes)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(0.3)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.pool(self.relu(self.bn1(self.conv1(x))))  # 96→48
+        x = self.pool(self.relu(self.bn2(self.conv2(x))))  # 48→24
+        x = self.pool(self.relu(self.bn3(self.conv3(x))))  # 24→12
+        x = self.gap(x)  # 12→1
+        x = x.reshape(x.size(0), -1)
         x = self.dropout(self.relu(self.fc1(x)))
         return cast(Tensor, self.fc2(x))
 
@@ -288,6 +316,47 @@ def build_cifar10_pipeline(
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.m_epochs * config.max_iterations)
+    adapter = SimpleTorchAdapter(
+        model=model,
+        criterion=criterion,
+        optimizer=optimizer,
+        target_layers=[model.conv3],
+        device=config.device,
+        scheduler=scheduler,
+    )
+    augmentations = _resolve_augmentations(augmentation_preset, config.seed)
+    return adapter, train_loader, val_loader, augmentations
+
+
+def build_stl10_pipeline(
+    config: BNNRConfig,
+    data_dir: Path,
+    batch_size: int,
+    max_train_samples: int | None,
+    max_val_samples: int | None,
+    augmentation_preset: str = "auto",
+) -> tuple[SimpleTorchAdapter, DataLoader, DataLoader, list[BaseAugmentation]]:
+    """Build a ready-to-train pipeline for STL-10.
+
+    STL-10 is downloaded via ``torchvision.datasets.STL10`` (binary format).
+    Images are 96x96 RGB.  No ``Normalize()`` — BatchNorm handles it.
+    """
+    transform = transforms.Compose([transforms.ToTensor()])
+    train_ds = datasets.STL10(str(data_dir), split="train", download=True, transform=transform)
+    val_ds = datasets.STL10(str(data_dir), split="test", download=True, transform=transform)
+
+    train_ds = _maybe_subset(train_ds, max_train_samples)
+    val_ds = _maybe_subset(val_ds, max_val_samples)
+
+    train_loader = DataLoader(_IndexedDataset(train_ds), batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(_IndexedDataset(val_ds), batch_size=batch_size, shuffle=False)
+
+    model = _STL10CNN(num_classes=10)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=config.m_epochs * config.max_iterations,
+    )
     adapter = SimpleTorchAdapter(
         model=model,
         criterion=criterion,
@@ -812,7 +881,7 @@ def build_pipeline(
     Parameters
     ----------
     dataset_name:
-        One of: mnist, fashion_mnist, cifar10, imagefolder, coco_mini, yolo.
+        One of: mnist, fashion_mnist, cifar10, stl10, imagefolder, coco_mini, yolo.
     config:
         BNNR configuration.
     data_dir:
@@ -839,6 +908,8 @@ def build_pipeline(
         return build_fashion_mnist_pipeline(config, data_dir, batch_size, max_train_samples, max_val_samples, augmentation_preset)
     elif ds == "cifar10":
         return build_cifar10_pipeline(config, data_dir, batch_size, max_train_samples, max_val_samples, augmentation_preset)
+    elif ds == "stl10":
+        return build_stl10_pipeline(config, data_dir, batch_size, max_train_samples, max_val_samples, augmentation_preset)
     elif ds == "imagefolder":
         if custom_data_path is None:
             raise ValueError("--data-path is required for imagefolder dataset. Provide path to directory with train/val subdirs.")

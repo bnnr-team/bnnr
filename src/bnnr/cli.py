@@ -154,7 +154,7 @@ def train_command(
     dataset: str = typer.Option(
         "mnist",
         "--dataset",
-        help="Dataset: mnist, fashion_mnist, cifar10, imagefolder, coco_mini, yolo",
+        help="Dataset: mnist, fashion_mnist, cifar10, stl10, imagefolder, coco_mini, yolo",
     ),
     data_dir: Path = typer.Option(Path("data"), "--data-dir", help="Directory for dataset download/storage"),
     data_path: Optional[Path] = typer.Option(
@@ -387,9 +387,9 @@ def analyze_command(
         data_dir = data_path.parent
     else:
         dataset_name = str(data).lower().strip()
-        if dataset_name not in ("mnist", "fashion_mnist", "cifar10"):
+        if dataset_name not in ("mnist", "fashion_mnist", "cifar10", "stl10"):
             typer.echo(
-                "Error: --data must be an existing directory (ImageFolder) or one of: mnist, fashion_mnist, cifar10.",
+                "Error: --data must be an existing directory (ImageFolder) or one of: mnist, fashion_mnist, cifar10, stl10.",
                 err=True,
             )
             raise typer.Exit(code=1)
@@ -431,10 +431,19 @@ def analyze_command(
         and "optimizer" in state
     ):
         state = state["model"]
-    # Load raw model state into adapter's model (BNNR checkpoints use model_state, not full adapter state)
     model_obj = getattr(adapter, "model", None)
     if model_obj is not None:
-        model_obj.load_state_dict(state, strict=True)
+        try:
+            model_obj.load_state_dict(state, strict=True)
+        except RuntimeError:
+            result = model_obj.load_state_dict(state, strict=False)
+            if result.missing_keys or result.unexpected_keys:
+                typer.echo(
+                    f"Warning: checkpoint architecture differs from built-in model "
+                    f"(missing={len(result.missing_keys)}, unexpected={len(result.unexpected_keys)}). "
+                    f"For best results, use the Python API with your original model class.",
+                    err=True,
+                )
     else:
         adapter.load_state_dict(state)
 
