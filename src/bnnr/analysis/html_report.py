@@ -774,24 +774,26 @@ def _class_diagnostics_table(diagnostics: list[dict[str, Any]]) -> str:
 
 # ─── Findings ──────────────────────────────────────────────────────────────
 
+_CONFIDENCE_LABELS = {"high": "Observed", "medium": "Likely", "low": "Suspected"}
+_CONFIDENCE_BADGE_CLS = {"high": "badge-ok", "medium": "badge-warning", "low": "badge-critical"}
+
+
 def _findings_block(findings: list[dict[str, Any]]) -> str:
     if not findings:
-        return '<p class="empty">No structured findings.</p>'
+        return '<p class="empty">No findings to report.</p>'
     h = '<div class="finding-grid">'
-    for f in findings[:20]:
+    for f in findings[:12]:
         sev = f.get("severity", "medium")
         sev_cls = f"sev-{sev}" if sev in ("critical", "high", "medium", "low") else ""
         h += f'<div class="finding-card {sev_cls}">'
         h += '<div class="finding-header">'
         h += f'<span class="finding-title">{_esc(f.get("title", ""))}</span>'
-        ftype = f.get("finding_type", "")
-        if ftype:
-            h += f' <span class="finding-type">{_esc(ftype)}</span>'
-        if sev:
-            sev_badge = ("badge-critical" if sev in ("critical", "high")
-                         else "badge-warning" if sev == "medium"
-                         else "badge-ok")
-            h += f' <span class="badge {sev_badge}">{_esc(sev)}</span>'
+
+        confidence = f.get("confidence", "medium")
+        conf_label = _CONFIDENCE_LABELS.get(confidence, "")
+        conf_badge = _CONFIDENCE_BADGE_CLS.get(confidence, "badge-warning")
+        if conf_label:
+            h += f' <span class="badge {conf_badge}">{_esc(conf_label)}</span>'
         h += '</div>'
 
         desc = f.get("description", "")
@@ -800,7 +802,7 @@ def _findings_block(findings: list[dict[str, Any]]) -> str:
 
         interp = f.get("interpretation", "")
         if interp:
-            h += f'<div class="finding-desc" style="font-style:italic;">{_esc(interp)}</div>'
+            h += f'<div class="finding-desc" style="font-style:italic;border-left:2px solid var(--border);padding-left:10px;">{_esc(interp)}</div>'
 
         evidence = f.get("evidence", [])
         if evidence:
@@ -808,10 +810,6 @@ def _findings_block(findings: list[dict[str, Any]]) -> str:
             for ev in evidence[:5]:
                 h += f'<span class="evidence-tag">{_esc(str(ev))}</span>'
             h += '</div>'
-
-        action = f.get("recommended_action", "")
-        if action:
-            h += f'<div class="finding-action">{_esc(action)}</div>'
 
         h += '</div>'
     h += '</div>'
@@ -866,19 +864,16 @@ def _failure_patterns_block(patterns: list[dict[str, Any]]) -> str:
 def _rec_block(recs_struct: list[dict[str, Any]], recs_legacy: list[str]) -> str:
     if recs_struct:
         h = '<div class="rec-grid">'
-        for r in recs_struct[:15]:
-            prio = r.get("priority", 99)
+        for idx, r in enumerate(recs_struct[:5], 1):
             h += '<div class="rec-card">'
             h += '<div class="rec-header">'
+            h += f'<span class="rec-priority" style="min-width:22px;text-align:center;">{idx}</span>'
             h += f'<span class="rec-title">{_esc(r.get("title", ""))}</span>'
-            h += f' <span class="rec-priority">P{prio}</span>'
-            scope = r.get("scope", "")
-            if scope:
-                h += f' <span class="evidence-tag">{_esc(scope)}</span>'
             h += '</div>'
             why = r.get("why", "")
             if why:
-                h += f'<div class="rec-why">{_esc(why)}</div>'
+                truncated = why[:300] + "..." if len(why) > 300 else why
+                h += f'<div class="rec-why">{_esc(truncated)}</div>'
             action = r.get("action", "")
             if action:
                 h += f'<div class="rec-action">{_esc(action)}</div>'
@@ -890,14 +885,14 @@ def _rec_block(recs_struct: list[dict[str, Any]], recs_legacy: list[str]) -> str
                       f'{_esc(impact)}</div>')
             reference = r.get("example_command", "")
             if reference and not reference.startswith("bnnr"):
-                h += (f'<div style="font-size:10px;color:var(--muted);margin-top:6px;'
-                      f'font-style:italic;">Ref: {_esc(reference)}</div>')
+                h += (f'<div style="font-size:10px;color:var(--muted);margin-top:4px;'
+                      f'font-style:italic;">{_esc(reference)}</div>')
             h += '</div>'
         h += '</div>'
         return h
     if recs_legacy:
         h = '<div class="rec-grid">'
-        for legacy_r in recs_legacy[:15]:
+        for legacy_r in recs_legacy[:5]:
             h += f'<div class="rec-card"><div class="rec-title">{_esc(legacy_r)}</div></div>'
         h += '</div>'
         return h
@@ -978,6 +973,12 @@ def _xai_overview_block(summary: dict[str, Any], per_class: dict[str, Any]) -> s
         return '<p class="empty">No XAI analysis was performed.</p>'
 
     h = ""
+    total_xai_samples = 0
+    if per_class:
+        for data in per_class.values():
+            if isinstance(data, dict):
+                total_xai_samples += data.get("sample_count", 0)
+
     if summary:
         mean_q = summary.get("mean_quality_score")
         if isinstance(mean_q, (int, float)):
@@ -989,6 +990,12 @@ def _xai_overview_block(summary: dict[str, Any], per_class: dict[str, Any]) -> s
                   f'</div>')
             h += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">'
             h += 'Scale 0&ndash;1. Higher means the model focuses on the object, not background/artifacts.'
+            if total_xai_samples:
+                h += f' Based on a probe set of {total_xai_samples} samples'
+                if total_xai_samples < 100:
+                    h += ' (small sample &mdash; treat as indicative, not definitive).'
+                else:
+                    h += '.'
             h += '</div></div>'
 
     if not per_class:
@@ -1107,6 +1114,11 @@ def _data_quality_block(dq: dict[str, Any]) -> str:
         h += ('<div style="display:flex;align-items:center;padding:12px 16px;border-radius:8px;'
               'background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);'
               'color:var(--fg);font-weight:600;font-size:13px;">No issues detected.</div>')
+    h += ('<div style="font-size:11px;color:var(--muted);margin-top:10px;font-style:italic;">'
+          'Dataset health checks use perceptual hashing (dHash) for duplicate detection and '
+          'statistical heuristics for image quality. False positives are possible, especially '
+          'on small or synthetic datasets. Treat warnings as starting points for manual review.'
+          '</div>')
     return h
 
 
@@ -1334,7 +1346,6 @@ def render_analysis_html(report: Any) -> str:
     summary = getattr(report, "executive_summary", {}) or {}
     diagnostics = getattr(report, "class_diagnostics", []) or []
     findings = getattr(report, "findings", []) or []
-    patterns_ext = getattr(report, "failure_patterns_extended", []) or getattr(report, "failure_patterns", []) or []
     xai_summary = getattr(report, "xai_quality_summary", {}) or {}
     xai_per_class = getattr(report, "xai_quality_per_class", {}) or {}
     xai_examples = getattr(report, "xai_examples_per_class", {}) or {}
@@ -1349,23 +1360,31 @@ def render_analysis_html(report: Any) -> str:
     num_classes = len(true_dist) if true_dist else (len(diagnostics) if diagnostics else 0)
     num_samples = sum(true_dist.values()) if true_dist else 0
 
-    sections = [
-        ("exec", "Executive Summary"),
-        ("metrics", "Overview Metrics"),
-        ("diagnostics", "Class Diagnostics"),
-        ("confusion", "Confusion Matrix"),
-        ("findings", "Findings"),
-        ("patterns", "Failure Patterns"),
-        ("xai", "XAI Insights"),
-        ("worst", "Worst Predictions"),
-        ("dq", "Dataset Health"),
-        ("cv", "Cross-Validation"),
-        ("cluster", "Cluster View"),
-        ("recs", "Recommendations"),
-        ("caveats", "Method & Caveats"),
-    ]
+    has_xai = bool(xai_summary or xai_per_class or xai_examples)
+    has_dq = bool(data_quality)
+    has_cv = bool(cv_results and cv_results.get("n_folds"))
+    has_cluster = bool(cluster_views)
 
-    # Build TOC
+    sections: list[tuple[str, str]] = [
+        ("exec", "Executive Summary"),
+        ("metrics", "Overview"),
+        ("findings", "Findings"),
+        ("confusion", "Confusion Matrix"),
+        ("diagnostics", "Class Diagnostics"),
+    ]
+    if has_xai:
+        sections.append(("xai", "XAI Insights"))
+    if worst:
+        sections.append(("worst", "Worst Predictions"))
+    if has_cluster:
+        sections.append(("cluster", "Error Clusters"))
+    if has_dq:
+        sections.append(("dq", "Dataset Health"))
+    if has_cv:
+        sections.append(("cv", "Cross-Validation"))
+    sections.append(("recs", "Recommendations"))
+    sections.append(("caveats", "Method & Caveats"))
+
     toc = '<nav class="toc"><div class="toc-inner"><div class="toc-title">Contents</div>'
     for sid, label in sections:
         toc += f'<a href="#{sid}">{_esc(label)}</a>'
@@ -1382,7 +1401,7 @@ def render_analysis_html(report: Any) -> str:
         '<div class="report-header">',
         "<h1>BNNR Analysis Report</h1>",
         '<div class="report-meta">',
-        f'<span>Schema v{_esc(schema_version)}</span>',
+        f'<span>v{_esc(schema_version)}</span>',
         '<span>Classification</span>',
         f'<span>{num_classes} classes &middot; {num_samples:,} samples</span>' if num_samples else "",
         '</div></div>',
@@ -1391,92 +1410,99 @@ def render_analysis_html(report: Any) -> str:
         '<div class="main-content">',
     ]
 
-    # Executive Summary
+    # 1. Executive Summary
     lines.append(_section_open("exec", "Executive Summary"))
     lines.append(_executive_block(summary))
     lines.append(_section_close())
 
-    # Overview Metrics
-    lines.append(_section_open("metrics", "Overview Metrics"))
+    # 2. Overview Metrics
+    lines.append(_section_open("metrics", "Overview"))
     lines.append(_kpi_cards(metrics, num_classes, num_samples))
     lines.append(_section_close())
 
-    # Class Diagnostics
-    lines.append(_section_open("diagnostics", "Class Diagnostics", count=len(diagnostics)))
-    lines.append(_class_diagnostics_table(diagnostics))
-    lines.append(_section_close())
+    # 3. Findings (the core diagnostic output)
+    if findings:
+        lines.append(_section_open("findings", "Findings", count=len(findings)))
+        lines.append(_findings_block(findings))
+        lines.append(_section_close())
 
-    # Confusion Matrix
+    # 4. Confusion Matrix
     lines.append(_section_open("confusion", "Confusion Matrix"))
     lines.append(_confusion_heatmap(confusion))
     lines.append(_section_close())
 
-    # Findings
-    lines.append(_section_open("findings", "Findings", count=len(findings)))
-    lines.append(_findings_block(findings))
+    # 5. Class Diagnostics
+    lines.append(_section_open("diagnostics", "Class Diagnostics", count=len(diagnostics)))
+    lines.append(_class_diagnostics_table(diagnostics))
     lines.append(_section_close())
 
-    # Failure Patterns
-    if patterns_ext:
-        lines.append(_section_open("patterns", "Failure Patterns", count=len(patterns_ext)))
-        lines.append(_failure_patterns_block(patterns_ext))
+    # 6. XAI Insights (only if data exists)
+    if has_xai:
+        lines.append(_section_open("xai", "XAI Insights"))
+        lines.append(_xai_overview_block(xai_summary, xai_per_class))
+        lines.append(_xai_examples_block(xai_examples))
         lines.append(_section_close())
 
-    # XAI Insights
-    lines.append(_section_open("xai", "XAI Insights"))
-    lines.append(_xai_overview_block(xai_summary, xai_per_class))
-    lines.append(_xai_examples_block(xai_examples))
-    lines.append(_section_close())
+    # 7. Worst Predictions
+    if worst:
+        lines.append(_section_open("worst", "Worst Predictions", count=min(len(worst), 25)))
+        lines.append(_worst_predictions_table(worst))
+        lines.append(_section_close())
 
-    # Worst Predictions
-    lines.append(_section_open("worst", "Worst Predictions", count=len(worst)))
-    lines.append(_worst_predictions_table(worst))
-    lines.append(_section_close())
+    # 8. Error Clusters (only if generated)
+    if has_cluster:
+        lines.append(_section_open("cluster", "Error Clusters"))
+        lines.append(_cluster_block(cluster_views))
+        lines.append(_section_close())
 
-    # Dataset Health
-    lines.append(_section_open("dq", "Dataset Health"))
-    lines.append(_data_quality_block(data_quality))
-    lines.append(_section_close())
+    # 9. Dataset Health (only if analysis ran)
+    if has_dq:
+        lines.append(_section_open("dq", "Dataset Health"))
+        lines.append(_data_quality_block(data_quality))
+        lines.append(_section_close())
 
-    # Cross-Validation
-    lines.append(_section_open("cv", "Cross-Validation"))
-    lines.append(_cv_block(cv_results))
-    lines.append(_section_close())
+    # 10. Cross-Validation (only if folds > 1)
+    if has_cv:
+        lines.append(_section_open("cv", "Cross-Validation"))
+        lines.append(_cv_block(cv_results))
+        lines.append(_section_close())
 
-    # Cluster View
-    lines.append(_section_open("cluster", "Cluster View"))
-    lines.append(_cluster_block(cluster_views))
-    lines.append(_section_close())
-
-    # Recommendations
-    lines.append(_section_open("recs", "Recommendations", count=len(recs_struct) or len(recs_legacy)))
+    # 11. Recommendations (capped at 5)
+    rec_count = min(len(recs_struct), 5) if recs_struct else min(len(recs_legacy), 5)
+    lines.append(_section_open("recs", "Recommendations", count=rec_count))
     lines.append(_rec_block(recs_struct, recs_legacy))
     lines.append(_section_close())
 
-    # Method & Caveats
+    # 12. Method & Caveats
     lines.append(_section_open("caveats", "Method & Caveats"))
     lines.append(
         '<div class="caveats">'
-        "This report is generated by <strong>bnnr analyze</strong> (classification mode). "
-        "XAI quality score ranges 0&ndash;1; low values suggest the model may attend to "
-        "background or artifacts rather than the object of interest. "
-        "Findings and recommendations are derived algorithmically from per-class metrics, "
-        "confusion patterns, and XAI diagnostics&mdash;apply judgment in your own context. "
-        "Cross-validation (when enabled) splits the validation set into k folds and evaluates "
-        "the same model checkpoint on each fold; it measures metric stability, not generalization "
-        "from retraining. "
-        "For full training-loop optimization, use <strong>bnnr train</strong> with ICD/AICD "
-        "augmentation search."
+        "<p><strong>How to read this report.</strong> "
+        "Findings are tagged by confidence level: "
+        '<span class="badge badge-ok" style="font-size:10px;">Observed</span> = '
+        "directly measured from data; "
+        '<span class="badge badge-warning" style="font-size:10px;">Likely</span> = '
+        "strong heuristic signal; "
+        '<span class="badge badge-critical" style="font-size:10px;">Suspected</span> = '
+        "requires manual verification.</p>"
+        "<p>XAI quality score (0&ndash;1) measures whether saliency maps focus on the object "
+        "of interest. Values are computed from a small probe set and should be treated as "
+        "indicative rather than definitive.</p>"
+        "<p>Cross-validation (when enabled) splits the validation set into k folds and "
+        "re-evaluates the same checkpoint. It measures metric stability across data subsets, "
+        "not generalization from retraining.</p>"
+        "<p>Dataset health checks use perceptual hashing and statistical heuristics. "
+        "False positives are possible on small or synthetic datasets.</p>"
+        "<p>For training-loop optimization with saliency-guided augmentation, use "
+        "<strong>bnnr train</strong> with ICD/AICD.</p>"
         "</div>"
     )
     lines.append(_section_close())
 
-    # Close layout
-    lines.append('</div></div>')  # main-content, two-col
-    lines.append('</div>')  # page
+    lines.append('</div></div>')
+    lines.append('</div>')
 
-    # Cluster tooltip JS
-    if cluster_views:
+    if has_cluster:
         lines.append(_cluster_js())
 
     lines.append("</body></html>")

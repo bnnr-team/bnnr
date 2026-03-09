@@ -559,6 +559,9 @@ def _build_recommendations(report: AnalysisReport) -> list[str]:
     return recs
 
 
+_CONFIDENCE_PREFIXES = {"high": "", "medium": "[Likely] ", "low": "[Suspected] "}
+
+
 def _build_executive_summary(
     report: AnalysisReport,
     findings: list[Any],
@@ -589,11 +592,14 @@ def _build_executive_summary(
 
     health_score = min(1.0, health_score)
 
-    key_findings = [f.title for f in findings[:5]] if findings else []
-    if not key_findings and acc < 0.9:
+    key_findings: list[str] = []
+    for f in findings[:5]:
+        prefix = _CONFIDENCE_PREFIXES.get(f.confidence, "")
+        key_findings.append(f"{prefix}{f.title}")
+    if not key_findings:
         key_findings = [f"Overall accuracy is {acc:.0%}"]
 
-    top_actions = [r.title for r in recs_structured[:5]] if recs_structured else []
+    top_actions = [r.title for r in recs_structured[:3]] if recs_structured else []
     if not top_actions and report.recommendations:
         top_actions = report.recommendations[:3]
 

@@ -115,9 +115,11 @@ def test_analysis_report_html_sections(tmp_path: Path) -> None:
     report = AnalysisReport(
         metrics={"accuracy": 0.85, "loss": 0.4},
         executive_summary={"health_status": "needs_attention", "key_findings": ["Low accuracy"]},
-        findings=[{"title": "Low recall class 2", "severity": "high"}],
+        findings=[{"title": "Low recall class 2", "severity": "high", "confidence": "high"}],
         recommendations_structured=[{"title": "Add data for class 2", "priority": 1}],
         class_diagnostics=[{"class_name": "0", "accuracy": 0.9, "recall": 0.9, "support": 10}],
+        data_quality_summary={"scanned_samples": 100, "total_duplicate_pairs": 0},
+        xai_quality_summary={"mean_quality_score": 0.7},
     )
     out = tmp_path / "report.html"
     report.to_html(out)
@@ -126,13 +128,13 @@ def test_analysis_report_html_sections(tmp_path: Path) -> None:
     assert "Class Diagnostics" in html
     assert "Findings" in html
     assert "Dataset Health" in html
-    assert "Cross-Validation" in html
     assert "XAI Insights" in html
     assert "Recommendations" in html
     assert "Method" in html and "Caveats" in html
     assert "needs_attention" in html or "Low accuracy" in html
     assert "Low recall class 2" in html
     assert "Add data for class 2" in html
+    assert "Observed" in html or "Likely" in html
 
 
 def test_analyze_model_with_xai(model_adapter, tmp_path: Path) -> None:

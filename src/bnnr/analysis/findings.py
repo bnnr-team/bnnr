@@ -420,4 +420,7 @@ def build_findings(
                 )
             )
 
+    sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    findings.sort(key=lambda f: (sev_order.get(f.severity, 9), f.title))
+    findings = findings[:12]
     return findings, patterns
