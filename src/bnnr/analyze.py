@@ -434,13 +434,17 @@ def _build_xai_examples_for_worst_cases(
     per_class_examples: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for info, path in zip(meta, paths):
         cls_id = str(info["true_label"])
+        try:
+            rel_path = str(path.relative_to(output_dir))
+        except ValueError:
+            rel_path = str(path)
         ex = {
             "index": info["index"],
             "true_label": info["true_label"],
             "pred_label": info["pred_label"],
             "confidence": info["confidence"],
-            "image_path": str(path),
-            "overlay_path": str(path),
+            "image_path": rel_path,
+            "overlay_path": rel_path,
         }
         per_class_examples[cls_id].append(ex)
 

@@ -94,13 +94,13 @@ def build_findings(
                 if i != j and mat[i, j] > 0:
                     pairs.append((i, j, int(mat[i, j])))
         pairs.sort(key=lambda x: -x[2])
-        for i, j, count in pairs[:8]:
+        for rank, (i, j, count) in enumerate(pairs[:8]):
             true_id = str(labels_list[i]) if i < len(labels_list) else str(i)
             pred_id = str(labels_list[j]) if j < len(labels_list) else str(j)
             patterns.append(
                 FailurePattern(
                     pattern_type="confused_pair",
-                    description=f"True {true_id} → Pred {pred_id}",
+                    description=f"True {true_id} \u2192 Pred {pred_id}",
                     severity="high" if count >= 10 else "medium",
                     count=count,
                     class_a=true_id,
@@ -108,19 +108,30 @@ def build_findings(
                     evidence=[f"count={count}"],
                 )
             )
-            findings.append(
-                Finding(
-                    title=f"Model confuses class {true_id} with {pred_id}",
-                    finding_type="confused_pair",
-                    description=f"{count} samples of class {true_id} were predicted as {pred_id}.",
-                    evidence=[f"Confusion count: {count}"],
-                    interpretation="Possible semantic similarity or missing discriminative features.",
-                    severity="high" if count >= 10 else "medium",
-                    confidence="high",
-                    class_ids=[true_id, pred_id],
-                    recommended_action="Consider targeted augmentation or more data to separate these classes.",
+            if rank < 4:
+                findings.append(
+                    Finding(
+                        title=f"Model confuses class {true_id} with {pred_id} ({count}\u00d7)",
+                        finding_type="confused_pair",
+                        description=(
+                            f"{count} samples of true class {true_id} were predicted as {pred_id}. "
+                            f"This is the #{rank+1} most frequent confusion pair."
+                        ),
+                        evidence=[f"Confusion count: {count}"],
+                        interpretation=(
+                            "These classes may share visual features or background context. "
+                            "Check XAI overlays to determine if the confusion is driven by "
+                            "object similarity or spurious correlations."
+                        ),
+                        severity="high" if count >= 10 else "medium",
+                        confidence="high",
+                        class_ids=[true_id, pred_id],
+                        recommended_action=(
+                            "Inspect XAI overlays for both classes, add pair-specific augmentation, "
+                            "or consider metric learning to increase inter-class separation."
+                        ),
+                    )
                 )
-            )
 
     # --- Low XAI quality ---
     for cls_id, diag in xai_diagnoses.items():
@@ -327,12 +338,15 @@ def build_findings(
             )
 
     # --- Background / artefact focus suspected from XAI breakdown ---
+    bg_focus_count = 0
+    artifact_count = 0
     for cls_id, diag in xai_diagnoses.items():
         breakdown = diag.get("quality_breakdown") or {}
         edge_score = breakdown.get("edge")
         coverage_score = breakdown.get("coverage")
         focus_score = breakdown.get("focus")
-        if edge_score is not None and edge_score < 0.4:
+        if edge_score is not None and edge_score < 0.4 and bg_focus_count < 3:
+            bg_focus_count += 1
             findings.append(
                 Finding(
                     title=f"Background focus suspected for class {cls_id}",
@@ -366,7 +380,9 @@ def build_findings(
             and coverage_score is not None
             and focus_score < 0.3
             and coverage_score > 0.4
+            and artifact_count < 3
         ):
+            artifact_count += 1
             findings.append(
                 Finding(
                     title=f"Diffuse attention pattern for class {cls_id}",

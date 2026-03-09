@@ -884,7 +884,14 @@ def _rec_block(recs_struct: list[dict[str, Any]], recs_legacy: list[str]) -> str
                 h += f'<div class="rec-action">{_esc(action)}</div>'
             impact = r.get("expected_impact", "")
             if impact:
-                h += f'<div style="font-size:11px;color:var(--muted);margin-top:4px;">{_esc(impact)}</div>'
+                h += (f'<div style="font-size:12px;color:var(--green);margin-top:6px;'
+                      f'padding:4px 10px;background:rgba(34,197,94,0.08);border-radius:6px;'
+                      f'border:1px solid rgba(34,197,94,0.2);">'
+                      f'{_esc(impact)}</div>')
+            reference = r.get("example_command", "")
+            if reference and not reference.startswith("bnnr"):
+                h += (f'<div style="font-size:10px;color:var(--muted);margin-top:6px;'
+                      f'font-style:italic;">Ref: {_esc(reference)}</div>')
             h += '</div>'
         h += '</div>'
         return h
@@ -1029,18 +1036,25 @@ def _xai_examples_block(examples_per_class: dict[str, Any]) -> str:
     h = ""
     shown = 0
     for cls_id, examples in examples_per_class.items():
-        if not examples or shown >= 8:
+        if not examples or shown >= 12:
             break
-        h += f'<h3 style="margin:14px 0 8px;font-size:13px;">Class {_esc(str(cls_id))}</h3>'
+        h += (f'<div style="margin:18px 0 10px;display:flex;align-items:center;gap:8px;">'
+              f'<span style="font-size:14px;font-weight:700;">Class {_esc(str(cls_id))}</span>'
+              f'<span class="evidence-tag">{len(examples)} examples</span>'
+              f'</div>')
         h += '<div class="xai-example-grid">'
-        for ex in examples[:4]:
+        for ex in examples[:6]:
             overlay = _esc(str(ex.get("overlay_path", ex.get("image_path", ""))))
-            h += '<div class="xai-example-card">'
+            is_wrong = ex.get("true_label") != ex.get("pred_label")
+            border_style = "border-color:rgba(239,68,68,0.4);" if is_wrong else ""
+            h += f'<div class="xai-example-card" style="{border_style}">'
             if overlay:
                 h += f'<img src="{overlay}" alt="XAI overlay class {_esc(str(cls_id))}" loading="lazy" />'
             h += '<div class="xai-example-meta">'
-            h += (f'<strong>#{ex.get("index","")}</strong> '
-                  f'true={ex.get("true_label","")} pred={ex.get("pred_label","")} '
+            wrong_tag = ' <span style="color:var(--red);font-weight:700;">WRONG</span>' if is_wrong else ""
+            h += (f'<strong>#{ex.get("index","")}</strong>{wrong_tag}<br>'
+                  f'true={ex.get("true_label","")} '
+                  f'pred={ex.get("pred_label","")} '
                   f'conf={float(ex.get("confidence",0)):.3f}')
             h += '</div></div>'
         h += '</div>'
@@ -1141,91 +1155,170 @@ def _cluster_block(cluster_views: list[dict[str, Any]]) -> str:
     if not points:
         return '<p class="empty">No cluster visualization data.</p>'
 
-    xs = [float(p.get("x", 0)) for p in points]
-    ys = [float(p.get("y", 0)) for p in points]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
-    span_x = max(max_x - min_x, 1e-6)
-    span_y = max(max_y - min_y, 1e-6)
-
-    w, height = 440, 400
-    pad = 24
-
     unique_true = sorted(set(p.get("true_label", 0) for p in points))
     label_to_color = {lbl: _CLASS_COLORS[i % len(_CLASS_COLORS)] for i, lbl in enumerate(unique_true)}
 
-    svg_parts: list[str] = []
-    svg_parts.append(
-        f'<svg id="cluster-svg" width="{w}" height="{height}" '
-        f'viewBox="0 0 {w} {height}" style="background:#020617;border-radius:12px;'
-        f'border:1px solid var(--border);">'
-    )
-    svg_parts.append(f'<rect width="{w}" height="{height}" fill="transparent"/>')
+    points_json = json.dumps([
+        {
+            "x": p.get("x", 0),
+            "y": p.get("y", 0),
+            "index": p.get("index", 0),
+            "true_label": p.get("true_label", 0),
+            "pred_label": p.get("pred_label", 0),
+            "confidence": round(p.get("confidence", 0), 3),
+        }
+        for p in points
+    ])
+    colors_json = json.dumps({str(k): v for k, v in label_to_color.items()})
 
-    for i, p in enumerate(points):
-        px = float(p.get("x", 0))
-        py = float(p.get("y", 0))
-        nx = pad + (px - min_x) / span_x * (w - 2 * pad)
-        ny = pad + (max_y - py) / span_y * (height - 2 * pad)
-        color = label_to_color.get(p.get("true_label", 0), "#94a3b8")
-        meta_json = _esc(json.dumps({
-            "index": p.get("index"),
-            "true": p.get("true_label"),
-            "pred": p.get("pred_label"),
-            "conf": round(p.get("confidence", 0), 3),
-        }))
-        svg_parts.append(
-            f'<circle cx="{nx:.1f}" cy="{ny:.1f}" r="6" fill="{color}" opacity="0.85" '
-            f'stroke="rgba(255,255,255,0.2)" stroke-width="1" '
-            f'style="cursor:pointer;transition:r 0.15s;" '
-            f'data-meta="{meta_json}" '
-            f'onmouseenter="this.setAttribute(\'r\',\'10\');showClusterTip(evt,this)" '
-            f'onmouseleave="this.setAttribute(\'r\',\'6\');hideClusterTip()" />'
-        )
-    svg_parts.append("</svg>")
-
-    legend = '<div class="cluster-legend">'
-    legend += '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">True Class</div>'
-    for lbl in unique_true[:15]:
+    legend = '<div class="cluster-legend" id="cluster-legend">'
+    legend += ('<div style="font-size:10px;font-weight:700;color:var(--muted);'
+               'text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">True Class</div>')
+    for lbl in unique_true[:20]:
         c = label_to_color.get(lbl, "#94a3b8")
-        legend += f'<div class="cluster-legend-item"><span class="cluster-legend-dot" style="background:{c};"></span>'
-        legend += f'<span class="cluster-legend-label">{_esc(str(lbl))}</span></div>'
+        legend += (f'<div class="cluster-legend-item" data-class="{lbl}" '
+                   f'onclick="toggleClusterClass(this,{lbl})" style="cursor:pointer;">'
+                   f'<span class="cluster-legend-dot" style="background:{c};"></span>'
+                   f'<span class="cluster-legend-label">Class {_esc(str(lbl))}</span></div>')
     legend += '</div>'
 
-    h = '<div class="cluster-container">'
-    h += '<div class="cluster-svg-wrap">'
-    h += "".join(svg_parts)
+    h = '<div class="cluster-container" style="flex-direction:column;">'
+    h += '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;">'
+    h += '<div class="cluster-svg-wrap" style="flex:1;min-width:0;">'
+    h += '<canvas id="cluster-canvas" style="width:100%;height:520px;border-radius:12px;border:1px solid var(--border);background:#020617;cursor:crosshair;"></canvas>'
     h += '<div class="cluster-tooltip" id="cluster-tooltip"></div>'
     h += '</div>'
     h += legend
     h += '</div>'
-    h += '<div style="font-size:11px;color:var(--muted);margin-top:8px;">2D PCA projection of logits for worst predictions. Hover points for details.</div>'
+    h += ('<div style="font-size:12px;color:var(--muted);margin-top:10px;">'
+          '2D PCA projection of logits for worst predictions. '
+          'Click a class in the legend to filter. Hover points for details.</div>')
+    h += '</div>'
+    h += f'<script>var _clusterPoints={points_json};var _clusterColors={colors_json};</script>'
     return h
 
 
 def _cluster_js() -> str:
     return """
 <script>
-function showClusterTip(evt, el) {
+(function() {
+  var canvas = document.getElementById('cluster-canvas');
+  if (!canvas || typeof _clusterPoints === 'undefined') return;
+  var ctx = canvas.getContext('2d');
   var tip = document.getElementById('cluster-tooltip');
-  if (!tip || !el) return;
-  try {
-    var meta = JSON.parse(el.getAttribute('data-meta'));
-    tip.innerHTML = '<strong>#' + meta.index + '</strong><br>'
-      + 'True: ' + meta.true + '<br>'
-      + 'Pred: ' + meta.pred + '<br>'
-      + 'Conf: ' + meta.conf;
-    var rect = el.getBoundingClientRect();
-    var wrap = el.closest('.cluster-svg-wrap').getBoundingClientRect();
-    tip.style.left = (rect.left - wrap.left + 12) + 'px';
-    tip.style.top = (rect.top - wrap.top - 60) + 'px';
-    tip.style.display = 'block';
-  } catch(e) {}
-}
-function hideClusterTip() {
-  var tip = document.getElementById('cluster-tooltip');
-  if (tip) tip.style.display = 'none';
-}
+  var points = _clusterPoints;
+  var colors = _clusterColors;
+  var hiddenClasses = {};
+  var dpr = window.devicePixelRatio || 1;
+  var PAD = 32;
+
+  function resize() {
+    var rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+
+  function bounds() {
+    var xs = points.map(function(p){return p.x;});
+    var ys = points.map(function(p){return p.y;});
+    return {
+      minX: Math.min.apply(null, xs), maxX: Math.max.apply(null, xs),
+      minY: Math.min.apply(null, ys), maxY: Math.max.apply(null, ys)
+    };
+  }
+
+  function toScreen(px, py, b, w, h) {
+    var sx = b.maxX - b.minX || 1;
+    var sy = b.maxY - b.minY || 1;
+    return {
+      x: PAD + (px - b.minX) / sx * (w - 2*PAD),
+      y: PAD + (b.maxY - py) / sy * (h - 2*PAD)
+    };
+  }
+
+  function draw() {
+    var rect = canvas.getBoundingClientRect();
+    var w = rect.width, h = rect.height;
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.strokeStyle = 'rgba(148,163,184,0.1)';
+    ctx.lineWidth = 0.5;
+    for (var i = 0; i <= 4; i++) {
+      var gy = PAD + i * (h - 2*PAD) / 4;
+      ctx.beginPath(); ctx.moveTo(PAD, gy); ctx.lineTo(w - PAD, gy); ctx.stroke();
+      var gx = PAD + i * (w - 2*PAD) / 4;
+      ctx.beginPath(); ctx.moveTo(gx, PAD); ctx.lineTo(gx, h - PAD); ctx.stroke();
+    }
+
+    var b = bounds();
+    for (var i = 0; i < points.length; i++) {
+      var p = points[i];
+      if (hiddenClasses[p.true_label]) continue;
+      var s = toScreen(p.x, p.y, b, w, h);
+      var c = colors[String(p.true_label)] || '#94a3b8';
+      var wrongPred = p.true_label !== p.pred_label;
+
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, wrongPred ? 7 : 5, 0, Math.PI * 2);
+      ctx.fillStyle = c;
+      ctx.globalAlpha = 0.85;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = wrongPred ? 'rgba(239,68,68,0.6)' : 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = wrongPred ? 2 : 1;
+      ctx.stroke();
+    }
+  }
+
+  canvas.addEventListener('mousemove', function(e) {
+    if (!tip) return;
+    var rect = canvas.getBoundingClientRect();
+    var mx = e.clientX - rect.left;
+    var my = e.clientY - rect.top;
+    var w = rect.width, h = rect.height;
+    var b = bounds();
+    var best = null, bestD = 18;
+    for (var i = 0; i < points.length; i++) {
+      var p = points[i];
+      if (hiddenClasses[p.true_label]) continue;
+      var s = toScreen(p.x, p.y, b, w, h);
+      var d = Math.sqrt((s.x - mx) * (s.x - mx) + (s.y - my) * (s.y - my));
+      if (d < bestD) { best = p; bestD = d; }
+    }
+    if (best) {
+      var wrongTag = best.true_label !== best.pred_label
+        ? '<span style="color:#ef4444;font-weight:700;"> WRONG</span>' : '';
+      tip.innerHTML = '<strong>#' + best.index + '</strong>' + wrongTag + '<br>'
+        + 'True: <strong>' + best.true_label + '</strong><br>'
+        + 'Pred: <strong>' + best.pred_label + '</strong><br>'
+        + 'Conf: ' + best.confidence;
+      tip.style.left = (mx + 14) + 'px';
+      tip.style.top = (my - 50) + 'px';
+      tip.style.display = 'block';
+    } else {
+      tip.style.display = 'none';
+    }
+  });
+  canvas.addEventListener('mouseleave', function() {
+    if (tip) tip.style.display = 'none';
+  });
+
+  window.toggleClusterClass = function(el, cls) {
+    if (hiddenClasses[cls]) {
+      delete hiddenClasses[cls];
+      el.style.opacity = '1';
+    } else {
+      hiddenClasses[cls] = true;
+      el.style.opacity = '0.3';
+    }
+    draw();
+  };
+
+  window.addEventListener('resize', resize);
+  resize();
+})();
 </script>
 """
 
