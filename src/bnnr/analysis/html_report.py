@@ -1,428 +1,1390 @@
-"""HTML report renderer for bnnr analyze — dashboard-aligned design."""
+"""HTML report renderer for bnnr analyze — dashboard-aligned design.
+
+Produces a self-contained HTML file with:
+- Dark theme matching the BNNR dashboard (#080810 bg, #f0a069 accent)
+- Sticky table of contents with smooth-scroll navigation
+- Interactive confusion-matrix heatmap (colored cells)
+- Per-class diagnostic bars (recall / precision / F1)
+- Interactive cluster scatter plot (per-class colors, JS tooltips)
+- Severity-styled finding and recommendation cards
+- Professional typography and spacing
+"""
 
 from __future__ import annotations
 
+import html as html_mod
 import json
 from typing import Any
 
+_CLASS_COLORS = [
+    "#f0a069", "#818cf8", "#22c55e", "#ef4444", "#facc15",
+    "#06b6d4", "#e879f9", "#f97316", "#a3e635", "#fb7185",
+    "#38bdf8", "#c084fc", "#34d399", "#fbbf24", "#f472b6",
+    "#2dd4bf", "#a78bfa", "#4ade80", "#fb923c", "#94a3b8",
+]
+
 
 def _css() -> str:
-    """BNNR dashboard-aligned CSS (dark theme tokens)."""
     return """
 :root {
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   --radius: 12px;
+  --transition: 0.2s ease;
   --bg: #080810;
   --bg-subtle: #0d0d18;
   --fg: #f1f5f9;
   --muted: #94a3b8;
   --card: #131322;
+  --card-solid: #141423;
   --border: rgba(240, 160, 105, 0.18);
+  --border-subtle: rgba(255, 255, 255, 0.06);
   --accent: #f0a069;
+  --accent-hover: #f5b888;
+  --accent-muted: rgba(240, 160, 105, 0.15);
+  --glow: 0 0 20px rgba(240, 160, 105, 0.08), 0 0 40px rgba(240, 160, 105, 0.04);
+  --glow-strong: 0 0 20px rgba(240, 160, 105, 0.15), 0 0 60px rgba(240, 160, 105, 0.08);
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
   --green: #22c55e;
   --red: #ef4444;
-  --glow: 0 0 20px rgba(240, 160, 105, 0.08);
+  --yellow: #facc15;
 }
-* { box-sizing: border-box; margin: 0; }
-body { background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.5; padding: 20px; max-width: 1200px; margin: 0 auto; }
-.report-header { border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 24px; }
-.report-header h1 { font-size: 24px; font-weight: 800; color: var(--accent); margin-bottom: 8px; }
-.report-meta { font-size: 12px; color: var(--muted); }
-.section { margin-bottom: 28px; }
-.section h2 { font-size: 16px; font-weight: 700; color: var(--accent); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; box-shadow: var(--glow); }
-.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
-.kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; text-align: center; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse 80% 60% at 50% -20%, rgba(240,160,105,0.05) 0%, transparent 60%);
+  pointer-events: none;
+}
+::selection { background: rgba(240,160,105,0.3); color: inherit; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(240,160,105,0.2); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(240,160,105,0.4); }
+
+/* Layout */
+.page { max-width: 1200px; margin: 0 auto; padding: 0 24px 60px; }
+.two-col { display: flex; gap: 28px; }
+.main-content { flex: 1; min-width: 0; }
+
+/* Sticky TOC */
+.toc {
+  position: sticky;
+  top: 24px;
+  width: 200px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  display: none;
+}
+@media (min-width: 960px) { .toc { display: block; } }
+.toc-inner {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--glow);
+}
+.toc-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.toc a {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 4px 0;
+  transition: color var(--transition);
+}
+.toc a:hover, .toc a.active { color: var(--accent); }
+
+/* Header */
+.report-header {
+  padding: 32px 0 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 28px;
+}
+.report-header h1 {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #f0a069, #f5b888);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 6px;
+}
+.report-meta {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.report-meta span { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Section */
+.section { margin-bottom: 32px; scroll-margin-top: 24px; }
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.section-header h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.section-count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+/* Card */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 14px;
+  box-shadow: var(--glow);
+  transition: border-color var(--transition);
+}
+.card:hover { border-color: var(--accent); }
+.card h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+
+/* KPI Row */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.kpi-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  box-shadow: var(--glow);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.kpi-card:hover { border-color: var(--accent); box-shadow: var(--glow-strong); }
+.kpi-card.best {
+  border-color: rgba(240,160,105,0.5);
+  background: linear-gradient(135deg, rgba(240,160,105,0.1), rgba(240,160,105,0.03));
+  box-shadow: 0 0 16px rgba(240,160,105,0.2);
+}
 .kpi-value { font-size: 28px; font-weight: 800; color: var(--accent); line-height: 1.1; }
-.kpi-label { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-.badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 999px; margin-right: 8px; margin-bottom: 8px; }
-.badge-ok { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
-.badge-warning { background: rgba(240, 160, 105, 0.15); color: #f5b888; }
-.badge-critical { background: rgba(239, 68, 68, 0.15); color: #f87171; }
-.findings-list, .rec-list { display: grid; gap: 10px; }
-.finding-card, .rec-card { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 10px; padding: 14px; border-left: 3px solid var(--accent); }
-.finding-card.critical { border-left-color: var(--red); }
-.finding-card.warning { border-left-color: var(--accent); }
-.finding-title, .rec-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
-.finding-desc, .rec-why { font-size: 13px; color: var(--muted); margin-bottom: 6px; line-height: 1.5; }
-.rec-action { font-size: 13px; color: var(--accent); margin-top: 6px; }
-.table-wrap { overflow-x: auto; }
+.kpi-label {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 12px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.badge-ok { background: rgba(34,197,94,0.15); color: #4ade80; }
+.badge-warning { background: rgba(240,160,105,0.15); color: #f5b888; }
+.badge-critical { background: rgba(239,68,68,0.15); color: #f87171; }
+
+/* Health gauge */
+.health-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.health-bar-track {
+  flex: 1;
+  min-width: 120px;
+  max-width: 280px;
+  height: 10px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.health-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.6s ease;
+}
+.health-score {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+/* Finding / Recommendation cards */
+.finding-grid, .rec-grid { display: grid; gap: 10px; }
+.finding-card, .rec-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border-left: 3px solid var(--accent);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.finding-card:hover, .rec-card:hover { box-shadow: var(--glow); }
+.finding-card.sev-critical { border-left-color: var(--red); }
+.finding-card.sev-high { border-left-color: #f97316; }
+.finding-card.sev-medium { border-left-color: var(--yellow); }
+.finding-card.sev-low { border-left-color: var(--green); }
+.finding-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.finding-title { font-weight: 700; font-size: 13px; }
+.finding-type {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+.finding-desc { font-size: 13px; color: var(--muted); line-height: 1.55; margin-bottom: 6px; }
+.finding-evidence {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.evidence-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--muted);
+  font-family: 'SF Mono', SFMono-Regular, Consolas, monospace;
+}
+.finding-action {
+  font-size: 12px;
+  color: var(--accent);
+  padding: 6px 10px;
+  background: var(--accent-muted);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-top: 6px;
+}
+.rec-card { border-left-color: var(--accent); }
+.rec-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.rec-title { font-weight: 700; font-size: 13px; }
+.rec-priority {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  color: var(--muted);
+}
+.rec-why { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.rec-action {
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: 6px;
+}
+
+/* Tables */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
-th { font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; }
-.worst-list { display: grid; gap: 8px; }
-.worst-item { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; padding: 10px; background: var(--bg-subtle); border-radius: 8px; font-size: 13px; }
-.caveats { font-size: 12px; color: var(--muted); padding: 16px; background: var(--bg-subtle); border-radius: var(--radius); }
-.xai-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-.xai-card { background: var(--bg-subtle); border-radius: 10px; padding: 14px; border: 1px solid var(--border); }
-.xai-score { font-weight: 700; color: var(--accent); }
-.xai-flags { font-size: 11px; color: var(--muted); margin-top: 4px; }
-.xai-example-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
-.xai-example-card { background: var(--bg-subtle); border-radius: 10px; padding: 10px; border: 1px solid var(--border); }
-.xai-example-card img { width: 100%; border-radius: 8px; display: block; margin-bottom: 6px; }
-.dq-summary { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
-.cluster-wrap { margin-top: 8px; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border-subtle); }
+th {
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 2px solid var(--border);
+}
+tr:hover td { background: rgba(240,160,105,0.03); }
+.sev-row-critical td { border-left: 3px solid var(--red); }
+.sev-row-warning td:first-child { border-left: 3px solid var(--yellow); }
+
+/* Metric bar (inline in table) */
+.metric-bar-track {
+  width: 60px;
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 6px;
+  overflow: hidden;
+}
+.metric-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  display: block;
+}
+
+/* Confusion matrix heatmap */
+.cm-grid {
+  display: inline-grid;
+  gap: 2px;
+  font-size: 12px;
+  margin: 0 auto;
+}
+.cm-corner {
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.cm-header {
+  text-align: center;
+  padding: 4px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.cm-row-label {
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.cm-cell {
+  text-align: center;
+  padding: 6px 4px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 11px;
+  cursor: default;
+  transition: transform var(--transition);
+  min-width: 36px;
+}
+.cm-cell:hover { transform: scale(1.1); z-index: 1; position: relative; }
+
+/* XAI Grid */
+.xai-class-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.xai-class-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 14px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.xai-class-card:hover { border-color: var(--border); box-shadow: var(--glow); }
+.xai-class-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.xai-class-name { font-weight: 700; font-size: 13px; }
+.xai-quality-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent);
+}
+.xai-quality-bar-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.xai-quality-bar-fill { height: 100%; border-radius: 3px; }
+.xai-flags {
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.xai-flag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+}
+
+/* XAI Examples */
+.xai-example-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.xai-example-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 8px;
+  transition: border-color var(--transition);
+}
+.xai-example-card:hover { border-color: var(--accent); }
+.xai-example-card img {
+  width: 100%;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 6px;
+  border: 1px solid var(--border-subtle);
+}
+.xai-example-meta {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.xai-example-meta strong { color: var(--fg); }
+
+/* Worst predictions table */
+.worst-table tr.wrong td { color: var(--red); }
+.worst-conf-high { color: var(--red); font-weight: 700; }
+.worst-conf-low { color: var(--muted); }
+
+/* Data quality */
+.dq-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.dq-stat {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+}
+.dq-stat-value { font-size: 22px; font-weight: 800; color: var(--accent); }
+.dq-stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+.dq-warnings { display: grid; gap: 8px; }
+.dq-warning-row {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  align-items: flex-start;
+}
+.dq-warning-row.dq-critical {
+  background: rgba(239,68,68,0.08);
+  border-color: rgba(239,68,68,0.3);
+}
+.dq-warning-row.dq-warning {
+  background: rgba(240,160,105,0.08);
+  border-color: rgba(240,160,105,0.3);
+}
+.dq-warning-row.dq-info {
+  background: rgba(59,130,246,0.08);
+  border-color: rgba(59,130,246,0.3);
+}
+.dq-warning-title { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+.dq-warning-msg { font-size: 12px; color: var(--muted); }
+
+/* CV table */
+.cv-global {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.cv-metric {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+  text-align: center;
+}
+.cv-metric-value { font-size: 20px; font-weight: 800; color: var(--accent); }
+.cv-metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+
+/* Cluster */
+.cluster-container {
+  position: relative;
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.cluster-svg-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.cluster-tooltip {
+  display: none;
+  position: absolute;
+  background: rgba(20,20,35,0.95);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  z-index: 100;
+  white-space: nowrap;
+  color: var(--fg);
+}
+.cluster-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.cluster-legend-item { display: flex; align-items: center; gap: 6px; }
+.cluster-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cluster-legend-label { color: var(--muted); font-weight: 600; }
+
+/* Caveats */
+.caveats {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 16px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  line-height: 1.7;
+}
+
+/* Empty state */
+.empty { color: var(--muted); font-size: 13px; font-style: italic; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .page { padding: 0 12px 40px; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .kpi-value { font-size: 22px; }
+  .cm-cell { min-width: 28px; font-size: 10px; padding: 4px 2px; }
+  .cm-header, .cm-row-label { font-size: 9px; }
+  .cluster-container { flex-direction: column; }
+}
 """
 
 
-def _section(title: str, content: str) -> str:
-    return f'<div class="section"><h2>{title}</h2>{content}</div>'
+def _esc(s: str) -> str:
+    return html_mod.escape(str(s), quote=True)
 
 
-def _kpi_cards(metrics: dict[str, Any]) -> str:
-    if not metrics:
+def _section_open(section_id: str, title: str, count: int | None = None) -> str:
+    count_html = f' <span class="section-count">{count}</span>' if count is not None else ""
+    return (
+        f'<div class="section" id="{_esc(section_id)}">'
+        f'<div class="section-header"><h2>{_esc(title)}</h2>{count_html}</div>'
+    )
+
+
+def _section_close() -> str:
+    return "</div>"
+
+
+def _color_for_value(value: float, low: float = 0.0, high: float = 1.0) -> str:
+    """Interpolate from red through yellow to green."""
+    t = max(0.0, min(1.0, (value - low) / max(high - low, 1e-9)))
+    if t < 0.5:
+        r, g = 239, int(68 + (250 - 68) * (t * 2))
+        b = 68
+    else:
+        r = int(250 - (250 - 34) * ((t - 0.5) * 2))
+        g, b = 197, 94
+    return f"rgb({r},{g},{b})"
+
+
+def _bar_color(value: float) -> str:
+    if value >= 0.8:
+        return "var(--green)"
+    if value >= 0.5:
+        return "var(--accent)"
+    return "var(--red)"
+
+
+# ─── KPI ───────────────────────────────────────────────────────────────────
+
+def _kpi_cards(metrics: dict[str, Any], num_classes: int = 0, num_samples: int = 0) -> str:
+    if not metrics and not num_classes:
         return ""
-    parts = []
-    for key in ["accuracy", "f1_macro", "loss"]:
+    parts: list[str] = []
+
+    ordered = ["accuracy", "f1_macro", "loss"]
+    for key in ordered:
         if key not in metrics:
             continue
         v = metrics[key]
-        if isinstance(v, float):
-            if key == "loss":
-                parts.append(f'<div class="kpi-card"><div class="kpi-value">{v:.4f}</div><div class="kpi-label">{key}</div></div>')
-            else:
-                parts.append(f'<div class="kpi-card"><div class="kpi-value">{v:.1%}</div><div class="kpi-label">{key}</div></div>')
+        if not isinstance(v, (int, float)):
+            parts.append(f'<div class="kpi-card"><div class="kpi-value">{_esc(str(v))}</div>'
+                         f'<div class="kpi-label">{_esc(key)}</div></div>')
+            continue
+        best = ""
+        if key == "accuracy" and v >= 0.9:
+            best = " best"
+        if key == "loss":
+            disp = f"{v:.4f}"
         else:
-            parts.append(f'<div class="kpi-card"><div class="kpi-value">{v}</div><div class="kpi-label">{key}</div></div>')
+            disp = f"{v:.1%}"
+        parts.append(f'<div class="kpi-card{best}"><div class="kpi-value">{disp}</div>'
+                     f'<div class="kpi-label">{_esc(key)}</div></div>')
+
+    if num_classes:
+        parts.append(f'<div class="kpi-card"><div class="kpi-value">{num_classes}</div>'
+                     f'<div class="kpi-label">Classes</div></div>')
+    if num_samples:
+        parts.append(f'<div class="kpi-card"><div class="kpi-value">{num_samples:,}</div>'
+                     f'<div class="kpi-label">Samples</div></div>')
+
     if not parts:
         return ""
     return '<div class="kpi-row">' + "".join(parts) + "</div>"
 
 
+# ─── Executive Summary ─────────────────────────────────────────────────────
+
 def _executive_block(summary: dict[str, Any]) -> str:
     if not summary:
-        return ""
+        return '<p class="empty">No executive summary available.</p>'
+
     status = summary.get("health_status", "unknown")
     score = summary.get("health_score", 0)
-    badge_class = "badge-ok" if status == "ok" else "badge-warning" if status == "warning" else "badge-critical"
-    html = f'<div class="card"><span class="badge {badge_class}">{status.upper()}</span>'
-    html += f' <strong>Score:</strong> {score:.0%}'
-    if summary.get("severity"):
-        html += f' &middot; Severity: {summary["severity"]}'
-    html += "</div>"
-    key = summary.get("key_findings", [])
-    if key:
-        html += "<div class='card'><strong>Key findings</strong><ul style='margin:10px 0 0 20px;'>"
-        for k in key[:5]:
-            html += f"<li>{_esc(k)}</li>"
-        html += "</ul></div>"
+    severity = summary.get("severity", "")
+    badge_cls = ("badge-ok" if status == "ok"
+                 else "badge-warning" if status == "warning"
+                 else "badge-critical")
+    bar_color = ("var(--green)" if status == "ok"
+                 else "var(--accent)" if status == "warning"
+                 else "var(--red)")
+
+    h = '<div class="card">'
+    h += '<div class="health-row">'
+    h += f'<span class="badge {badge_cls}">{_esc(status.upper())}</span>'
+    h += f'<span class="health-score">{score:.0%}</span>'
+    h += (f'<div class="health-bar-track">'
+          f'<div class="health-bar-fill" style="width:{score*100:.0f}%;background:{bar_color};"></div>'
+          f'</div>')
+    if severity:
+        sev_cls = ("badge-critical" if severity in ("high", "critical")
+                   else "badge-warning" if severity == "medium"
+                   else "badge-ok")
+        h += f' <span class="badge {sev_cls}">Severity: {_esc(severity)}</span>'
+    h += '</div></div>'
+
+    key_findings = summary.get("key_findings", [])
+    if key_findings:
+        h += '<div class="card"><h3>Key Findings</h3><ul style="margin:0 0 0 18px;">'
+        for f in key_findings[:5]:
+            h += f"<li style='margin-bottom:4px;'>{_esc(f)}</li>"
+        h += "</ul></div>"
+
     actions = summary.get("top_actions", [])
     if actions:
-        html += "<div class='card'><strong>Top actions</strong><ul style='margin:10px 0 0 20px;'>"
+        h += '<div class="card"><h3>Top Actions</h3><ul style="margin:0 0 0 18px;">'
         for a in actions[:5]:
-            html += f"<li>{_esc(a)}</li>"
-        html += "</ul></div>"
-    return html
+            h += f"<li style='margin-bottom:4px;color:var(--accent);'>{_esc(a)}</li>"
+        h += "</ul></div>"
+
+    return h
 
 
-def _esc(s: str) -> str:
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-
-
-def _findings_block(findings: list[dict[str, Any]]) -> str:
-    if not findings:
-        return "<p class='muted'>No structured findings.</p>"
-    html = "<div class='findings-list'>"
-    for f in findings[:15]:
-        sev = f.get("severity", "medium")
-        cls = "critical" if sev == "critical" else "warning" if sev in ("high", "warning") else ""
-        html += f"<div class='finding-card {cls}'>"
-        html += f"<div class='finding-title'>{_esc(f.get('title', ''))}</div>"
-        html += f"<div class='finding-desc'>{_esc(f.get('description', ''))}</div>"
-        if f.get("recommended_action"):
-            html += f"<div class='rec-action'>{_esc(f['recommended_action'])}</div>"
-        html += "</div>"
-    html += "</div>"
-    return html
-
-
-def _rec_block(recs: list[dict[str, Any]], fallback: list[str]) -> str:
-    if recs:
-        html = "<div class='rec-list'>"
-        for r in recs[:15]:
-            html += "<div class='rec-card'>"
-            html += f"<div class='rec-title'>{_esc(r.get('title', ''))}</div>"
-            html += f"<div class='rec-why'>{_esc(r.get('why', ''))}</div>"
-            html += f"<div class='rec-action'>{_esc(r.get('action', ''))}</div>"
-            html += "</div>"
-        html += "</div>"
-        return html
-    if fallback:
-        return "<ul style='margin-left:20px;'>" + "".join(f"<li>{_esc(r)}</li>" for r in fallback) + "</ul>"
-    return "<p class='muted'>No recommendations.</p>"
-
+# ─── Class Diagnostics ─────────────────────────────────────────────────────
 
 def _class_diagnostics_table(diagnostics: list[dict[str, Any]]) -> str:
     if not diagnostics:
-        return "<p class='muted'>No per-class diagnostics.</p>"
-    html = "<div class='table-wrap'><table><thead><tr><th>Class</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>Support</th><th>Pred count</th><th>Severity</th></tr></thead><tbody>"
-    for d in diagnostics[:20]:
-        html += f"<tr><td>{_esc(str(d.get('class_id', '')))}</td><td>{d.get('accuracy', 0):.2%}</td><td>{d.get('precision', 0):.2%}</td><td>{d.get('recall', 0):.2%}</td><td>{d.get('f1', 0):.2%}</td><td>{d.get('support', 0)}</td><td>{d.get('pred_count', 0)}</td><td>{_esc(d.get('severity', ''))}</td></tr>"
-    html += "</tbody></table></div>"
-    return html
+        return '<p class="empty">No per-class diagnostics.</p>'
+
+    h = '<div class="table-wrap"><table><thead><tr>'
+    h += "<th>#</th><th>Class</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th>"
+    h += "<th>Support</th><th>Pred count</th><th>Severity</th>"
+    h += "</tr></thead><tbody>"
+
+    for i, d in enumerate(diagnostics[:30], 1):
+        sev = d.get("severity", "ok")
+        row_cls = f' class="sev-row-{sev}"' if sev in ("critical", "warning") else ""
+        cid = _esc(str(d.get("class_id", "")))
+        acc = d.get("accuracy", 0)
+        prec = d.get("precision", 0)
+        rec = d.get("recall", 0)
+        f1 = d.get("f1", 0)
+        support = d.get("support", 0)
+        pred_count = d.get("pred_count", 0)
+
+        def _metric_cell(val: float) -> str:
+            pct = f"{val:.1%}"
+            bar = (f'<span class="metric-bar-track">'
+                   f'<span class="metric-bar-fill" style="width:{val*100:.0f}%;background:{_bar_color(val)};"></span>'
+                   f'</span>')
+            return f"<td>{pct} {bar}</td>"
+
+        sev_badge = ""
+        if sev == "critical":
+            sev_badge = '<span class="badge badge-critical">critical</span>'
+        elif sev == "warning":
+            sev_badge = '<span class="badge badge-warning">warning</span>'
+        else:
+            sev_badge = '<span class="badge badge-ok">ok</span>'
+
+        h += f"<tr{row_cls}><td>{i}</td><td><strong>{cid}</strong></td>"
+        h += _metric_cell(acc) + _metric_cell(prec) + _metric_cell(rec) + _metric_cell(f1)
+        h += f"<td>{support}</td><td>{pred_count}</td><td>{sev_badge}</td></tr>"
+
+    h += "</tbody></table></div>"
+    return h
 
 
-def _worst_predictions_table(worst: list[dict[str, Any]], n: int = 20) -> str:
+# ─── Findings ──────────────────────────────────────────────────────────────
+
+def _findings_block(findings: list[dict[str, Any]]) -> str:
+    if not findings:
+        return '<p class="empty">No structured findings.</p>'
+    h = '<div class="finding-grid">'
+    for f in findings[:20]:
+        sev = f.get("severity", "medium")
+        sev_cls = f"sev-{sev}" if sev in ("critical", "high", "medium", "low") else ""
+        h += f'<div class="finding-card {sev_cls}">'
+        h += '<div class="finding-header">'
+        h += f'<span class="finding-title">{_esc(f.get("title", ""))}</span>'
+        ftype = f.get("finding_type", "")
+        if ftype:
+            h += f' <span class="finding-type">{_esc(ftype)}</span>'
+        if sev:
+            sev_badge = ("badge-critical" if sev in ("critical", "high")
+                         else "badge-warning" if sev == "medium"
+                         else "badge-ok")
+            h += f' <span class="badge {sev_badge}">{_esc(sev)}</span>'
+        h += '</div>'
+
+        desc = f.get("description", "")
+        if desc:
+            h += f'<div class="finding-desc">{_esc(desc)}</div>'
+
+        interp = f.get("interpretation", "")
+        if interp:
+            h += f'<div class="finding-desc" style="font-style:italic;">{_esc(interp)}</div>'
+
+        evidence = f.get("evidence", [])
+        if evidence:
+            h += '<div class="finding-evidence">'
+            for ev in evidence[:5]:
+                h += f'<span class="evidence-tag">{_esc(str(ev))}</span>'
+            h += '</div>'
+
+        action = f.get("recommended_action", "")
+        if action:
+            h += f'<div class="finding-action">{_esc(action)}</div>'
+
+        h += '</div>'
+    h += '</div>'
+    return h
+
+
+# ─── Failure Patterns ──────────────────────────────────────────────────────
+
+def _failure_patterns_block(patterns: list[dict[str, Any]]) -> str:
+    if not patterns:
+        return ""
+    h = '<div class="finding-grid">'
+    for p in patterns[:15]:
+        ptype = p.get("pattern_type", p.get("type", ""))
+        desc = p.get("description", "")
+        sev = p.get("severity", "medium")
+        count = p.get("count", 0)
+        sev_cls = f"sev-{sev}" if sev in ("critical", "high", "medium", "low") else ""
+
+        h += f'<div class="finding-card {sev_cls}">'
+        h += '<div class="finding-header">'
+        h += f'<span class="finding-title">{_esc(desc)}</span>'
+        if ptype:
+            h += f' <span class="finding-type">{_esc(ptype)}</span>'
+        if count:
+            h += f' <span class="evidence-tag">count={count}</span>'
+        h += '</div>'
+
+        evidence = p.get("evidence", [])
+        if evidence:
+            h += '<div class="finding-evidence">'
+            for ev in evidence[:4]:
+                h += f'<span class="evidence-tag">{_esc(str(ev))}</span>'
+            h += '</div>'
+
+        meta = p.get("metadata", {})
+        if meta:
+            tags = [f"{k}={v}" for k, v in meta.items() if not isinstance(v, (dict, list))]
+            if tags:
+                h += '<div class="finding-evidence">'
+                for t in tags[:4]:
+                    h += f'<span class="evidence-tag">{_esc(t)}</span>'
+                h += '</div>'
+
+        h += '</div>'
+    h += '</div>'
+    return h
+
+
+# ─── Recommendations ──────────────────────────────────────────────────────
+
+def _rec_block(recs_struct: list[dict[str, Any]], recs_legacy: list[str]) -> str:
+    if recs_struct:
+        h = '<div class="rec-grid">'
+        for r in recs_struct[:15]:
+            prio = r.get("priority", 99)
+            h += '<div class="rec-card">'
+            h += '<div class="rec-header">'
+            h += f'<span class="rec-title">{_esc(r.get("title", ""))}</span>'
+            h += f' <span class="rec-priority">P{prio}</span>'
+            scope = r.get("scope", "")
+            if scope:
+                h += f' <span class="evidence-tag">{_esc(scope)}</span>'
+            h += '</div>'
+            why = r.get("why", "")
+            if why:
+                h += f'<div class="rec-why">{_esc(why)}</div>'
+            action = r.get("action", "")
+            if action:
+                h += f'<div class="rec-action">{_esc(action)}</div>'
+            impact = r.get("expected_impact", "")
+            if impact:
+                h += f'<div style="font-size:11px;color:var(--muted);margin-top:4px;">{_esc(impact)}</div>'
+            h += '</div>'
+        h += '</div>'
+        return h
+    if recs_legacy:
+        h = '<div class="rec-grid">'
+        for legacy_r in recs_legacy[:15]:
+            h += f'<div class="rec-card"><div class="rec-title">{_esc(legacy_r)}</div></div>'
+        h += '</div>'
+        return h
+    return '<p class="empty">No recommendations.</p>'
+
+
+# ─── Confusion Matrix Heatmap ──────────────────────────────────────────────
+
+def _confusion_heatmap(confusion: dict[str, Any]) -> str:
+    matrix = confusion.get("matrix")
+    labels_list = confusion.get("labels", [])
+    if not isinstance(matrix, list) or not matrix or not labels_list:
+        return '<p class="empty">No confusion matrix data.</p>'
+
+    n = len(matrix)
+    flat = [matrix[i][j] for i in range(n) for j in range(n)]
+    max_val = max(flat) if flat else 1
+    if max_val == 0:
+        max_val = 1
+
+    h = '<div style="overflow-x:auto;text-align:center;">'
+    h += f'<div class="cm-grid" style="grid-template-columns:60px repeat({n}, 1fr); max-width:{max(n*42+60, 300)}px; margin:0 auto;">'
+    h += '<div class="cm-corner">True \\ Pred</div>'
+    for j in range(n):
+        lbl = str(labels_list[j]) if j < len(labels_list) else str(j)
+        h += f'<div class="cm-header">{_esc(lbl)}</div>'
+
+    for i in range(n):
+        row_lbl = str(labels_list[i]) if i < len(labels_list) else str(i)
+        h += f'<div class="cm-row-label">{_esc(row_lbl)}</div>'
+        for j in range(n):
+            val = int(matrix[i][j])
+            intensity = val / max_val
+            if i == j:
+                bg = f"rgba(34,197,94,{0.1 + intensity * 0.6:.2f})"
+            else:
+                bg = f"rgba(239,68,68,{intensity * 0.6:.2f})" if val > 0 else "transparent"
+            fg = "var(--fg)" if intensity > 0.3 else "var(--muted)"
+            disp = str(val) if val > 0 else ""
+            h += (f'<div class="cm-cell" style="background:{bg};color:{fg};" '
+                  f'title="True {_esc(row_lbl)} → Pred {_esc(str(labels_list[j]) if j < len(labels_list) else str(j))}: {val}">'
+                  f'{disp}</div>')
+
+    h += '</div></div>'
+    return h
+
+
+# ─── Worst Predictions ────────────────────────────────────────────────────
+
+def _worst_predictions_table(worst: list[dict[str, Any]], n: int = 25) -> str:
     if not worst:
-        return "<p class='muted'>No worst predictions.</p>"
+        return '<p class="empty">No worst predictions.</p>'
     subset = worst[:n]
-    html = "<div class='table-wrap'><table><thead><tr><th>#</th><th>Index</th><th>True</th><th>Pred</th><th>Confidence</th><th>Loss</th></tr></thead><tbody>"
+    h = '<div class="table-wrap"><table class="worst-table"><thead><tr>'
+    h += "<th>#</th><th>Sample</th><th>True</th><th>Predicted</th><th>Confidence</th><th>Loss</th>"
+    h += "</tr></thead><tbody>"
     for i, w in enumerate(subset, 1):
-        html += f"<tr><td>{i}</td><td>{w.get('index', '')}</td><td>{w.get('true_label', '')}</td><td>{w.get('pred_label', '')}</td><td>{w.get('confidence', 0):.3f}</td><td>{w.get('loss', 0):.4f}</td></tr>"
-    html += "</tbody></table></div>"
-    return html
+        is_wrong = w.get("true_label") != w.get("pred_label")
+        row_cls = ' class="wrong"' if is_wrong else ""
+        conf = w.get("confidence", 0)
+        conf_cls = "worst-conf-high" if conf >= 0.8 else "worst-conf-low" if conf < 0.5 else ""
+        h += f"<tr{row_cls}>"
+        h += f"<td>{i}</td>"
+        h += f'<td>#{w.get("index", "")}</td>'
+        h += f'<td>{w.get("true_label", "")}</td>'
+        h += f'<td>{w.get("pred_label", "")}</td>'
+        h += f'<td class="{conf_cls}">{conf:.3f}</td>'
+        h += f'<td>{w.get("loss", 0):.4f}</td>'
+        h += "</tr>"
+    h += "</tbody></table></div>"
+    return h
 
 
-def _xai_overview_block(
-    summary: dict[str, Any],
-    per_class: dict[str, Any],
-) -> str:
+# ─── XAI Insights ─────────────────────────────────────────────────────────
+
+def _xai_overview_block(summary: dict[str, Any], per_class: dict[str, Any]) -> str:
     if not summary and not per_class:
-        return "<p class='muted'>No XAI summary.</p>"
-    html = "<div class='card'>"
+        return '<p class="empty">No XAI analysis was performed.</p>'
+
+    h = ""
     if summary:
         mean_q = summary.get("mean_quality_score")
         if isinstance(mean_q, (int, float)):
-            html += f"<div><strong>Mean XAI quality:</strong> {mean_q:.3f} (0–1, higher is better)</div>"
-    html += "</div>"
+            bar_color = _bar_color(mean_q)
+            h += '<div class="card">'
+            h += f'<h3>Global XAI Quality: {mean_q:.3f}</h3>'
+            h += (f'<div class="xai-quality-bar-track" style="max-width:300px;">'
+                  f'<div class="xai-quality-bar-fill" style="width:{mean_q*100:.0f}%;background:{bar_color};"></div>'
+                  f'</div>')
+            h += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">'
+            h += 'Scale 0&ndash;1. Higher means the model focuses on the object, not background/artifacts.'
+            h += '</div></div>'
+
     if not per_class:
-        return html
-    # Show worst classes by XAI quality
-    items = []
+        return h
+
+    items: list[tuple[float, str, int, list[str]]] = []
     for cid, data in per_class.items():
         if isinstance(data, dict):
             q = data.get("mean_quality")
             sc = data.get("sample_count", 0)
             flags = data.get("flags", [])
         else:
-            q = None
-            sc = 0
-            flags = []
+            continue
         if q is None:
             continue
         items.append((float(q), str(cid), sc, flags))
+
     if not items:
-        return html
+        return h
+
     items.sort(key=lambda t: t[0])
-    html += "<div class='xai-grid'>"
-    for q, cid, sc, flags in items[:8]:
-        html += "<div class='xai-card'>"
-        html += f"<div><strong>Class { _esc(cid) }</strong></div>"
-        html += f"<div class='xai-score'>quality={q:.3f}</div>"
-        html += f"<div class='xai-flags'>samples={sc}"
-        if flags:
-            html += " · " + ", ".join(_esc(str(f)) for f in flags)
-        html += "</div></div>"
-    html += "</div>"
-    return html
+    h += '<div class="xai-class-grid">'
+    for q, cid, sc, flags in items[:12]:
+        q_color = _bar_color(q)
+        h += f'<div class="xai-class-card" style="border-left:3px solid {q_color};">'
+        h += '<div class="xai-class-header">'
+        h += f'<span class="xai-class-name">Class {_esc(cid)}</span>'
+        h += f'<span class="xai-quality-badge">{q:.3f}</span>'
+        h += '</div>'
+        h += (f'<div class="xai-quality-bar-track">'
+              f'<div class="xai-quality-bar-fill" style="width:{q*100:.0f}%;background:{q_color};"></div>'
+              f'</div>')
+        h += f'<div class="xai-flags"><span class="xai-flag">samples: {sc}</span>'
+        for fl in flags[:3]:
+            h += f' <span class="xai-flag">{_esc(str(fl))}</span>'
+        h += '</div></div>'
+    h += '</div>'
+    return h
 
 
 def _xai_examples_block(examples_per_class: dict[str, Any]) -> str:
     if not examples_per_class:
-        return "<p class='muted'>No XAI example cards were generated. Enable XAI in analyze to see saliency overlays.</p>"
-    html = "<div class='xai-example-grid'>"
-    # Show up to a few classes with examples
+        return ('<p class="empty">No XAI example overlays were generated. '
+                'Run with XAI enabled and an output directory to see saliency overlays.</p>')
+    h = ""
     shown = 0
     for cls_id, examples in examples_per_class.items():
-        if not examples:
-            continue
-        if shown >= 6:
+        if not examples or shown >= 8:
             break
-        ex0 = examples[0]
-        html += "<div class='xai-example-card'>"
-        overlay_path = _esc(str(ex0.get("overlay_path", ex0.get("image_path", ""))))
-        if overlay_path:
-            html += f"<img src=\"{overlay_path}\" alt=\"XAI overlay for class { _esc(str(cls_id)) }\" />"
-        html += f"<div><strong>Class { _esc(str(cls_id)) }</strong></div>"
-        html += "<div style='font-size:12px; color:var(--muted);'>"
-        html += f"Example idx={_esc(str(ex0.get('index', '')))}, true={_esc(str(ex0.get('true_label', '')))}, pred={_esc(str(ex0.get('pred_label', '')))}, conf={float(ex0.get('confidence', 0.0)):.3f}"
-        html += "</div>"
-        html += "</div>"
+        h += f'<h3 style="margin:14px 0 8px;font-size:13px;">Class {_esc(str(cls_id))}</h3>'
+        h += '<div class="xai-example-grid">'
+        for ex in examples[:4]:
+            overlay = _esc(str(ex.get("overlay_path", ex.get("image_path", ""))))
+            h += '<div class="xai-example-card">'
+            if overlay:
+                h += f'<img src="{overlay}" alt="XAI overlay class {_esc(str(cls_id))}" loading="lazy" />'
+            h += '<div class="xai-example-meta">'
+            h += (f'<strong>#{ex.get("index","")}</strong> '
+                  f'true={ex.get("true_label","")} pred={ex.get("pred_label","")} '
+                  f'conf={float(ex.get("confidence",0)):.3f}')
+            h += '</div></div>'
+        h += '</div>'
         shown += 1
-    html += "</div>"
-    return html
+    return h
 
 
-def _data_quality_block(data_quality: dict[str, Any]) -> str:
-    if not data_quality:
-        return "<p class='muted'>No data-quality analysis was run.</p>"
-    dq = data_quality
-    scanned = dq.get("scanned_samples")
-    summary = dq.get("summary", "")
+# ─── Data Quality ──────────────────────────────────────────────────────────
+
+def _data_quality_block(dq: dict[str, Any]) -> str:
+    if not dq:
+        return '<p class="empty">No data quality analysis was performed.</p>'
+
+    scanned = dq.get("scanned_samples") or dq.get("total_scanned", 0)
     dup_pairs = dq.get("total_duplicate_pairs", 0)
     flagged = dq.get("total_flagged_images", 0)
     warnings = dq.get("warnings", [])
-    html = "<div class='card dq-summary'>"
-    if scanned is not None:
-        html += f"Scanned samples: {scanned}. "
-    if summary:
-        html += _esc(summary)
-    html += "</div>"
-    html += "<div class='card'>"
-    html += f"<div>Duplicate pairs: {dup_pairs}, flagged images: {flagged}</div>"
+    summary_text = dq.get("summary", "")
+
+    h = '<div class="dq-stats">'
+    if scanned:
+        h += f'<div class="dq-stat"><div class="dq-stat-value">{scanned:,}</div><div class="dq-stat-label">Scanned</div></div>'
+    h += f'<div class="dq-stat"><div class="dq-stat-value">{dup_pairs}</div><div class="dq-stat-label">Duplicate Pairs</div></div>'
+    h += f'<div class="dq-stat"><div class="dq-stat-value">{flagged}</div><div class="dq-stat-label">Flagged Images</div></div>'
+    h += '</div>'
+
+    if summary_text:
+        h += f'<div class="card" style="font-size:13px;color:var(--muted);">{_esc(summary_text)}</div>'
+
     if warnings:
-        html += "<ul style='margin:8px 0 0 18px;'>"
-        for w in warnings[:6]:
-            msg = w.get("message") or ""
-            wtype = w.get("type") or ""
+        h += '<div class="dq-warnings">'
+        for w in warnings[:8]:
+            msg = w.get("message", "")
+            wtype = w.get("type", "info")
             count = w.get("count", 0)
-            html += f"<li><strong>{_esc(str(wtype))}</strong>: {_esc(str(msg))} (count={count})</li>"
-        html += "</ul>"
-    html += "</div>"
-    return html
+            sev_cls = ("dq-critical" if wtype in ("critical", "error")
+                       else "dq-warning" if wtype in ("warning", "high_variance", "tiny_images", "zero_variance")
+                       else "dq-info")
+            h += f'<div class="dq-warning-row {sev_cls}">'
+            h += '<div>'
+            h += f'<div class="dq-warning-title">{_esc(str(wtype))}'
+            if count:
+                h += f' <span class="evidence-tag">count={count}</span>'
+            h += '</div>'
+            if msg:
+                h += f'<div class="dq-warning-msg">{_esc(str(msg))}</div>'
+            h += '</div></div>'
+        h += '</div>'
+    elif not warnings and scanned:
+        h += ('<div style="display:flex;align-items:center;padding:12px 16px;border-radius:8px;'
+              'background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);'
+              'color:var(--fg);font-weight:600;font-size:13px;">No issues detected.</div>')
+    return h
 
 
-def _cv_block(cv_results: dict[str, Any]) -> str:
-    if not cv_results or not cv_results.get("n_folds"):
-        return "<p class='muted'>Cross-validation was not run.</p>"
-    n_folds = cv_results.get("n_folds", 0)
-    global_metrics = cv_results.get("global_metrics", {}) or {}
-    per_fold = cv_results.get("per_fold_metrics", []) or []
-    html = "<div class='card'>"
-    html += f"<div><strong>Folds:</strong> {n_folds}</div>"
-    if global_metrics:
-        parts = []
-        for key in ["mean_accuracy", "std_accuracy", "min_accuracy", "max_accuracy"]:
-            if key in global_metrics:
-                parts.append(f"{key}={global_metrics[key]:.3f}")
-        if parts:
-            html += "<div>Accuracy: " + ", ".join(parts) + "</div>"
-    html += "</div>"
+# ─── Cross-Validation ─────────────────────────────────────────────────────
+
+def _cv_block(cv: dict[str, Any]) -> str:
+    if not cv or not cv.get("n_folds"):
+        return '<p class="empty">Cross-validation was not run. Use --cv-folds to enable.</p>'
+
+    n_folds = cv.get("n_folds", 0)
+    gm = cv.get("global_metrics", {}) or {}
+    per_fold = cv.get("per_fold_metrics", []) or []
+
+    h = '<div class="cv-global">'
+    h += f'<div class="cv-metric"><div class="cv-metric-value">{n_folds}</div><div class="cv-metric-label">Folds</div></div>'
+    for key in ["mean_accuracy", "std_accuracy", "min_accuracy", "max_accuracy"]:
+        if key in gm:
+            label = key.replace("_", " ").title()
+            h += (f'<div class="cv-metric"><div class="cv-metric-value">{gm[key]:.3f}</div>'
+                  f'<div class="cv-metric-label">{_esc(label)}</div></div>')
+    h += '</div>'
+
     if per_fold:
-        html += "<div class='table-wrap'><table><thead><tr><th>Fold</th><th>Accuracy</th><th>Support</th></tr></thead><tbody>"
+        h += '<div class="table-wrap"><table><thead><tr>'
+        h += "<th>Fold</th><th>Accuracy</th><th>Support</th>"
+        h += "</tr></thead><tbody>"
         for fm in per_fold:
-            html += f"<tr><td>{fm.get('fold', '')}</td><td>{fm.get('accuracy', 0):.3f}</td><td>{fm.get('support', 0)}</td></tr>"
-        html += "</tbody></table></div>"
-    return html
+            acc = fm.get("accuracy", 0)
+            h += f'<tr><td>{fm.get("fold","")}</td>'
+            h += f'<td>{acc:.3f} '
+            h += (f'<span class="metric-bar-track"><span class="metric-bar-fill" '
+                  f'style="width:{acc*100:.0f}%;background:{_bar_color(acc)};"></span></span></td>')
+            h += f'<td>{fm.get("support",0)}</td></tr>'
+        h += "</tbody></table></div>"
+    return h
 
+
+# ─── Cluster Visualization ────────────────────────────────────────────────
 
 def _cluster_block(cluster_views: list[dict[str, Any]]) -> str:
     if not cluster_views:
-        return "<p class='muted'>No cluster visualisation was generated.</p>"
+        return '<p class="empty">No cluster visualization generated.</p>'
+
     view = cluster_views[0]
-    points = view.get("points") or []
+    points = view.get("points", [])
     if not points:
-        return "<p class='muted'>No cluster visualisation was generated.</p>"
-    xs = [float(p.get("x", 0.0)) for p in points]
-    ys = [float(p.get("y", 0.0)) for p in points]
+        return '<p class="empty">No cluster visualization data.</p>'
+
+    xs = [float(p.get("x", 0)) for p in points]
+    ys = [float(p.get("y", 0)) for p in points]
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
     span_x = max(max_x - min_x, 1e-6)
     span_y = max(max_y - min_y, 1e-6)
-    svg = "<svg width='260' height='260' viewBox='0 0 260 260' style='background: #020617; border-radius: 12px;'>"
-    svg += "<rect x='0' y='0' width='260' height='260' fill='transparent' stroke='rgba(148,163,184,0.35)' />"
-    for p in points:
-        x = float(p.get("x", 0.0))
-        y = float(p.get("y", 0.0))
-        # Normalise to [10, 250]
-        nx = 10 + (x - min_x) / span_x * 240.0
-        ny = 10 + (max_y - y) / span_y * 240.0
-        color = "#f97316"  # accent
-        svg += f"<circle cx='{nx:.1f}' cy='{ny:.1f}' r='4' fill='{color}' />"
-    svg += "</svg>"
-    # Minimal JS to show point details on click (no external deps).
-    # We only show a JSON dump of the first few points.
-    sample_meta = json.dumps(points[:5], indent=2)
-    html = "<div class='cluster-wrap'>"
-    html += svg
-    html += "<div style='font-size:11px; color:var(--muted); margin-top:8px;'>2D projection of worst predictions (relative positions only). Below are a few sample points:</div>"
-    html += "<pre style='font-size:11px; max-height:160px; overflow:auto; margin-top:4px;'>" + _esc(sample_meta) + "</pre>"
-    html += "</div>"
-    return html
+
+    w, height = 440, 400
+    pad = 24
+
+    unique_true = sorted(set(p.get("true_label", 0) for p in points))
+    label_to_color = {lbl: _CLASS_COLORS[i % len(_CLASS_COLORS)] for i, lbl in enumerate(unique_true)}
+
+    svg_parts: list[str] = []
+    svg_parts.append(
+        f'<svg id="cluster-svg" width="{w}" height="{height}" '
+        f'viewBox="0 0 {w} {height}" style="background:#020617;border-radius:12px;'
+        f'border:1px solid var(--border);">'
+    )
+    svg_parts.append(f'<rect width="{w}" height="{height}" fill="transparent"/>')
+
+    for i, p in enumerate(points):
+        px = float(p.get("x", 0))
+        py = float(p.get("y", 0))
+        nx = pad + (px - min_x) / span_x * (w - 2 * pad)
+        ny = pad + (max_y - py) / span_y * (height - 2 * pad)
+        color = label_to_color.get(p.get("true_label", 0), "#94a3b8")
+        meta_json = _esc(json.dumps({
+            "index": p.get("index"),
+            "true": p.get("true_label"),
+            "pred": p.get("pred_label"),
+            "conf": round(p.get("confidence", 0), 3),
+        }))
+        svg_parts.append(
+            f'<circle cx="{nx:.1f}" cy="{ny:.1f}" r="6" fill="{color}" opacity="0.85" '
+            f'stroke="rgba(255,255,255,0.2)" stroke-width="1" '
+            f'style="cursor:pointer;transition:r 0.15s;" '
+            f'data-meta="{meta_json}" '
+            f'onmouseenter="this.setAttribute(\'r\',\'10\');showClusterTip(evt,this)" '
+            f'onmouseleave="this.setAttribute(\'r\',\'6\');hideClusterTip()" />'
+        )
+    svg_parts.append("</svg>")
+
+    legend = '<div class="cluster-legend">'
+    legend += '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">True Class</div>'
+    for lbl in unique_true[:15]:
+        c = label_to_color.get(lbl, "#94a3b8")
+        legend += f'<div class="cluster-legend-item"><span class="cluster-legend-dot" style="background:{c};"></span>'
+        legend += f'<span class="cluster-legend-label">{_esc(str(lbl))}</span></div>'
+    legend += '</div>'
+
+    h = '<div class="cluster-container">'
+    h += '<div class="cluster-svg-wrap">'
+    h += "".join(svg_parts)
+    h += '<div class="cluster-tooltip" id="cluster-tooltip"></div>'
+    h += '</div>'
+    h += legend
+    h += '</div>'
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:8px;">2D PCA projection of logits for worst predictions. Hover points for details.</div>'
+    return h
 
 
-def _confusion_preview(confusion: dict[str, Any]) -> str:
-    if not confusion or not confusion.get("matrix"):
-        return "<p class='muted'>No confusion matrix.</p>"
-    return "<div class='card'><pre style='font-size:11px; overflow:auto; max-height:320px;'>" + _esc(json.dumps(confusion, indent=2)) + "</pre></div>"
+def _cluster_js() -> str:
+    return """
+<script>
+function showClusterTip(evt, el) {
+  var tip = document.getElementById('cluster-tooltip');
+  if (!tip || !el) return;
+  try {
+    var meta = JSON.parse(el.getAttribute('data-meta'));
+    tip.innerHTML = '<strong>#' + meta.index + '</strong><br>'
+      + 'True: ' + meta.true + '<br>'
+      + 'Pred: ' + meta.pred + '<br>'
+      + 'Conf: ' + meta.conf;
+    var rect = el.getBoundingClientRect();
+    var wrap = el.closest('.cluster-svg-wrap').getBoundingClientRect();
+    tip.style.left = (rect.left - wrap.left + 12) + 'px';
+    tip.style.top = (rect.top - wrap.top - 60) + 'px';
+    tip.style.display = 'block';
+  } catch(e) {}
+}
+function hideClusterTip() {
+  var tip = document.getElementById('cluster-tooltip');
+  if (tip) tip.style.display = 'none';
+}
+</script>
+"""
 
+
+# ─── Main Renderer ────────────────────────────────────────────────────────
 
 def render_analysis_html(report: Any) -> str:
-    """Generate full HTML report aligned with BNNR dashboard style."""
-    lines = [
+    """Generate full HTML report aligned with BNNR dashboard design language."""
+
+    schema_version = getattr(report, "schema_version", "0.2.0")
+    metrics = getattr(report, "metrics", {}) or {}
+    confusion = getattr(report, "confusion", {}) or {}
+    summary = getattr(report, "executive_summary", {}) or {}
+    diagnostics = getattr(report, "class_diagnostics", []) or []
+    findings = getattr(report, "findings", []) or []
+    patterns_ext = getattr(report, "failure_patterns_extended", []) or getattr(report, "failure_patterns", []) or []
+    xai_summary = getattr(report, "xai_quality_summary", {}) or {}
+    xai_per_class = getattr(report, "xai_quality_per_class", {}) or {}
+    xai_examples = getattr(report, "xai_examples_per_class", {}) or {}
+    worst = getattr(report, "worst_predictions", []) or []
+    data_quality = getattr(report, "data_quality_summary", {}) or getattr(report, "data_quality_result", {}) or {}
+    cv_results = getattr(report, "cv_results", {}) or {}
+    cluster_views = getattr(report, "cluster_views", []) or []
+    recs_struct = getattr(report, "recommendations_structured", []) or []
+    recs_legacy = getattr(report, "recommendations", []) or []
+    true_dist = getattr(report, "true_distribution", {}) or {}
+
+    num_classes = len(true_dist) if true_dist else (len(diagnostics) if diagnostics else 0)
+    num_samples = sum(true_dist.values()) if true_dist else 0
+
+    sections = [
+        ("exec", "Executive Summary"),
+        ("metrics", "Overview Metrics"),
+        ("diagnostics", "Class Diagnostics"),
+        ("confusion", "Confusion Matrix"),
+        ("findings", "Findings"),
+        ("patterns", "Failure Patterns"),
+        ("xai", "XAI Insights"),
+        ("worst", "Worst Predictions"),
+        ("dq", "Dataset Health"),
+        ("cv", "Cross-Validation"),
+        ("cluster", "Cluster View"),
+        ("recs", "Recommendations"),
+        ("caveats", "Method & Caveats"),
+    ]
+
+    # Build TOC
+    toc = '<nav class="toc"><div class="toc-inner"><div class="toc-title">Contents</div>'
+    for sid, label in sections:
+        toc += f'<a href="#{sid}">{_esc(label)}</a>'
+    toc += '</div></nav>'
+
+    lines: list[str] = [
         "<!DOCTYPE html>",
-        "<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>",
+        "<html lang='en'><head><meta charset='utf-8'>",
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>",
         "<title>BNNR Analysis Report</title>",
         "<style>" + _css() + "</style>",
         "</head><body>",
-        "<div class='report-header'>",
+        '<div class="page">',
+        '<div class="report-header">',
         "<h1>BNNR Analysis Report</h1>",
-        "<div class='report-meta'>Schema v" + getattr(report, "schema_version", "0.2.0") + "</div>",
-        "</div>",
+        '<div class="report-meta">',
+        f'<span>Schema v{_esc(schema_version)}</span>',
+        '<span>Classification</span>',
+        f'<span>{num_classes} classes &middot; {num_samples:,} samples</span>' if num_samples else "",
+        '</div></div>',
+        '<div class="two-col">',
+        toc,
+        '<div class="main-content">',
     ]
 
-    # Executive summary
-    summary = getattr(report, "executive_summary", None) or {}
-    lines.append(_section("Executive summary", _executive_block(summary)))
+    # Executive Summary
+    lines.append(_section_open("exec", "Executive Summary"))
+    lines.append(_executive_block(summary))
+    lines.append(_section_close())
 
-    # KPIs
-    lines.append(_section("Overview metrics", _kpi_cards(getattr(report, "metrics", {}))))
+    # Overview Metrics
+    lines.append(_section_open("metrics", "Overview Metrics"))
+    lines.append(_kpi_cards(metrics, num_classes, num_samples))
+    lines.append(_section_close())
 
-    # Class diagnostics
-    diag = getattr(report, "class_diagnostics", None) or []
-    lines.append(_section("Class diagnostics", _class_diagnostics_table(diag)))
+    # Class Diagnostics
+    lines.append(_section_open("diagnostics", "Class Diagnostics", count=len(diagnostics)))
+    lines.append(_class_diagnostics_table(diagnostics))
+    lines.append(_section_close())
+
+    # Confusion Matrix
+    lines.append(_section_open("confusion", "Confusion Matrix"))
+    lines.append(_confusion_heatmap(confusion))
+    lines.append(_section_close())
 
     # Findings
-    findings = getattr(report, "findings", None) or []
-    lines.append(_section("Findings", _findings_block(findings)))
+    lines.append(_section_open("findings", "Findings", count=len(findings)))
+    lines.append(_findings_block(findings))
+    lines.append(_section_close())
 
-    # Failure patterns (extended)
-    patterns = (
-        getattr(report, "failure_patterns_extended", None)
-        or getattr(report, "failure_patterns", None)
-        or []
-    )
-    if patterns:
-        lines.append(
-            _section(
-                "Failure patterns",
-                "<div class='card'><pre style='font-size:12px;'>"
-                + _esc(json.dumps(patterns[:20], indent=2))
-                + "</pre></div>",
-            )
-        )
+    # Failure Patterns
+    if patterns_ext:
+        lines.append(_section_open("patterns", "Failure Patterns", count=len(patterns_ext)))
+        lines.append(_failure_patterns_block(patterns_ext))
+        lines.append(_section_close())
 
-    # XAI insights (overview + examples)
-    xai_summary = getattr(report, "xai_quality_summary", None) or {}
-    xai_per_class = getattr(report, "xai_quality_per_class", None) or {}
-    xai_examples = getattr(report, "xai_examples_per_class", None) or {}
-    xai_content = _xai_overview_block(xai_summary, xai_per_class) + _xai_examples_block(
-        xai_examples
-    )
-    lines.append(_section("XAI insights", xai_content))
+    # XAI Insights
+    lines.append(_section_open("xai", "XAI Insights"))
+    lines.append(_xai_overview_block(xai_summary, xai_per_class))
+    lines.append(_xai_examples_block(xai_examples))
+    lines.append(_section_close())
 
-    # Worst predictions
-    worst = getattr(report, "worst_predictions", None) or []
-    lines.append(_section("Worst predictions", _worst_predictions_table(worst)))
+    # Worst Predictions
+    lines.append(_section_open("worst", "Worst Predictions", count=len(worst)))
+    lines.append(_worst_predictions_table(worst))
+    lines.append(_section_close())
 
-    # Dataset health
-    data_quality = getattr(report, "data_quality_summary", None) or getattr(
-        report, "data_quality_result", None
-    ) or {}
-    lines.append(_section("Dataset health", _data_quality_block(data_quality)))
+    # Dataset Health
+    lines.append(_section_open("dq", "Dataset Health"))
+    lines.append(_data_quality_block(data_quality))
+    lines.append(_section_close())
 
-    # Cross-validation
-    cv_results = getattr(report, "cv_results", None) or {}
-    lines.append(_section("Cross-validation", _cv_block(cv_results)))
+    # Cross-Validation
+    lines.append(_section_open("cv", "Cross-Validation"))
+    lines.append(_cv_block(cv_results))
+    lines.append(_section_close())
 
-    # Cluster view
-    cluster_views = getattr(report, "cluster_views", None) or []
-    lines.append(_section("Cluster view (worst predictions)", _cluster_block(cluster_views)))
-
-    # Confusion
-    lines.append(
-        _section(
-            "Confusion matrix", _confusion_preview(getattr(report, "confusion", {}))
-        )
-    )
+    # Cluster View
+    lines.append(_section_open("cluster", "Cluster View"))
+    lines.append(_cluster_block(cluster_views))
+    lines.append(_section_close())
 
     # Recommendations
-    recs_struct = getattr(report, "recommendations_structured", None) or []
-    recs_legacy = getattr(report, "recommendations", None) or []
-    lines.append(_section("Recommendations", _rec_block(recs_struct, recs_legacy)))
+    lines.append(_section_open("recs", "Recommendations", count=len(recs_struct) or len(recs_legacy)))
+    lines.append(_rec_block(recs_struct, recs_legacy))
+    lines.append(_section_close())
 
-    # Caveats
-    lines.append(_section("Method & caveats", "<div class='caveats'>This report is generated by <strong>bnnr analyze</strong>. XAI quality score is 0–1; low values suggest background or artefact focus. Recommendations are derived from findings and metrics; apply in your own environment. For full training loop use <strong>bnnr train</strong>.</div>"))
+    # Method & Caveats
+    lines.append(_section_open("caveats", "Method & Caveats"))
+    lines.append(
+        '<div class="caveats">'
+        "This report is generated by <strong>bnnr analyze</strong> (classification mode). "
+        "XAI quality score ranges 0&ndash;1; low values suggest the model may attend to "
+        "background or artifacts rather than the object of interest. "
+        "Findings and recommendations are derived algorithmically from per-class metrics, "
+        "confusion patterns, and XAI diagnostics&mdash;apply judgment in your own context. "
+        "Cross-validation (when enabled) splits the validation set into k folds and evaluates "
+        "the same model checkpoint on each fold; it measures metric stability, not generalization "
+        "from retraining. "
+        "For full training-loop optimization, use <strong>bnnr train</strong> with ICD/AICD "
+        "augmentation search."
+        "</div>"
+    )
+    lines.append(_section_close())
+
+    # Close layout
+    lines.append('</div></div>')  # main-content, two-col
+    lines.append('</div>')  # page
+
+    # Cluster tooltip JS
+    if cluster_views:
+        lines.append(_cluster_js())
 
     lines.append("</body></html>")
     return "\n".join(lines)

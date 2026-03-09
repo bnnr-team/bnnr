@@ -122,14 +122,14 @@ def test_analysis_report_html_sections(tmp_path: Path) -> None:
     out = tmp_path / "report.html"
     report.to_html(out)
     html = out.read_text()
-    assert "Executive summary" in html
-    assert "Class diagnostics" in html
+    assert "Executive Summary" in html
+    assert "Class Diagnostics" in html
     assert "Findings" in html
-    assert "Dataset health" in html
-    assert "Cross-validation" in html
-    assert "XAI insights" in html
+    assert "Dataset Health" in html
+    assert "Cross-Validation" in html
+    assert "XAI Insights" in html
     assert "Recommendations" in html
-    assert "Method & caveats" in html
+    assert "Method" in html and "Caveats" in html
     assert "needs_attention" in html or "Low accuracy" in html
     assert "Low recall class 2" in html
     assert "Add data for class 2" in html
