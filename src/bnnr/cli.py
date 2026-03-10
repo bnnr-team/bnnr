@@ -343,6 +343,37 @@ def report_command(
     typer.echo(rendered)
 
 
+def _try_alternate_models(
+    dataset_name: str,
+    state_dict: dict,
+    cfg: Any,
+) -> Any:
+    """Try alternate model architectures for a known built-in dataset.
+
+    Returns a new ``SimpleTorchAdapter`` with the correct model loaded, or
+    ``None`` if no architecture matches.
+    """
+    import torch as _torch
+    import torch.nn as _nn
+
+    from bnnr.adapter import SimpleTorchAdapter
+
+    if dataset_name == "stl10":
+        from bnnr.pipelines import _try_stl10_models
+
+        result = _try_stl10_models(state_dict)
+        if result is not None:
+            model, target_layers = result
+            return SimpleTorchAdapter(
+                model=model,
+                criterion=_nn.CrossEntropyLoss(),
+                optimizer=_torch.optim.Adam(model.parameters()),
+                target_layers=target_layers,
+                device=cfg.device,
+            )
+    return None
+
+
 @app.command("analyze")
 def analyze_command(
     model: Path = typer.Option(..., "--model", "-m", help="Path to model checkpoint (.pt) or state dict"),
@@ -436,14 +467,16 @@ def analyze_command(
         try:
             model_obj.load_state_dict(state, strict=True)
         except RuntimeError:
-            result = model_obj.load_state_dict(state, strict=False)
-            if result.missing_keys or result.unexpected_keys:
+            resolved = _try_alternate_models(dataset_name, state, cfg)
+            if resolved is not None:
+                adapter = resolved
+            else:
                 typer.echo(
-                    f"Warning: checkpoint architecture differs from built-in model "
-                    f"(missing={len(result.missing_keys)}, unexpected={len(result.unexpected_keys)}). "
-                    f"For best results, use the Python API with your original model class.",
+                    "Error: checkpoint does not match any known model architecture for "
+                    f"dataset '{dataset_name}'. Use the Python API with your original model class.",
                     err=True,
                 )
+                raise typer.Exit(code=1)
     else:
         adapter.load_state_dict(state)
 
