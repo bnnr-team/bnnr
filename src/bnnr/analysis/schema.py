@@ -74,6 +74,7 @@ class ClassDiagnostic:
     f1: float
     support: int
     pred_count: int  # number of samples predicted as this class
+    cohen_kappa: float = 0.0
     severity: str = "ok"  # ok, warning, critical
     rank: int = 0  # 1 = worst
 
@@ -106,6 +107,7 @@ class XAIClassSummary:
     mean_quality: float
     sample_count: int
     flags: list[str] = field(default_factory=list)
+    components: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -154,12 +156,18 @@ class CrossValidationResults:
 
 
 @dataclass
-class ClusterView:
-    """Cluster visualisation for confusing examples (projected to 2D/3D)."""
+class ConfusionPairAnalysis:
+    """XAI-driven analysis of a frequently confused class pair."""
 
-    name: str
-    description: str
-    points: list[dict[str, Any]] = field(default_factory=list)
+    class_a: str
+    class_b: str
+    count: int
+    mean_overlay_correct_a: str = ""
+    mean_overlay_confused_ab: str = ""
+    sample_overlays: list[dict[str, Any]] = field(default_factory=list)
+    heuristic_description: str = ""
+    stats_correct: dict[str, float] = field(default_factory=dict)
+    stats_confused: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

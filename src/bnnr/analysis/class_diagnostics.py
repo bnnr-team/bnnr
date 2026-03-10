@@ -12,12 +12,26 @@ import numpy as np
 from bnnr.analysis.schema import ClassDiagnostic
 
 
+def _cohen_kappa_from_matrix(mat: np.ndarray) -> float:
+    """Compute Cohen's Kappa from a confusion matrix."""
+    total = float(mat.sum())
+    if total == 0:
+        return 0.0
+    p_o = float(np.trace(mat)) / total
+    row_sums = mat.sum(axis=1).astype(float)
+    col_sums = mat.sum(axis=0).astype(float)
+    p_e = float((row_sums * col_sums).sum()) / (total * total)
+    if p_e >= 1.0:
+        return 1.0 if p_o >= 1.0 else 0.0
+    return float((p_o - p_e) / (1.0 - p_e))
+
+
 def compute_class_diagnostics(
     confusion: dict[str, Any],
     *,
     n_classes: int | None = None,
 ) -> tuple[list[ClassDiagnostic], dict[str, int], dict[str, int]]:
-    """Compute per-class precision, recall, F1 and true/pred distributions.
+    """Compute per-class precision, recall, F1, Cohen's Kappa and distributions.
 
     confusion must have "matrix" (list of lists) and "labels" (list of class ids).
     Returns (list of ClassDiagnostic, true_distribution, pred_distribution).
@@ -49,6 +63,13 @@ def compute_class_diagnostics(
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
         acc = tp / support if support > 0 else 0.0
 
+        binary = np.zeros((2, 2), dtype=np.int64)
+        binary[0, 0] = tp
+        binary[0, 1] = support - tp
+        binary[1, 0] = pred_as_i - tp
+        binary[1, 1] = int(mat.sum()) - support - pred_as_i + tp
+        kappa = _cohen_kappa_from_matrix(binary)
+
         severity = "ok"
         if recall <= 0 and support > 0:
             severity = "critical"
@@ -64,6 +85,7 @@ def compute_class_diagnostics(
                 f1=round(f1, 4),
                 support=support,
                 pred_count=pred_as_i,
+                cohen_kappa=round(kappa, 4),
                 severity=severity,
             )
         )
@@ -107,5 +129,16 @@ def build_distribution_summary(
         "pred_total": total_pred,
         "over_predicted": over[:10],
         "under_predicted": under[:10],
-        "possible_collapse": len(pred_dist) < len(true_dist) and max(pred_dist.values() or [0]) > total_pred * 0.5,
+        "possible_collapse": (
+            len(pred_dist) < len(true_dist)
+            and max(pred_dist.values() or [0]) > total_pred * 0.5
+        ),
     }
+
+
+def compute_global_cohen_kappa(confusion: dict[str, Any]) -> float:
+    """Compute global Cohen's Kappa from a confusion matrix dict."""
+    matrix = confusion.get("matrix")
+    if not isinstance(matrix, list) or not matrix:
+        return 0.0
+    return _cohen_kappa_from_matrix(np.asarray(matrix, dtype=np.int64))

@@ -396,6 +396,11 @@ def analyze_command(
         "--cv-folds",
         help="Optional number of folds for lightweight cross-validation (0 to disable).",
     ),
+    xai_samples: int = typer.Option(
+        500,
+        "--xai-samples",
+        help="Number of samples for XAI probe set (more = more accurate, slower).",
+    ),
 ) -> None:
     """Run model analysis: metrics, XAI, data quality, failure patterns, recommendations."""
     from bnnr.analyze import analyze_model
@@ -491,6 +496,7 @@ def analyze_command(
         max_worst=max_worst,
         xai_enabled=not no_xai,
         cv_folds=cv_folds,
+        xai_samples=xai_samples,
     )
     report.to_html(output / "report.html")
     if output_summary:

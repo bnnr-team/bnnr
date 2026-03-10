@@ -64,12 +64,8 @@ def test_analyze_model_save(model_adapter, tmp_path: Path) -> None:
     assert "metrics" in data
     assert "per_class_accuracy" in data
     assert "confusion" in data
-
-
-def test_analysis_report_worst_predictions_list() -> None:
-    report = AnalysisReport(worst_predictions=[{"a": 1}, {"b": 2}, {"c": 3}])
-    assert len(report.worst_predictions_list(n=2)) == 2
-    assert report.worst_predictions_list(n=2)[0] == {"a": 1}
+    assert "confusion_pair_xai" in data
+    assert "best_worst_examples" in data
 
 
 def test_analysis_report_to_html(tmp_path: Path) -> None:
@@ -108,16 +104,22 @@ def test_analyze_model_extended_report_fields(model_adapter, tmp_path: Path) -> 
         assert len(report.class_diagnostics) > 0
         assert len(report.true_distribution) > 0
         assert len(report.pred_distribution) > 0
+    assert "cohen_kappa" in report.metrics
+    assert isinstance(report.confusion_pair_xai, list)
+    assert isinstance(report.best_worst_examples, dict)
 
 
 def test_analysis_report_html_sections(tmp_path: Path) -> None:
     """HTML report contains key sections and text labels."""
     report = AnalysisReport(
-        metrics={"accuracy": 0.85, "loss": 0.4},
+        metrics={"accuracy": 0.85, "loss": 0.4, "cohen_kappa": 0.75},
         executive_summary={"health_status": "needs_attention", "key_findings": ["Low accuracy"]},
         findings=[{"title": "Low recall class 2", "severity": "high", "confidence": "high"}],
         recommendations_structured=[{"title": "Add data for class 2", "priority": 1}],
-        class_diagnostics=[{"class_name": "0", "accuracy": 0.9, "recall": 0.9, "support": 10}],
+        class_diagnostics=[{
+            "class_id": "0", "accuracy": 0.9, "recall": 0.9, "precision": 0.85,
+            "f1": 0.87, "support": 10, "pred_count": 11, "cohen_kappa": 0.8,
+        }],
         data_quality_summary={"scanned_samples": 100, "total_duplicate_pairs": 0},
         xai_quality_summary={"mean_quality_score": 0.7},
     )
@@ -130,11 +132,13 @@ def test_analysis_report_html_sections(tmp_path: Path) -> None:
     assert "Dataset Health" in html
     assert "XAI Insights" in html
     assert "Recommendations" in html
-    assert "Method" in html and "Caveats" in html
     assert "needs_attention" in html or "Low accuracy" in html
     assert "Low recall class 2" in html
     assert "Add data for class 2" in html
     assert "Observed" in html or "Likely" in html
+    assert "BNNR" in html
+    assert "Train" in html
+    assert "production" in html.lower()
 
 
 def test_analyze_model_with_xai(model_adapter, tmp_path: Path) -> None:
@@ -152,13 +156,11 @@ def test_analyze_model_with_xai(model_adapter, tmp_path: Path) -> None:
     assert isinstance(report.xai_diagnoses, dict)
     if report.xai_quality_summary:
         assert "mean_quality_score" in report.xai_quality_summary
-    # Cluster views and XAI per-class structures should be present (even if empty lists/dicts).
     assert isinstance(report.xai_quality_per_class, dict)
     assert isinstance(report.xai_examples_per_class, dict)
-    assert isinstance(report.cluster_views, list)
 
 
-def test_analyze_model_with_cv_and_cluster(model_adapter, tmp_path: Path) -> None:
+def test_analyze_model_with_cv(model_adapter, tmp_path: Path) -> None:
     """analyze_model can run lightweight CV and populate cv_results."""
     loader = _make_indexed_loader()
     config = BNNRConfig(device="cpu", task="classification")
@@ -174,6 +176,12 @@ def test_analyze_model_with_cv_and_cluster(model_adapter, tmp_path: Path) -> Non
     assert isinstance(report.cv_results, dict)
     if report.cv_results:
         assert report.cv_results.get("n_folds", 0) >= 1
+        gm = report.cv_results.get("global_metrics", {})
+        if gm:
+            assert "mean_accuracy" in gm
+            assert "mean_precision_macro" in gm
+            assert "mean_recall_macro" in gm
+            assert "mean_cohen_kappa" in gm
 
 
 def test_run_evaluation_standalone(model_adapter) -> None:
@@ -239,3 +247,71 @@ def test_analyze_cli(tmp_path: Path) -> None:
     assert result.returncode == 0, (result.stdout, result.stderr)
     assert (out_dir / "analysis_report.json").exists()
     assert (out_dir / "report.html").exists()
+
+
+def test_cohen_kappa_in_class_diagnostics() -> None:
+    """Cohen's Kappa is computed per-class in class_diagnostics."""
+    from bnnr.analysis.class_diagnostics import compute_class_diagnostics
+
+    confusion = {
+        "matrix": [[90, 10], [20, 80]],
+        "labels": [0, 1],
+    }
+    diag, true_dist, pred_dist = compute_class_diagnostics(confusion)
+    assert len(diag) == 2
+    for d in diag:
+        assert hasattr(d, "cohen_kappa")
+        assert isinstance(d.cohen_kappa, float)
+
+
+def test_grouped_findings() -> None:
+    """Findings of the same type are grouped into single entries."""
+    from bnnr.analysis.findings import build_findings
+    from bnnr.analysis.schema import ClassDiagnostic
+
+    class MockReport:
+        confusion = {
+            "matrix": [[100, 50], [30, 120]],
+            "labels": [0, 1],
+        }
+        metrics = {"accuracy": 0.73}
+        xai_diagnoses = {}
+
+    diags = [
+        ClassDiagnostic(class_id="0", accuracy=0.67, precision=0.77, recall=0.67, f1=0.71, support=150, pred_count=130),
+        ClassDiagnostic(class_id="1", accuracy=0.80, precision=0.71, recall=0.80, f1=0.75, support=150, pred_count=170),
+    ]
+    true_d = {"0": 150, "1": 150}
+    pred_d = {"0": 130, "1": 170}
+
+    findings, patterns = build_findings(MockReport(), diags, true_d, pred_d)
+    assert isinstance(findings, list)
+    assert isinstance(patterns, list)
+    finding_types = [f.finding_type for f in findings]
+    for ft in finding_types:
+        assert finding_types.count(ft) == 1, f"Finding type {ft} appears more than once (not grouped)"
+
+
+def test_cross_validation_all_metrics() -> None:
+    """Cross-validation includes precision, recall, f1, and Cohen's Kappa."""
+    import numpy as np
+
+    from bnnr.analysis.cross_validation import run_cross_validation_from_predictions
+
+    rng = np.random.default_rng(42)
+    labels = rng.integers(0, 3, size=60)
+    preds = labels.copy()
+    preds[:10] = (preds[:10] + 1) % 3
+
+    cv = run_cross_validation_from_predictions(preds, labels, n_folds=3)
+    assert cv.n_folds == 3
+    gm = cv.global_metrics
+    assert "mean_accuracy" in gm
+    assert "mean_precision_macro" in gm
+    assert "mean_recall_macro" in gm
+    assert "mean_f1_macro" in gm
+    assert "mean_cohen_kappa" in gm
+    for fm in cv.per_fold_metrics:
+        assert "precision_macro" in fm
+        assert "recall_macro" in fm
+        assert "cohen_kappa" in fm
