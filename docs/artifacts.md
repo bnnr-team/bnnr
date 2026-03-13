@@ -44,8 +44,6 @@ Common top-level keys:
 - `iteration_summaries`
 - `analysis`
 
-For detection runs, `best_metrics` includes `map_50` and `map_50_95`.
-
 ## `events.jsonl`
 
 Written when `event_log_enabled=true`.

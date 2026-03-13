@@ -24,15 +24,13 @@ python3 -m bnnr train --config CONFIG [OPTIONS]
 - `fashion_mnist`
 - `cifar10`
 - `imagefolder`
-- `coco_mini`
-- `yolo`
 
 ### Main options
 
 - `--config, -c` (required)
 - `--dataset`
 - `--data-dir`
-- `--data-path` (required for `imagefolder`, `coco_mini`, `yolo`)
+- `--data-path` (required for `imagefolder`)
 - `--output, -o`
 - `--device, -d` (`cuda`, `cpu`, `auto`)
 - `--epochs, -e`
@@ -69,12 +67,6 @@ python3 -m bnnr train \
   --config examples/configs/classification/imagefolder_example.yaml \
   --dataset imagefolder \
   --data-path /path/to/dataset
-
-# YOLO detection
-python3 -m bnnr train \
-  --config examples/configs/detection/detection_underwater.yaml \
-  --dataset yolo \
-  --data-path /path/to/data.yaml
 ```
 
 ## `report`

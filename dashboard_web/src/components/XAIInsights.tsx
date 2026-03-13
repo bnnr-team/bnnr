@@ -5,7 +5,7 @@ interface Props {
   perClassTimeline: Record<string, PerClassRow[]>;
   xaiInsightsTimeline?: XAIInsightEntry[];
   classNames?: string[];
-  task?: "classification" | "detection" | "multilabel";
+  task?: "classification" | "multilabel";
 }
 
 /* ── Quality breakdown bar component ── */
@@ -234,8 +234,6 @@ export function XAIInsights({
               quality_breakdown: diag?.quality_breakdown,
               augmentation_impact: diag?.augmentation_impact,
               baseline_delta: diag?.baseline_delta,
-              ap_50: diag?.ap_50,
-              detections: diag?.detections,
               mean_confidence: diag?.mean_confidence,
             };
           });
@@ -433,17 +431,9 @@ export function XAIInsights({
 
                 <p className="xai-insight-text">{mainText}</p>
 
-                {task === "detection" && (
+                {item.mean_confidence !== undefined && (
                   <div className="xai-confusion-pairs">
-                    {item.ap_50 !== undefined && (
-                      <span className="xai-confusion-chip">AP@0.5 {(item.ap_50 * 100).toFixed(1)}%</span>
-                    )}
-                    {item.detections !== undefined && (
-                      <span className="xai-confusion-chip">Detections {item.detections}</span>
-                    )}
-                    {item.mean_confidence !== undefined && (
-                      <span className="xai-confusion-chip">Mean conf {(item.mean_confidence * 100).toFixed(1)}%</span>
-                    )}
+                    <span className="xai-confusion-chip">Mean conf {(item.mean_confidence * 100).toFixed(1)}%</span>
                   </div>
                 )}
 

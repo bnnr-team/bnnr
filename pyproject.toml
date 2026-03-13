@@ -126,8 +126,6 @@ module = [
   "bnnr.augmentation_runner",
   "bnnr.craft",
   "bnnr.data_quality",
-  "bnnr.detection_xai",
-  "bnnr.detection_icd",
 ]
 # numpy/opencv return types are inherently Any; narrow ignore.
 disable_error_code = ["no-any-return"]

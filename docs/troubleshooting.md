@@ -38,22 +38,10 @@ Cause:
 Applies to:
 
 - `imagefolder`
-- `coco_mini`
-- `yolo`
 
 Fix: pass `--data-path`.
 
-## 4) `Could not find YOLO data.yaml`
-
-Cause:
-
-- `--data-path` does not point to a `data.yaml` file or a directory containing it.
-
-Fix:
-
-- validate path and required `train`/`val` entries in YAML.
-
-## 5) Dashboard shows zero runs
+## 4) Dashboard shows zero runs
 
 Cause:
 

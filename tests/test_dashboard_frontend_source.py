@@ -5,9 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def test_detection_global_xai_view_excludes_gt_overlay() -> None:
+def test_augmentation_preview_has_xai_heatmap() -> None:
+    """AugmentationPreview shows XAI heatmap for classification."""
     src = Path(__file__).resolve().parents[1] / "dashboard_web" / "src" / "components" / "AugmentationPreview.tsx"
     text = src.read_text(encoding="utf-8")
-    assert '<option value="gt">GT Overlay</option>' not in text
-    assert '<option value="saliency">Saliency (Global)</option>' in text
-    assert '<option value="pred">Pred + Saliency</option>' in text
+    assert "XAI Heatmap" in text

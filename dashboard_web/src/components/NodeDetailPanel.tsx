@@ -36,8 +36,8 @@ export function NodeDetailPanel({ node, state, activeRun, offline, onClose }: Pr
     (d) => d.selected_branch_id === node.id,
   );
   const onBestPath = (state.selected_path ?? []).includes(node.id);
-  const runTask = (state.task ?? "classification") as "classification" | "detection" | "multilabel";
-  const primaryMetricKey = runTask === "detection" ? "map_50" : "accuracy";
+  const runTask = (state.task ?? "classification") as "classification" | "multilabel";
+  const primaryMetricKey = "accuracy";
 
   // Find sample snapshots for this branch
   const snapshot = (state.sample_branch_snapshots ?? {})[node.id];
@@ -124,7 +124,7 @@ export function NodeDetailPanel({ node, state, activeRun, offline, onClose }: Pr
             <h4>Decision Context</h4>
             <p className="muted">
               {decision.decision_reason
-                || `Best candidate selected by ${runTask === "detection" ? "mAP@0.5" : "accuracy"}.`}
+                || "Best candidate selected by accuracy."}
             </p>
             {decision.baseline_accuracy !== null && metrics?.[primaryMetricKey] !== undefined && (
               <p>
@@ -140,7 +140,7 @@ export function NodeDetailPanel({ node, state, activeRun, offline, onClose }: Pr
         {/* Per-class accuracy */}
         {Object.keys(perClassForBranch).length > 0 && (
           <div className="detail-section">
-            <h4>{runTask === "detection" ? "Per-Class AP" : runTask === "multilabel" ? "Per-Label F1" : "Per-Class Accuracy"}</h4>
+            <h4>{runTask === "multilabel" ? "Per-Label F1" : "Per-Class Accuracy"}</h4>
             <div className="class-bars">
               {Object.entries(perClassForBranch)
                 .sort(([a], [b]) => Number(a) - Number(b))

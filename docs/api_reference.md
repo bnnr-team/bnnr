@@ -23,7 +23,6 @@ This page documents only symbols exported publicly from `src/bnnr/__init__.py`.
 - `ModelAdapter`
 - `XAICapableModel`
 - `SimpleTorchAdapter`
-- `DetectionAdapter`
 
 ## Reporting and events API
 
@@ -107,31 +106,6 @@ ICD variants:
 - `ICD`
 - `AICD`
 
-## Detection API
-
-Augmentations and presets:
-
-- `BboxAwareAugmentation`
-- `AlbumentationsBboxAugmentation`
-- `DetectionHorizontalFlip`
-- `DetectionVerticalFlip`
-- `DetectionRandomRotate90`
-- `DetectionRandomScale`
-- `MosaicAugmentation`
-- `DetectionMixUp`
-- `get_detection_preset`
-
-XAI-driven detection augmentations:
-
-- `DetectionICD`
-- `DetectionAICD`
-
-Data helpers and metrics:
-
-- `detection_collate_fn`
-- `detection_collate_fn_with_index`
-- `calculate_detection_metrics`
-
 ## Dashboard helper
 
 - `start_dashboard`
@@ -160,30 +134,6 @@ trainer = BNNRTrainer(adapter, train_loader, val_loader, auto_select_augmentatio
 result = trainer.run()
 print(result.best_metrics)
 ```
-
-## Minimal detection integration
-
-```python
-import torch
-from bnnr import BNNRConfig, BNNRTrainer
-from bnnr import DetectionAdapter, DetectionHorizontalFlip
-
-model = ...
-optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9)
-adapter = DetectionAdapter(model=model, optimizer=optimizer, device="cpu")
-
-config = BNNRConfig(task="detection", m_epochs=1, max_iterations=1, device="cpu")
-augmentations = [DetectionHorizontalFlip(probability=0.5, random_state=42)]
-
-trainer = BNNRTrainer(adapter, train_loader, val_loader, augmentations, config)
-result = trainer.run()
-```
-
-Detection dataloader contract:
-
-- batch item: `(image, target, index)`
-- `target["boxes"]`: `FloatTensor[N,4]`
-- `target["labels"]`: `IntTensor[N]`
 
 ## `quick_run()` helper
 

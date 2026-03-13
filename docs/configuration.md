@@ -155,24 +155,6 @@ trainer = BNNRTrainer(
 ### `task: classification` (default)
 No extra required fields.
 
-### `task: detection`
-- `task` (default: `classification`, valid: `classification|detection|multilabel`)
-- `detection_bbox_format` (`xyxy|xywh|cxcywh`, default: `xyxy`)
-- `detection_targets_mode` (`auto|image_only|bbox_aware`, default: `auto`)
-- `detection_score_threshold` (default: `0.5`)
-- `detection_nms_threshold` (default: `0.5`)
-- `detection_min_box_area` (default: `16.0`)
-- `detection_max_truncation` (default: `0.7`)
-- `detection_xai_method` (`activation|occlusion`, default: `activation`)
-- `detection_xai_grid_size` (default: `3`)
-- `detection_xai_max_gt_boxes` (default: `1`)
-- `detection_xai_max_pred_boxes` (default: `1`)
-- `detection_class_names` (default: `null`)
-
-Auto-default behavior in code for detection:
-- If still at classification defaults, `selection_metric` becomes `map_50`
-- If still at classification defaults, `metrics` becomes `[map_50, map_50_95, loss]`
-
 ### `task: multilabel`
 - `multilabel_threshold` (default: `0.5`, validated to `(0,1)`)
 

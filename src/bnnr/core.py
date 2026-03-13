@@ -44,8 +44,7 @@ class BNNRConfig(BaseModel):
     """Immutable runtime configuration for a full BNNR training run.
 
     Defines training budget, metrics/selection policy, reporting paths,
-    XAI behavior, and task-specific options for classification, detection,
-    and multilabel workflows.
+    XAI behavior, and task-specific options for classification and multilabel workflows.
     """
     model_config = ConfigDict(frozen=True)
 
@@ -55,9 +54,6 @@ class BNNRConfig(BaseModel):
     selection_metric: str = "accuracy"
     selection_mode: str = "max"
 
-    # NOTE: For detection tasks, use selection_metric="map_50" (or "map_50_95")
-    # and metrics=["map_50", "map_50_95", "loss"].  The model_validator below
-    # auto-adjusts these when they are left at classification defaults.
     checkpoint_dir: Path = Path("checkpoints")
     report_dir: Path = Path("reports")
     xai_enabled: bool = True
@@ -99,19 +95,7 @@ class BNNRConfig(BaseModel):
     # ── Multi-label-specific fields (ignored when task!="multilabel") ──
     multilabel_threshold: float = 0.5
 
-    # ── Detection-specific fields (ignored when task="classification") ──
     task: str = "classification"
-    detection_bbox_format: str = "xyxy"
-    detection_targets_mode: str = "auto"  # auto | image_only | bbox_aware
-    detection_score_threshold: float = 0.5
-    detection_nms_threshold: float = 0.5
-    detection_min_box_area: float = 16.0
-    detection_max_truncation: float = 0.7
-    detection_xai_method: str = "activation"  # activation | occlusion
-    detection_xai_grid_size: int = 3
-    detection_xai_max_gt_boxes: int = 1
-    detection_xai_max_pred_boxes: int = 1
-    detection_class_names: Optional[list[str]] = None  # noqa: UP045
 
     @field_validator("multilabel_threshold")
     @classmethod
@@ -123,43 +107,8 @@ class BNNRConfig(BaseModel):
     @field_validator("task")
     @classmethod
     def validate_task(cls, value: str) -> str:
-        if value not in {"classification", "detection", "multilabel"}:
-            raise ValueError("task must be 'classification', 'detection' or 'multilabel'")
-        return value
-
-    @field_validator("detection_bbox_format")
-    @classmethod
-    def validate_detection_bbox_format(cls, value: str) -> str:
-        if value not in {"xyxy", "xywh", "cxcywh"}:
-            raise ValueError("detection_bbox_format must be 'xyxy', 'xywh' or 'cxcywh'")
-        return value
-
-    @field_validator("detection_targets_mode")
-    @classmethod
-    def validate_detection_targets_mode(cls, value: str) -> str:
-        if value not in {"auto", "image_only", "bbox_aware"}:
-            raise ValueError("detection_targets_mode must be 'auto', 'image_only' or 'bbox_aware'")
-        return value
-
-    @field_validator("detection_score_threshold", "detection_nms_threshold", "detection_max_truncation")
-    @classmethod
-    def validate_detection_thresholds(cls, value: float) -> float:
-        if value < 0.0 or value > 1.0:
-            raise ValueError("detection threshold fields must be in [0, 1]")
-        return value
-
-    @field_validator("detection_min_box_area")
-    @classmethod
-    def validate_detection_min_box_area(cls, value: float) -> float:
-        if value < 0.0:
-            raise ValueError("detection_min_box_area must be >= 0")
-        return value
-
-    @field_validator("detection_xai_grid_size", "detection_xai_max_gt_boxes", "detection_xai_max_pred_boxes")
-    @classmethod
-    def validate_detection_xai_controls(cls, value: int) -> int:
-        if value <= 0:
-            raise ValueError("detection_xai_* controls must be > 0")
+        if value not in {"classification", "multilabel"}:
+            raise ValueError("task must be 'classification' or 'multilabel'")
         return value
 
     @field_validator("selection_mode")
@@ -231,32 +180,6 @@ class BNNRConfig(BaseModel):
         if value < 0.0 or value > 1.0:
             raise ValueError("xai_pruning_threshold must be in [0, 1]")
         return value
-
-    @model_validator(mode="before")
-    @classmethod
-    def _auto_detection_defaults(cls, data: Any) -> Any:
-        """Auto-adjust selection_metric and metrics for detection tasks.
-
-        When ``task="detection"`` and the user hasn't explicitly overridden
-        ``selection_metric`` / ``metrics``, we switch to detection-appropriate
-        defaults (``map_50`` and ``["map_50", "map_50_95", "loss"]``).
-        """
-        if not isinstance(data, dict):
-            return data
-        task = data.get("task", "classification")
-        if task != "detection":
-            return data
-
-        cls_default_metric = "accuracy"
-        cls_default_metrics = ["accuracy", "f1_macro", "loss"]
-
-        if data.get("selection_metric", cls_default_metric) == cls_default_metric:
-            data["selection_metric"] = "map_50"
-
-        if data.get("metrics", cls_default_metrics) == cls_default_metrics:
-            data["metrics"] = ["map_50", "map_50_95", "loss"]
-
-        return data
 
     @model_validator(mode="before")
     @classmethod
@@ -381,7 +304,6 @@ class BNNRTrainer:
         self._report_probe_labels: Tensor | None = None
         self._report_probe_targets: list[dict[str, Tensor]] | None = None
         self._report_probe_sample_ids: list[str] = []
-        self._latest_detection_xai_details: list[dict[str, Any]] = []
         self._fast_probe_originals: dict[tuple[int, str, int], list[Path]] = {}
         self._prev_xai_batch_stats: dict[str, list[dict[str, float]]] = {}
         self._baseline_xai_stats: dict[str, list[dict[str, float]]] = {}
@@ -419,11 +341,6 @@ class BNNRTrainer:
     def _xai_enabled(self) -> bool:
         """Check if XAI is effectively enabled (config + runtime)."""
         return self.config.xai_enabled and not self._runtime.xai_disabled
-
-    @property
-    def _is_detection(self) -> bool:
-        """Check if this run is object detection task."""
-        return self.config.task == "detection"
 
     @property
     def _is_multilabel(self) -> bool:
@@ -533,71 +450,7 @@ class BNNRTrainer:
         augmentation: BaseAugmentation,
         sample_indices: Tensor | None = None,
     ) -> Any:
-        # ── Detection path ──────────────────────────────────────────────
-        if self._is_detection:
-            images, targets = batch
-            targets_mode = self.config.detection_targets_mode
-            # Bbox-aware augmentations implement apply_with_targets
-            can_apply_with_targets = hasattr(augmentation, "apply_with_targets")
-            if targets_mode == "bbox_aware" and not can_apply_with_targets:
-                # Explicit bbox-aware mode but augmentation has no bbox path:
-                # keep image-only semantics to avoid breaking existing augmentations.
-                can_apply_with_targets = False
-            if targets_mode == "image_only":
-                can_apply_with_targets = False
-
-            if can_apply_with_targets:
-                np_images = self._tensor_to_uint8(images)
-                aug_images_list = []
-                aug_targets_list = []
-                ref_h = int(images.shape[2])
-                ref_w = int(images.shape[3])
-                for idx in range(np_images.shape[0]):
-                    aug_img, aug_tgt = augmentation.apply_with_targets(  # type: ignore[attr-defined]  # duck-typed via hasattr check above
-                        np_images[idx], targets[idx],
-                    )
-                    # Some detection augs (e.g. random scale) can change image size.
-                    # Keep batch shape stable by resizing back to the reference
-                    # tensor size and scaling boxes accordingly.
-                    if aug_img.shape[0] != ref_h or aug_img.shape[1] != ref_w:
-                        src_h, src_w = int(aug_img.shape[0]), int(aug_img.shape[1])
-                        sx = ref_w / max(src_w, 1)
-                        sy = ref_h / max(src_h, 1)
-                        aug_img = cv2.resize(aug_img, (ref_w, ref_h), interpolation=cv2.INTER_LINEAR)
-
-                        boxes_any = aug_tgt.get("boxes")
-                        if isinstance(boxes_any, Tensor):
-                            boxes_t = boxes_any.clone().to(dtype=torch.float32)
-                            if boxes_t.numel() > 0:
-                                boxes_t[:, [0, 2]] *= sx
-                                boxes_t[:, [1, 3]] *= sy
-                                boxes_t[:, [0, 2]] = boxes_t[:, [0, 2]].clamp_(0, ref_w)
-                                boxes_t[:, [1, 3]] = boxes_t[:, [1, 3]].clamp_(0, ref_h)
-                            aug_tgt["boxes"] = boxes_t
-                        elif boxes_any is not None:
-                            boxes_np = np.asarray(boxes_any, dtype=np.float32).copy()
-                            if boxes_np.size > 0:
-                                boxes_np[:, [0, 2]] *= sx
-                                boxes_np[:, [1, 3]] *= sy
-                                boxes_np[:, [0, 2]] = np.clip(boxes_np[:, [0, 2]], 0, ref_w)
-                                boxes_np[:, [1, 3]] = np.clip(boxes_np[:, [1, 3]], 0, ref_h)
-                            aug_tgt["boxes"] = boxes_np
-
-                    aug_images_list.append(aug_img)
-                    aug_targets_list.append(aug_tgt)
-                aug_images_np = np.stack(aug_images_list, axis=0)
-                return self._uint8_to_tensor(aug_images_np, ref_batch=images), aug_targets_list
-
-            # Pixel-only augmentations: apply to images, pass targets through
-            try:
-                images = augmentation.apply_tensor(images)
-                return images, targets
-            except (NotImplementedError, RuntimeError, TypeError):
-                np_images = self._tensor_to_uint8(images)
-                aug_images = augmentation.apply_batch(np_images)
-                return self._uint8_to_tensor(aug_images, ref_batch=images), targets
-
-        # ── Classification path (unchanged) ─────────────────────────────
+        # ── Classification / multilabel path ─────────────────────────────
         images, labels = batch
         if hasattr(augmentation, "apply_batch_with_labels"):
             np_images = self._tensor_to_uint8(images)
@@ -618,24 +471,7 @@ class BNNRTrainer:
     def _train_epoch(self, loader: DataLoader, augmentations: list[BaseAugmentation] | None = None) -> dict[str, float]:
         epoch_metrics: list[dict[str, float]] = []
 
-        # ── Detection path (unchanged — AugmentationRunner doesn't
-        #    support apply_with_targets for bbox-aware augmentations) ──
-        if self._is_detection:
-            for raw_batch in loader:
-                if len(raw_batch) == 3:
-                    images, targets, sample_indices = raw_batch
-                else:
-                    images, targets = raw_batch
-                    sample_indices = None
-                batch: Any = (images, targets)
-                if augmentations:
-                    for aug in augmentations:
-                        batch = self._apply_augmentation_to_batch(batch, aug, sample_indices=sample_indices)
-                metrics = self.model.train_step(batch)
-                epoch_metrics.append(metrics)
-            return self._average_metrics(epoch_metrics)
-
-        # ── Classification path — use AugmentationRunner for batched
+        # ── Classification / multilabel path — use AugmentationRunner for batched
         #    numpy conversions and optional async prefetch ─────────────
         if augmentations:
             runner = AugmentationRunner(augmentations, async_prefetch=False)
@@ -677,7 +513,6 @@ class BNNRTrainer:
         # Determine whether we can cache predictions in this call.
         can_cache = (
             cache_predictions
-            and not self._is_detection
             and isinstance(self.model, XAICapableModel)
         )
         preds_rows: list[torch.Tensor] = []
@@ -698,17 +533,7 @@ class BNNRTrainer:
 
         try:
             for raw_batch in loader:
-                # ── Detection path ─────────────────────────────────────
-                if self._is_detection:
-                    if len(raw_batch) == 3:
-                        images, targets, _ = raw_batch
-                    else:
-                        images, targets = raw_batch
-                    batch: Any = (images, targets)
-                    all_metrics.append(self.model.eval_step(batch))
-                    continue
-
-                # ── Classification path ────────────────────────────────
+                # ── Classification / multilabel path ─────────────────────
                 if len(raw_batch) == 3:
                     images, labels, _ = raw_batch
                     batch = (images, labels)
@@ -742,19 +567,7 @@ class BNNRTrainer:
             self._last_eval_preds = None
             self._last_eval_labels = None
 
-        # For detection: call epoch_end_eval to compute mAP over all batches
-        epoch_end_eval_fn = getattr(self.model, "epoch_end_eval", None)
-        if self._is_detection and callable(epoch_end_eval_fn):
-            epoch_level_metrics = epoch_end_eval_fn()
-            # Merge epoch-level metrics; remove the dummy loss=0.0 from
-            # eval_step since detection models don't produce eval loss —
-            # the real training loss comes from train_metrics.
-            avg = self._average_metrics(all_metrics)
-            avg.pop("loss", None)  # remove dummy eval loss
-            avg.update(epoch_level_metrics)
-            result = avg
-        else:
-            result = self._average_metrics(all_metrics)
+        result = self._average_metrics(all_metrics)
 
         # ── Custom callable metrics ──────────────────────────────────
         if self._custom_metrics and self._last_eval_preds is not None and self._last_eval_labels is not None:
@@ -973,237 +786,6 @@ class BNNRTrainer:
         if not self._xai_enabled:
             return [], {}, {}
 
-        if self._is_detection:
-            model_getter = getattr(self.model, "get_model", None)
-            if not callable(model_getter):
-                return [], {}, {}
-
-            from bnnr.detection_xai import (
-                compute_detection_box_saliency_occlusion,
-                generate_detection_saliency,
-                save_detection_xai_visualization,
-            )
-
-            self._initialize_report_probe_samples()
-            if self._report_probe_images is None or self._report_probe_targets is None:
-                return [], {}, {}
-
-            model_impl = model_getter()
-            device = next(model_impl.parameters()).device
-            # Generate XAI for ALL probe samples (activation method is
-            # a single batched forward pass, so the cost is negligible).
-            images = self._report_probe_images.to(device)
-            targets = self._report_probe_targets
-
-            xai_method = self.config.detection_xai_method
-
-            with torch.no_grad():
-                preds = model_impl([img for img in images])
-
-            # ── Activation-based saliency (fast: single batched forward pass) ──
-            activation_saliency: list[np.ndarray] | None = None
-            if xai_method == "activation":
-                target_layers_fn = getattr(self.model, "get_target_layers", None)
-                target_layers = target_layers_fn() if callable(target_layers_fn) else []
-                if target_layers:
-                    activation_saliency = generate_detection_saliency(
-                        model_impl, images, target_layers, device=device,
-                    )
-
-            np_images = self._tensor_batch_to_preview_uint8(images.detach().cpu())
-            save_dir = self.config.report_dir / "xai" / f"iter_{iteration}_{augmentation_name}"
-            save_dir.mkdir(parents=True, exist_ok=True)
-
-            class_names = self.config.detection_class_names
-            paths: list[Path] = []
-            self._latest_detection_xai_details = []
-            per_class_scores: dict[str, list[float]] = defaultdict(list)
-            for idx in range(np_images.shape[0]):
-                gt = targets[idx]
-                pred = preds[idx]
-                pred_scores = pred.get("scores", torch.zeros(0))
-                pred_labels = pred.get("labels", torch.zeros(0, dtype=torch.long))
-                # Keep top-k predictions for readability
-                top_k = min(5, int(pred_scores.numel()))
-                if top_k > 0:
-                    top_idx = torch.argsort(pred_scores, descending=True)[:top_k]
-                    pred_boxes = pred["boxes"][top_idx].detach().cpu()
-                    pred_labels = pred_labels[top_idx].detach().cpu()
-                    pred_scores = pred_scores[top_idx].detach().cpu()
-                else:
-                    pred_boxes = torch.zeros((0, 4), dtype=torch.float32)
-                    pred_labels = torch.zeros((0,), dtype=torch.long)
-                    pred_scores = torch.zeros((0,), dtype=torch.float32)
-
-                for cls, score in zip(pred_labels.tolist(), pred_scores.tolist()):
-                    per_class_scores[str(int(cls))].append(float(score))
-
-                gt_boxes = gt.get("boxes", torch.zeros((0, 4))).detach().cpu()
-                gt_labels = gt.get("labels", torch.zeros((0,), dtype=torch.long)).detach().cpu()
-
-                # ── Choose saliency method ──
-                sal: np.ndarray | None = None
-                used_method = xai_method
-
-                if xai_method == "activation" and activation_saliency is not None:
-                    # Use the pre-computed activation saliency (fast path).
-                    sal = activation_saliency[idx]
-                elif xai_method == "occlusion":
-                    # Per-box saliency via detection-conditioned occlusion sensitivity.
-                    pred_boxes_cpu = pred_boxes.detach().cpu()
-                    pred_labels_cpu = pred_labels.detach().cpu()
-                    max_gt_boxes = int(self.config.detection_xai_max_gt_boxes)
-                    max_pred_boxes = int(self.config.detection_xai_max_pred_boxes)
-                    gt_sel = torch.arange(min(max_gt_boxes, int(gt_boxes.shape[0])))
-                    pred_sel = torch.arange(min(max_pred_boxes, int(pred_boxes_cpu.shape[0])))
-                    query_boxes_parts: list[Tensor] = []
-                    query_labels_parts: list[Tensor] = []
-                    if gt_sel.numel() > 0:
-                        query_boxes_parts.append(gt_boxes[gt_sel])
-                        query_labels_parts.append(gt_labels[gt_sel])
-                    if pred_sel.numel() > 0:
-                        query_boxes_parts.append(pred_boxes_cpu[pred_sel])
-                        query_labels_parts.append(pred_labels_cpu[pred_sel])
-
-                    if query_boxes_parts:
-                        q_boxes = torch.cat(query_boxes_parts, dim=0)
-                        q_labels = torch.cat(query_labels_parts, dim=0)
-                        sal_maps, _baseline_scores = compute_detection_box_saliency_occlusion(
-                            model=model_impl,
-                            image=images[idx],
-                            query_boxes=q_boxes.to(device),
-                            query_labels=q_labels.to(device),
-                            baseline_pred=pred,
-                            device=device,
-                            grid_size=int(self.config.detection_xai_grid_size),
-                            iou_threshold=0.3,
-                        )
-                        if sal_maps:
-                            sal = np.mean(np.stack(sal_maps, axis=0), axis=0).astype(np.float32)
-
-                img_h, img_w = images.shape[2], images.shape[3]
-
-                def _box_saliency_stats(
-                    boxes_tensor: Tensor,
-                    labels_tensor: Tensor,
-                    scores_tensor: Tensor | None = None,
-                    saliency_map: np.ndarray | None = sal,
-                    _img_h: int = img_h,
-                    _img_w: int = img_w,
-                ) -> list[dict[str, Any]]:
-                    out: list[dict[str, Any]] = []
-                    if saliency_map is None or boxes_tensor.numel() == 0:
-                        return out
-                    for bi in range(int(boxes_tensor.shape[0])):
-                        bx1 = int(max(0, min(_img_w - 1, float(boxes_tensor[bi, 0].item()))))
-                        by1 = int(max(0, min(_img_h - 1, float(boxes_tensor[bi, 1].item()))))
-                        bx2 = int(max(0, min(_img_w, float(boxes_tensor[bi, 2].item()))))
-                        by2 = int(max(0, min(_img_h, float(boxes_tensor[bi, 3].item()))))
-                        if bx2 <= bx1 or by2 <= by1:
-                            continue
-                        patch = saliency_map[by1:by2, bx1:bx2]
-                        mean_sal = float(np.mean(patch)) if patch.size > 0 else 0.0
-                        max_sal = float(np.max(patch)) if patch.size > 0 else 0.0
-                        row: dict[str, Any] = {
-                            "box": [bx1, by1, bx2, by2],
-                            "label": int(labels_tensor[bi].item()) if bi < int(labels_tensor.numel()) else -1,
-                            "saliency_mean": mean_sal,
-                            "saliency_max": max_sal,
-                        }
-                        if scores_tensor is not None and bi < int(scores_tensor.numel()):
-                            row["score"] = float(scores_tensor[bi].item())
-                        out.append(row)
-                    return out
-
-                details_row = {
-                    "image_size": [int(img_h), int(img_w)],
-                    "xai_method": used_method,
-                    "gt": _box_saliency_stats(
-                        gt.get("boxes", torch.zeros((0, 4))).detach().cpu(),
-                        gt.get("labels", torch.zeros((0,), dtype=torch.long)).detach().cpu(),
-                    ),
-                    "pred": _box_saliency_stats(
-                        pred_boxes,
-                        pred_labels,
-                        pred_scores,
-                    ),
-                }
-                self._latest_detection_xai_details.append(details_row)
-
-                out_path = save_detection_xai_visualization(
-                    image=np_images[idx],
-                    saliency=sal,
-                    boxes_gt=gt.get("boxes"),
-                    labels_gt=gt.get("labels"),
-                    boxes_pred=pred_boxes,
-                    labels_pred=pred_labels,
-                    scores_pred=pred_scores,
-                    class_names=class_names,
-                    save_path=save_dir / f"xai_{idx}.png",
-                    size=self.config.report_xai_size,
-                )
-                paths.append(out_path)
-
-            # Enrich insight text with per-class AP for better detection diagnostics.
-            # Prefer cached full-eval predictions when available (from epoch_end_eval).
-            from bnnr.detection_metrics import calculate_per_class_ap
-
-            cached_preds = getattr(self.model, "last_eval_preds", [])
-            cached_targets = getattr(self.model, "last_eval_targets", [])
-            if cached_preds and cached_targets:
-                ap_preds = cached_preds
-                ap_targets = cached_targets
-            else:
-                ap_preds = [
-                    {
-                        "boxes": p.get("boxes", torch.zeros((0, 4))).detach().cpu(),
-                        "scores": p.get("scores", torch.zeros((0,))).detach().cpu(),
-                        "labels": p.get("labels", torch.zeros((0,), dtype=torch.long)).detach().cpu(),
-                    }
-                    for p in preds
-                ]
-                ap_targets = [
-                    {
-                        "boxes": t.get("boxes", torch.zeros((0, 4))).detach().cpu(),
-                        "labels": t.get("labels", torch.zeros((0,), dtype=torch.long)).detach().cpu(),
-                    }
-                    for t in targets
-                ]
-
-            per_class_ap = calculate_per_class_ap(
-                ap_preds, ap_targets, class_names=class_names,
-            )
-
-            xai_insights: dict[str, str] = {}
-            xai_diagnoses: dict[str, dict[str, Any]] = {}
-            for cls_id, scores in per_class_scores.items():
-                if not scores:
-                    continue
-                avg_score = float(np.mean(scores))
-                support = int(len(scores))
-                ap_info = per_class_ap.get(cls_id, {"ap": 0.0, "support": 0})
-                ap_val = float(ap_info.get("ap", 0.0))
-                cls_name = (
-                    class_names[int(cls_id)]
-                    if class_names is not None and int(cls_id) < len(class_names)
-                    else f"class_{cls_id}"
-                )
-                xai_insights[cls_id] = (
-                    f"{cls_name}: AP@0.5={ap_val:.2f}, mean detection confidence={avg_score:.2f}, "
-                    f"detections={support} ({used_method} XAI overlays available)."
-                )
-                xai_diagnoses[cls_id] = {
-                    "severity": "ok" if ap_val >= 0.5 else ("warning" if ap_val >= 0.2 else "critical"),
-                    "quality_score": ap_val,
-                    "trend": "stable",
-                    "short_text": xai_insights[cls_id],
-                    "confused_with": [],
-                    "ap_50": ap_val,
-                    "detections": support,
-                    "mean_confidence": avg_score,
-                }
-            return paths, xai_insights, xai_diagnoses
-
         if not isinstance(self.model, XAICapableModel):
             return [], {}, {}
 
@@ -1306,10 +888,6 @@ class BNNRTrainer:
         if not self._xai_enabled or not isinstance(self.model, XAICapableModel):
             return {}, {}, {}
 
-        # Detection XAI is handled in PR3; skip for now
-        if self._is_detection:
-            return {}, {}, {}
-
         self._initialize_report_probe_samples()
         if self._report_probe_images is None or self._report_probe_labels is None:
             return {}, {}, {}
@@ -1397,69 +975,6 @@ class BNNRTrainer:
         augmentation_name: str,
         augmentations: list[BaseAugmentation] | None,
     ) -> list[tuple[Path, Path]]:
-        if self._is_detection:
-            from bnnr.detection_xai import draw_boxes_on_image
-
-            self._initialize_report_probe_samples()
-            if self._report_probe_images is None or self._report_probe_targets is None:
-                return []
-
-            images = self._report_probe_images
-            targets = copy.deepcopy(self._report_probe_targets)
-            batch: Any = (images, targets)
-
-            if augmentations:
-                preview_augs = [copy.copy(a) for a in augmentations]
-                for pa in preview_augs:
-                    pa.probability = 1.0
-                for pa in preview_augs:
-                    batch = self._apply_augmentation_to_batch(batch, pa)
-
-            aug_images, aug_targets = batch
-            np_images = self._tensor_batch_to_preview_uint8(images)
-            np_aug_images = self._tensor_batch_to_preview_uint8(aug_images)
-            save_dir = self.config.report_dir / "samples" / f"iter_{iteration}_{augmentation_name}"
-            save_dir.mkdir(parents=True, exist_ok=True)
-            pairs: list[tuple[Path, Path]] = []
-
-            for idx in range(np_images.shape[0]):
-                original = np_images[idx]
-                augmented = np_aug_images[idx]
-                if original.shape[-1] == 1:
-                    original = np.repeat(original, 3, axis=2)
-                if augmented.shape[-1] == 1:
-                    augmented = np.repeat(augmented, 3, axis=2)
-
-                original = draw_boxes_on_image(
-                    original,
-                    targets[idx].get("boxes", torch.zeros((0, 4))),
-                    targets[idx].get("labels", torch.zeros((0,), dtype=torch.long)),
-                    class_names=self.config.detection_class_names,
-                )
-                augmented = draw_boxes_on_image(
-                    augmented,
-                    aug_targets[idx].get("boxes", torch.zeros((0, 4))),
-                    aug_targets[idx].get("labels", torch.zeros((0,), dtype=torch.long)),
-                    class_names=self.config.detection_class_names,
-                )
-
-                original = cv2.resize(
-                    original,
-                    (self.config.report_preview_size, self.config.report_preview_size),
-                    interpolation=cv2.INTER_NEAREST,
-                )
-                augmented = cv2.resize(
-                    augmented,
-                    (self.config.report_preview_size, self.config.report_preview_size),
-                    interpolation=cv2.INTER_NEAREST,
-                )
-                orig_path = save_dir / f"sample_{idx}_original.png"
-                aug_path = save_dir / f"sample_{idx}_augmented.png"
-                cv2.imwrite(str(orig_path), cv2.cvtColor(original, cv2.COLOR_RGB2BGR))
-                cv2.imwrite(str(aug_path), cv2.cvtColor(augmented, cv2.COLOR_RGB2BGR))
-                pairs.append((orig_path, aug_path))
-            return pairs
-
         self._initialize_report_probe_samples()
         if self._report_probe_images is None or self._report_probe_labels is None:
             return []
@@ -1517,41 +1032,8 @@ class BNNRTrainer:
             return
 
         images_by_class: dict[int, list[Tensor]] = defaultdict(list)
-        targets_by_class: dict[int, list[dict[str, Tensor] | None]] = defaultdict(list)
         indices_by_class: dict[int, list[int | None]] = defaultdict(list)
         for raw_batch in self.val_loader:
-            if self._is_detection:
-                # Detection: register each image under ALL classes
-                # it contains so that probe selection is distributed
-                # evenly across all present classes (not biased toward
-                # the largest-box class only).
-                if len(raw_batch) == 3:
-                    images, targets, sample_indices = raw_batch
-                else:
-                    images, targets = raw_batch
-                    sample_indices = None
-                for idx in range(images.shape[0]):
-                    target = targets[idx]
-                    if len(target.get("labels", [])) == 0:
-                        continue
-                    # Register under each unique class present in the image
-                    unique_classes = set(int(lbl.item()) for lbl in target["labels"])
-                    for class_id in unique_classes:
-                        images_by_class[class_id].append(images[idx].detach().cpu())
-                        targets_by_class[class_id].append({
-                            "boxes": target["boxes"].detach().cpu().clone(),
-                            "labels": target["labels"].detach().cpu().clone(),
-                        })
-                        if sample_indices is not None:
-                            current_idx = sample_indices[idx]
-                            if isinstance(current_idx, Tensor):
-                                indices_by_class[class_id].append(int(current_idx.item()))
-                            else:
-                                indices_by_class[class_id].append(int(current_idx))
-                        else:
-                            indices_by_class[class_id].append(None)
-                continue
-
             # Classification / multilabel path
             if len(raw_batch) == 3:
                 images, labels, sample_indices = raw_batch
@@ -1595,7 +1077,6 @@ class BNNRTrainer:
         rnd = np.random.default_rng(self.config.seed)
         selected_images: list[Tensor] = []
         selected_labels: list[int] = []
-        selected_targets: list[dict[str, Tensor]] = []
         selected_sample_ids: list[str] = []
         classes = sorted(images_by_class.keys())[: self.config.report_probe_max_classes]
         per_class = self.config.report_probe_images_per_class
@@ -1610,10 +1091,6 @@ class BNNRTrainer:
                 real_index = int(index)
                 selected_images.append(class_images[real_index])
                 selected_labels.append(class_id)
-                if self._is_detection:
-                    target_entry = targets_by_class[class_id][real_index]
-                    if target_entry is not None:
-                        selected_targets.append(target_entry)
                 sample_idx = class_indices[real_index]
                 if sample_idx is None:
                     selected_sample_ids.append(f"class_{class_id}_probe_{probe_rank}")
@@ -1624,7 +1101,7 @@ class BNNRTrainer:
             return
         self._report_probe_images = torch.stack(selected_images)
         self._report_probe_labels = torch.as_tensor(selected_labels, dtype=torch.long)
-        self._report_probe_targets = selected_targets if self._is_detection else None
+        self._report_probe_targets = None
         self._report_probe_sample_ids = selected_sample_ids
         log_probe_set = getattr(self.reporter, "log_probe_set", None)
         if callable(log_probe_set):
@@ -1687,10 +1164,6 @@ class BNNRTrainer:
         return preds, labels
 
     def _compute_eval_class_details(self) -> tuple[dict[str, dict[str, float | int]], dict[str, Any]]:
-        # ── Detection path ──────────────────────────────────────────────
-        if self._is_detection:
-            return self._compute_eval_class_details_detection()
-
         # ── Multi-label path ────────────────────────────────────────────
         if self._is_multilabel:
             return self._compute_eval_class_details_multilabel()
@@ -1761,111 +1234,6 @@ class BNNRTrainer:
         }
         return per_label, confusion
 
-    def _compute_eval_class_details_detection(self) -> tuple[dict[str, dict[str, float | int]], dict[str, Any]]:
-        """Compute per-class AP for detection task.
-
-        Reuses ``last_eval_preds`` / ``last_eval_targets`` saved by
-        ``DetectionAdapter.epoch_end_eval()`` to avoid a redundant full
-        evaluation pass.  Falls back to a single forward pass only when
-        the cached data is empty.
-        """
-        from bnnr.detection_metrics import (
-            calculate_detection_confusion_matrix,
-            calculate_per_class_ap,
-        )
-
-        # Try to reuse cached eval results from the adapter
-        all_preds: list[dict[str, Tensor]] = getattr(self.model, "last_eval_preds", [])
-        all_targets: list[dict[str, Tensor]] = getattr(self.model, "last_eval_targets", [])
-
-        # Fallback: run a single forward pass if no cached data
-        if not all_preds or not all_targets:
-            all_preds = []
-            all_targets = []
-            model_obj = self.model.get_model() if hasattr(self.model, "get_model") else None
-            if model_obj is None:
-                return {}, {}
-            model_obj.eval()
-            with torch.no_grad():
-                for raw_batch in self.val_loader:
-                    if len(raw_batch) == 3:
-                        images, targets, _ = raw_batch
-                    else:
-                        images, targets = raw_batch
-                    device = next(model_obj.parameters()).device
-                    images_list = [img.to(device) for img in images]
-                    preds = model_obj(images_list)
-                    for pred in preds:
-                        all_preds.append({
-                            "boxes": pred["boxes"].cpu(),
-                            "scores": pred["scores"].cpu(),
-                            "labels": pred["labels"].cpu(),
-                        })
-                    for target in targets:
-                        all_targets.append({
-                            "boxes": target["boxes"].cpu() if isinstance(target["boxes"], Tensor) else target["boxes"],
-                            "labels": target["labels"].cpu() if isinstance(target["labels"], Tensor) else target["labels"],
-                        })
-
-        if not all_preds or not all_targets:
-            return {}, {}
-
-        class_names = self.config.detection_class_names
-
-        # Determine known class IDs from dataset (GT labels only)
-        known_classes: set[int] = set()
-        for t in all_targets:
-            if t.get("labels") is not None and len(t["labels"]) > 0:
-                known_classes.update(int(x) for x in t["labels"].cpu().tolist())
-
-        per_class_ap = calculate_per_class_ap(all_preds, all_targets, class_names=class_names)
-
-        # Convert to the expected format with proper detection naming
-        per_class: dict[str, dict[str, float | int]] = {}
-        for cls_id, info in per_class_ap.items():
-            per_class[cls_id] = {
-                "accuracy": info["ap"],
-                "ap_50": info["ap"],
-                "support": info["support"],
-            }
-
-        # Build class-level confusion matrix for dashboard diagnostics.
-        # Filter to known GT classes + background (class 0) to avoid
-        # phantom predicted-only classes cluttering the matrix.
-        confusion = calculate_detection_confusion_matrix(
-            predictions=all_preds,
-            targets=all_targets,
-            num_classes=(
-                (
-                    len(self.config.detection_class_names)
-                    if (
-                        self.config.detection_class_names
-                        and str(self.config.detection_class_names[0]).strip().lower()
-                        in {"background", "bg", "__background__"}
-                    )
-                    else len(self.config.detection_class_names) + 1
-                )
-                if self.config.detection_class_names is not None else None
-            ),
-            iou_threshold=0.5,
-        )
-
-        # Filter confusion matrix to known classes only
-        if known_classes and confusion.get("labels"):
-            allowed = known_classes | {0}  # always keep background
-            old_labels = confusion["labels"]
-            old_matrix = confusion["matrix"]
-            keep_indices = [i for i, lbl in enumerate(old_labels) if lbl in allowed]
-            if len(keep_indices) < len(old_labels):
-                new_labels = [old_labels[i] for i in keep_indices]
-                new_matrix = [
-                    [old_matrix[r][c] for c in keep_indices]
-                    for r in keep_indices
-                ]
-                confusion = {"labels": new_labels, "matrix": new_matrix}
-
-        return per_class, confusion
-
     def _emit_probe_prediction_snapshots(
         self,
         *,
@@ -1878,87 +1246,6 @@ class BNNRTrainer:
         log_prediction = getattr(self.reporter, "log_sample_prediction", None)
         if not callable(log_prediction):
             return
-        if self._is_detection:
-            model_getter = getattr(self.model, "get_model", None)
-            if not callable(model_getter):
-                return
-            self._initialize_report_probe_samples()
-            if self._report_probe_images is None or self._report_probe_targets is None:
-                return
-            model = model_getter()
-            device = next(model.parameters()).device
-            images = self._report_probe_images.to(device)
-            with torch.no_grad():
-                preds = model([img for img in images])
-
-            sample_ids = self._probe_sample_ids()
-            reporter_run_dir = getattr(self.reporter, "run_dir", None)
-            fallback_originals = self._ensure_fast_probe_originals(
-                iteration=iteration,
-                branch=branch,
-                epoch=epoch,
-                run_dir=reporter_run_dir,
-            )
-            normalized_preview_pairs = preview_pairs
-            normalized_xai_paths = xai_paths
-            checkpoints = getattr(self.reporter, "_checkpoints", None)
-            if isinstance(checkpoints, list) and checkpoints:
-                latest = checkpoints[-1]
-                if getattr(latest, "iteration", None) == iteration and getattr(latest, "augmentation", None) == branch:
-                    normalized_preview_pairs = list(getattr(latest, "preview_pairs", preview_pairs))
-                    normalized_xai_paths = list(getattr(latest, "xai_paths", xai_paths))
-
-            for idx, sample_id in enumerate(sample_ids):
-                gt = self._report_probe_targets[idx]
-                pred = preds[idx]
-                pred_scores = pred.get("scores", torch.zeros(0))
-                pred_labels = pred.get("labels", torch.zeros(0, dtype=torch.long))
-                if pred_scores.numel() > 0:
-                    top = int(torch.argmax(pred_scores).item())
-                    predicted_class = int(pred_labels[top].item())
-                    confidence = float(pred_scores[top].item())
-                else:
-                    predicted_class = -1
-                    confidence = 0.0
-
-                if gt.get("labels") is not None and int(gt["labels"].numel()) > 0:
-                    true_class = int(gt["labels"][0].item())
-                else:
-                    true_class = -1
-
-                original_artifact = None
-                augmented_artifact = None
-                xai_artifact = None
-                if idx < len(normalized_preview_pairs):
-                    original_artifact = self._to_artifact_reference(normalized_preview_pairs[idx][0], reporter_run_dir)
-                    augmented_artifact = self._to_artifact_reference(normalized_preview_pairs[idx][1], reporter_run_dir)
-                elif idx < len(fallback_originals):
-                    # Keep Samples tab usable immediately after epoch_end:
-                    # if full previews are not ready yet, expose a fast original.
-                    original_artifact = self._to_artifact_reference(fallback_originals[idx], reporter_run_dir)
-                if idx < len(normalized_xai_paths):
-                    xai_artifact = self._to_artifact_reference(normalized_xai_paths[idx], reporter_run_dir)
-
-                detection_details: dict[str, Any] = {}
-                if idx < len(self._latest_detection_xai_details):
-                    detection_details = self._latest_detection_xai_details[idx]
-
-                log_prediction(
-                    sample_id=sample_id,
-                    iteration=iteration,
-                    epoch=epoch,
-                    branch=branch,
-                    true_class=true_class,
-                    predicted_class=predicted_class,
-                    confidence=confidence,
-                    loss_local=None,
-                    original_artifact=original_artifact,
-                    augmented_artifact=augmented_artifact,
-                    xai_artifact=xai_artifact,
-                    detection_details=detection_details,
-                )
-            return
-
         if not isinstance(self.model, XAICapableModel):
             return
         self._initialize_report_probe_samples()
@@ -2039,41 +1326,18 @@ class BNNRTrainer:
 
         np_images = self._tensor_batch_to_preview_uint8(self._report_probe_images)
         paths: list[Path] = []
-        if self._is_detection and self._report_probe_targets is not None:
-            from bnnr.detection_xai import draw_boxes_on_image
-
-            for idx in range(np_images.shape[0]):
-                original = np_images[idx]
-                if original.shape[-1] == 1:
-                    original = np.repeat(original, 3, axis=2)
-                target = self._report_probe_targets[idx]
-                overlay = draw_boxes_on_image(
-                    original,
-                    target.get("boxes", torch.zeros((0, 4))),
-                    target.get("labels", torch.zeros((0,), dtype=torch.long)),
-                    class_names=self.config.detection_class_names,
-                )
-                overlay = cv2.resize(
-                    overlay,
-                    (self.config.report_preview_size, self.config.report_preview_size),
-                    interpolation=cv2.INTER_NEAREST,
-                )
-                out_path = save_dir / f"sample_{idx}_original.png"
-                cv2.imwrite(str(out_path), cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR))
-                paths.append(out_path)
-        else:
-            for idx in range(np_images.shape[0]):
-                original = np_images[idx]
-                if original.shape[-1] == 1:
-                    original = np.repeat(original, 3, axis=2)
-                original = cv2.resize(
-                    original,
-                    (self.config.report_preview_size, self.config.report_preview_size),
-                    interpolation=cv2.INTER_NEAREST,
-                )
-                out_path = save_dir / f"sample_{idx}_original.png"
-                cv2.imwrite(str(out_path), cv2.cvtColor(original, cv2.COLOR_RGB2BGR))
-                paths.append(out_path)
+        for idx in range(np_images.shape[0]):
+            original = np_images[idx]
+            if original.shape[-1] == 1:
+                original = np.repeat(original, 3, axis=2)
+            original = cv2.resize(
+                original,
+                (self.config.report_preview_size, self.config.report_preview_size),
+                interpolation=cv2.INTER_NEAREST,
+            )
+            out_path = save_dir / f"sample_{idx}_original.png"
+            cv2.imwrite(str(out_path), cv2.cvtColor(original, cv2.COLOR_RGB2BGR))
+            paths.append(out_path)
 
         self._fast_probe_originals[key] = paths
         return paths
@@ -2143,17 +1407,6 @@ class BNNRTrainer:
                 )
 
     def _compute_eval_analysis(self) -> dict[str, Any]:
-        # ── Detection path ──────────────────────────────────────────────
-        if self._is_detection:
-            per_class, _ = self._compute_eval_class_details_detection()
-            if not per_class:
-                return {}
-            ap_values = [v.get("accuracy", 0.0) for v in per_class.values()]
-            return {
-                "per_class_accuracy": per_class,
-                "macro_per_class_accuracy": float(np.mean(ap_values)) if ap_values else None,
-            }
-
         # ── Multi-label path ────────────────────────────────────────────
         if self._is_multilabel:
             per_label, _ = self._compute_eval_class_details_multilabel()
@@ -2468,10 +1721,6 @@ class BNNRTrainer:
     def _generate_dual_xai_analysis(self) -> dict[str, Any]:
         if not self._xai_enabled or not self.config.dual_xai_report or not isinstance(self.model, XAICapableModel):
             return {}
-        # Detection XAI uses different saliency approach; skip dual analysis
-        if self._is_detection:
-            return {}
-
         first_batch = next(iter(self.val_loader))
         if len(first_batch) == 3:
             images, labels, _ = first_batch
@@ -2531,11 +1780,6 @@ class BNNRTrainer:
         }
 
     def _precompute_xai_cache(self) -> XAICache | None:
-        # Detection uses bbox-prior ICD (DetectionICD/DetectionAICD) which
-        # doesn't need an XAI cache.  Skip entirely for detection tasks.
-        if self._is_detection:
-            return None
-
         if not isinstance(self.model, XAICapableModel):
             self._log("Model is not XAICapableModel. Disabling XAI.")
             self._runtime.xai_disabled = True
@@ -2684,7 +1928,6 @@ class BNNRTrainer:
     def _count_labels(
         loader: DataLoader,
         *,
-        is_detection: bool,
         is_multilabel: bool,
         capture_shape: bool = False,
     ) -> tuple[Counter[int], list[int], int]:
@@ -2692,24 +1935,13 @@ class BNNRTrainer:
 
         Returns ``(counter, image_shape, total_boxes)``.  ``image_shape``
         is only populated when *capture_shape* is True and an image batch
-        is found.  ``total_boxes`` is non-zero only for detection.
+        is found.  ``total_boxes`` is always 0 (classification/multilabel).
         """
         counter: Counter[int] = Counter()
         image_shape: list[int] = []
         total_boxes = 0
         for raw_batch in loader:
-            if is_detection:
-                if len(raw_batch) == 3:
-                    images, targets, _ = raw_batch
-                else:
-                    images, targets = raw_batch
-                if capture_shape and not image_shape and images.ndim == 4:
-                    image_shape = list(images.shape[1:])
-                for target in targets:
-                    for label in target["labels"].tolist():
-                        counter[int(label)] += 1
-                        total_boxes += 1
-            elif is_multilabel:
+            if is_multilabel:
                 if len(raw_batch) == 3:
                     images, labels, _ = raw_batch
                 else:
@@ -2746,13 +1978,11 @@ class BNNRTrainer:
         """
         train_counter, image_shape, total_train_boxes = self._count_labels(
             self.train_loader,
-            is_detection=self._is_detection,
             is_multilabel=self._is_multilabel,
             capture_shape=True,
         )
         val_counter, _, total_val_boxes = self._count_labels(
             self.val_loader,
-            is_detection=self._is_detection,
             is_multilabel=self._is_multilabel,
         )
 
@@ -2772,11 +2002,8 @@ class BNNRTrainer:
         else:
             imbalance_ratio = float("inf")
 
-        # Build class names from config or class IDs
-        if self.config.detection_class_names:
-            class_names = list(self.config.detection_class_names)
-        else:
-            class_names = [f"class_{c}" for c in all_classes]
+        # Build class names from class IDs
+        class_names = [f"class_{c}" for c in all_classes]
 
         profile: dict[str, Any] = {
             "num_classes": num_classes,
@@ -2787,12 +2014,8 @@ class BNNRTrainer:
             "imbalance_ratio": round(imbalance_ratio, 2),
             "image_shape": image_shape,
             "class_names": class_names,
+            "task": self.config.task,
         }
-
-        if self._is_detection:
-            profile["task"] = "detection"
-            profile["total_train_boxes"] = total_train_boxes
-            profile["total_val_boxes"] = total_val_boxes
 
         # --- Data quality analysis (duplicate detection + sanity checks) ---
         try:
@@ -2800,7 +2023,6 @@ class BNNRTrainer:
             dq_save_dir = dq_run_dir / "artifacts" / "data_quality"
             quality_result = run_data_quality_analysis(
                 self.train_loader,
-                is_detection=self._is_detection,
                 save_dir=dq_save_dir,
                 run_dir=dq_run_dir,
                 duplicate_threshold=self.config.duplicate_hamming_threshold,
@@ -3086,12 +2308,10 @@ class BNNRTrainer:
                     candidate_best_epochs[augmentation.name] = cand_best_epoch
 
                     # Restore best-epoch state to compute per-class details at that point.
-                    # Clear cached eval data so _compute_eval_class_details_detection
-                    # runs a fresh (single) forward pass with the best-epoch weights.
                     self.model.load_state_dict(cand_best_state)
                     if hasattr(self.model, "last_eval_preds"):
-                        self.model.last_eval_preds = []  # type: ignore[attr-defined]  # duck-typed attr on DetectionAdapter
-                        self.model.last_eval_targets = []  # type: ignore[attr-defined]  # duck-typed attr on DetectionAdapter
+                        self.model.last_eval_preds = []  # type: ignore[attr-defined]
+                        self.model.last_eval_targets = []  # type: ignore[attr-defined]
                     # Invalidate classification prediction cache (state changed)
                     self._last_eval_preds = None
                     self._last_eval_labels = None

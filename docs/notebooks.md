@@ -10,8 +10,7 @@ This guide covers all user notebooks in `examples/` and how to run them in a way
 | `examples/bnnr_augmentations_guide.ipynb` | Visualize all built-in augmentations and ICD/AICD behavior | Optional (focus is augmentation visuals) | Short |
 | `examples/classification/bnnr_classification_demo.ipynb` | End-to-end STL-10 classification with XAI and branch selection | Required (live tracking) | Medium |
 | `examples/multilabel/bnnr_multilabel_demo.ipynb` | Multi-label training flow (`task="multilabel"`) | Required (live tracking) | Medium |
-| `examples/detection/bnnr_detection_demo.ipynb` | VOC detection flow with bbox-aware augmentations + detection XAI | Required (live tracking) | Long |
-| `examples/bnnr_custom_data.ipynb` | Bring-your-own classification/detection data patterns | Recommended | Medium |
+| `examples/bnnr_custom_data.ipynb` | Bring-your-own classification data patterns | Recommended | Medium |
 
 ## Phase C Benchmark Notebooks (`benchmarks/notebooks/phase_c/`)
 
@@ -20,15 +19,13 @@ This guide covers all user notebooks in `examples/` and how to run them in a way
 | `00_setup_private_wheel.ipynb` | Mount Drive, install private wheel, unpack benchmark bundle, verify files | Required first step | Short |
 | `01_eurosat.ipynb` | Run EuroSAT benchmark matrix (4 variants x seeds) with resume | Benchmark execution | Medium |
 | `02_isic2019.ipynb` | Run ISIC benchmark matrix with Kaggle-first ingest + ZIP fallback | Benchmark execution | Long |
-| `03_voc2007_yolo.ipynb` | Run VOC2007 detection benchmark (YOLOv8-only) with resume | Benchmark execution | Long |
 | `04_aggregate_results.ipynb` | Validate produced JSON/MD summaries for README/paper tables | Post-processing | Short |
 
 ## Recommended order
 1. `bnnr_augmentations_guide.ipynb`
 2. `classification/bnnr_classification_demo.ipynb`
 3. `multilabel/bnnr_multilabel_demo.ipynb`
-4. `detection/bnnr_detection_demo.ipynb`
-5. `bnnr_custom_data.ipynb`
+4. `bnnr_custom_data.ipynb`
 
 This order gives fastest understanding: augmentations -> core training loop -> task variants -> custom integration.
 
@@ -50,12 +47,12 @@ jupyter lab
 
 ## Colab setup (recommended for first run)
 1. Open notebook via the “Open in Colab” badge.
-2. Runtime -> Change runtime type -> GPU (recommended for detection).
+2. Runtime -> Change runtime type -> GPU (recommended for larger runs).
 3. Run installation cell first (`%pip install -q "bnnr[dashboard]" ...`).
 4. Run cells top-to-bottom without skipping.
 
 ## Dashboard-first workflow (desktop + mobile)
-For classification/multilabel/detection notebooks:
+For classification/multilabel notebooks:
 1. Run dashboard section **before** training.
 2. Confirm local dashboard URL appears.
 3. On Colab, confirm iframe is rendered.
@@ -78,7 +75,6 @@ After each run verify:
 - task metrics are present:
   - classification: `accuracy`, `f1_*`,
   - multilabel: `f1_samples`, `fbeta_*`,
-  - detection: `map_50`, `map_50_95`.
 
 Optional replay/export checks:
 
@@ -97,8 +93,6 @@ During B11 notebook hardening, the following were normalized:
 
 ## Common pitfalls
 - Missing `jupyter`/`nbconvert` locally.
-- Expecting full detection runs to finish quickly on CPU.
-- Confusing YOLO `data.yaml` with BNNR config YAML.
 - Forgetting to keep `events.jsonl` (required for replay/export).
 
 For concrete fixes, see `troubleshooting.md`.

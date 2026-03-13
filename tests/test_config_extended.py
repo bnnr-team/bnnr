@@ -1,5 +1,5 @@
 """Extended tests for bnnr.config — validation branches, save_config,
-YAML error handling, detection/multilabel validation paths.
+YAML error handling, multilabel validation paths.
 
 Note: BNNRConfig uses pydantic field_validators that prevent invalid
 values from being set. ``validate_config()`` is a secondary validation
@@ -134,17 +134,6 @@ class TestValidateConfigBranches:
         warnings = validate_config(cfg)
         assert not any("multilabel" in w.lower() for w in warnings)
 
-    def test_detection_valid_metric(self):
-        cfg = BNNRConfig(
-            task="detection",
-            selection_metric="map_50",
-            metrics=["map_50"],
-        )
-        warnings = validate_config(cfg)
-        detection_metric_warnings = [w for w in warnings if "detection" in w.lower() and "selection_metric" in w]
-        assert len(detection_metric_warnings) == 0
-
-
 # ---------------------------------------------------------------------------
 # Pydantic validators — these SHOULD raise ValidationError
 # ---------------------------------------------------------------------------
@@ -164,14 +153,6 @@ class TestPydanticFieldValidators:
     def test_invalid_device(self):
         with pytest.raises(ValidationError):
             BNNRConfig(device="tpu")
-
-    def test_invalid_detection_bbox_format(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_bbox_format="pascal_voc")
-
-    def test_invalid_detection_targets_mode(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_targets_mode="never")
 
     def test_invalid_report_preview_size(self):
         with pytest.raises(ValidationError):
@@ -221,28 +202,11 @@ class TestPydanticFieldValidators:
         with pytest.raises(ValidationError):
             BNNRConfig(multilabel_threshold=1.0)
 
-    def test_invalid_detection_score_threshold(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_score_threshold=1.5)
-
-    def test_invalid_detection_nms_threshold(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_nms_threshold=-0.1)
-
-    def test_invalid_detection_min_box_area(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_min_box_area=-1.0)
-
     def test_invalid_report_probe_controls(self):
         with pytest.raises(ValidationError):
             BNNRConfig(report_probe_images_per_class=0)
         with pytest.raises(ValidationError):
             BNNRConfig(report_probe_max_classes=0)
-
-    def test_invalid_detection_xai_grid_size(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_xai_grid_size=0)
-
 
 # ---------------------------------------------------------------------------
 # merge_configs
