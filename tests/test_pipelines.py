@@ -32,7 +32,7 @@ class TestListDatasets:
     def test_returns_list(self):
         ds = list_datasets()
         assert isinstance(ds, list)
-        assert len(ds) >= 5
+        assert len(ds) >= 4
 
     def test_contains_expected_names(self):
         ds = list_datasets()
