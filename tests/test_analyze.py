@@ -249,6 +249,163 @@ def test_analyze_cli(tmp_path: Path) -> None:
     assert (out_dir / "report.html").exists()
 
 
+def test_analyze_cli_with_xai(tmp_path: Path) -> None:
+    """CLI bnnr analyze with XAI enabled produces XAI fields in report."""
+    import subprocess
+    import sys
+
+    from bnnr.core import BNNRConfig
+    from bnnr.pipelines import build_pipeline
+
+    cfg = BNNRConfig(device="cpu", task="classification")
+    adapter, _, _, _ = build_pipeline(
+        dataset_name="mnist",
+        config=cfg,
+        data_dir=tmp_path / "data",
+        batch_size=8,
+        max_train_samples=16,
+        max_val_samples=24,
+    )
+    ckpt = tmp_path / "model.pt"
+    torch.save({"model_state": adapter.model.state_dict()}, ckpt)
+    out_dir = tmp_path / "analysis_out_xai"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "bnnr",
+            "analyze",
+            "--model",
+            str(ckpt),
+            "--data",
+            "mnist",
+            "--output",
+            str(out_dir),
+            "--batch-size",
+            "8",
+            "--xai-samples",
+            "30",
+            "--no-data-quality",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    data = __import__("json").loads((out_dir / "analysis_report.json").read_text())
+    assert "xai_insights" in data or "xai_quality_summary" in data
+    assert "metrics" in data
+
+
+def test_analyze_api_output_dir_none(model_adapter, tmp_path: Path) -> None:
+    """API with output_dir=None returns full report without writing to disk."""
+    loader = _make_indexed_loader()
+    config = BNNRConfig(device="cpu", task="classification")
+    report = analyze_model(
+        model_adapter,
+        loader,
+        config=config,
+        output_dir=None,
+        run_data_quality=False,
+    )
+    assert isinstance(report, AnalysisReport)
+    assert report.metrics
+    assert report.executive_summary
+    assert not (tmp_path / "analysis_report.json").exists()
+
+
+def test_api_cli_parity(tmp_path: Path) -> None:
+    """API and CLI produce consistent report structure and metrics for same model (classification)."""
+    import subprocess
+    import sys
+
+    from bnnr.core import BNNRConfig
+    from bnnr.pipelines import build_pipeline
+
+    cfg = BNNRConfig(device="cpu", task="classification")
+    adapter, _, val_loader, _ = build_pipeline(
+        dataset_name="mnist",
+        config=cfg,
+        data_dir=tmp_path / "data",
+        batch_size=8,
+        max_train_samples=24,
+        max_val_samples=48,
+    )
+    ckpt = tmp_path / "model.pt"
+    torch.save({"model_state": adapter.model.state_dict()}, ckpt)
+
+    # API
+    report_api = analyze_model(
+        adapter,
+        val_loader,
+        config=cfg,
+        output_dir=None,
+        run_data_quality=False,
+        xai_enabled=False,
+    )
+
+    # CLI (uses same checkpoint; val set may differ so we check structure, not exact values)
+    out_dir = tmp_path / "cli_out"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "bnnr",
+            "analyze",
+            "--model",
+            str(ckpt),
+            "--data",
+            "mnist",
+            "--output",
+            str(out_dir),
+            "--batch-size",
+            "8",
+            "--no-xai",
+            "--no-data-quality",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        timeout=90,
+    )
+    data_cli = __import__("json").loads((out_dir / "analysis_report.json").read_text())
+
+    # Both produce same schema
+    for key in ("metrics", "per_class_accuracy", "confusion", "executive_summary", "findings"):
+        assert key in data_cli, f"CLI report missing {key}"
+    assert "accuracy" in report_api.metrics
+    assert "accuracy" in data_cli["metrics"]
+    assert 0 <= data_cli["metrics"]["accuracy"] <= 1
+
+
+def test_recommendations_build() -> None:
+    """Structured recommendations are built from findings."""
+    from bnnr.analysis.recommendations import build_recommendations
+    from bnnr.analysis.schema import Finding
+
+    class MockReport:
+        metrics = {"accuracy": 0.7}
+        xai_quality_summary = {}
+        class_diagnostics = []
+
+    findings = [
+        Finding(
+            title="Zero recall",
+            finding_type="zero_recall_class",
+            description="Class 2: no correct predictions.",
+            evidence=["recall=0"],
+            severity="critical",
+            confidence="high",
+            class_ids=["2"],
+        ),
+    ]
+    recs = build_recommendations(findings, MockReport(), max_items=5)
+    assert isinstance(recs, list)
+    assert len(recs) >= 1
+    assert any("focal" in r.action.lower() or "class" in r.action.lower() for r in recs)
+
+
 def test_cohen_kappa_in_class_diagnostics() -> None:
     """Cohen's Kappa is computed per-class in class_diagnostics."""
     from bnnr.analysis.class_diagnostics import compute_class_diagnostics
