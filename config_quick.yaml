@@ -1,0 +1,17 @@
+# Minimal config for quick training (demo)
+m_epochs: 2
+max_iterations: 2
+metrics:
+  - accuracy
+  - f1_macro
+  - loss
+selection_metric: accuracy
+selection_mode: max
+checkpoint_dir: checkpoints
+report_dir: reports
+xai_enabled: false
+device: auto
+seed: 42
+save_checkpoints: true
+verbose: true
+early_stopping_patience: 1

@@ -1,0 +1,17 @@
+# Minimal STL-10 config for quick demo
+m_epochs: 3
+max_iterations: 2
+metrics:
+  - accuracy
+  - f1_macro
+  - loss
+selection_metric: accuracy
+selection_mode: max
+checkpoint_dir: checkpoints
+report_dir: reports
+xai_enabled: false
+device: auto
+seed: 42
+save_checkpoints: true
+verbose: true
+early_stopping_patience: 1
