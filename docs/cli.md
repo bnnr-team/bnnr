@@ -85,9 +85,9 @@ python3 -m bnnr analyze --model PATH --data PATH_OR_DATASET --output DIR [OPTION
 
 Run standalone diagnostics on a trained model (no training): metrics, XAI, data quality, failure analysis, patterns, recommendations. Writes `analysis_report.json` and `report.html` under `--output`.
 
-Required: `--model` (checkpoint `.pt`), `--data` (directory or dataset name: `mnist`, `fashion_mnist`, `cifar10`), `--output`.
+Required: `--model` (checkpoint `.pt`), `--data` (directory or dataset name: `mnist`, `fashion_mnist`, `cifar10`, `stl10`), `--output`.
 
-Options: `--task` (classification, multilabel, detection), `--config`, `--max-worst`, `--no-xai`, `--no-data-quality`, `--device`, `--batch-size`.
+Options: `--task` (classification, multilabel, detection), `--config`, `--max-worst`, `--no-xai`, `--no-data-quality`, `--device`, `--batch-size`, `--cv-folds`, `--xai-samples`, `--summary/--no-summary`.
 
 See `analyze.md` for details and examples.
 

@@ -8,6 +8,24 @@ How to run **zero-friction diagnostics** on a trained model without running full
 
 Use this when you have a trained model (e.g. from `bnnr train` or your own pipeline) and want a single report that answers: how does the model perform, where does it fail, what does it look at (XAI), and what to improve.
 
+## Classification quick start
+
+For **image classification** (MNIST, CIFAR-10, STL-10, ImageFolder):
+
+```bash
+# 1. Train a model (or use an existing checkpoint)
+python3 -m bnnr train -c config.yaml --dataset mnist -o out_mnist -e 2
+
+# 2. Run analysis
+python3 -m bnnr analyze --model out_mnist/checkpoints/iter_2_baseline.pt \
+  --data mnist --output out_analyze
+
+# 3. Open the HTML report
+xdg-open out_analyze/report.html
+```
+
+The report includes: accuracy/F1, per-class diagnostics, confusion matrix, XAI quality score, failure patterns, and actionable recommendations. API and CLI produce equivalent results for the same model and data.
+
 ## Overview
 
 `bnnr analyze` (and the Python API `analyze_model`) runs:
@@ -30,7 +48,7 @@ python3 -m bnnr analyze --model PATH --data PATH_OR_DATASET --output DIR [OPTION
 ### Required arguments
 
 - `--model` — Path to a saved model checkpoint (`.pt`). Can be a BNNR checkpoint (with `model` or `model_state`) or a raw `state_dict`.
-- `--data` — Either a directory path (ImageFolder-style: `class1/`, `class2/`, …) or a built-in dataset name: `mnist`, `fashion_mnist`, `cifar10`.
+- `--data` — Either a directory path (ImageFolder-style: `class1/`, `class2/`, …) or a built-in dataset name: `mnist`, `fashion_mnist`, `cifar10`, `stl10`.
 - `--output` — Directory where to write `analysis_report.json` and `report.html`.
 
 ### Main options
@@ -43,6 +61,7 @@ python3 -m bnnr analyze --model PATH --data PATH_OR_DATASET --output DIR [OPTION
 - `--device` — `cuda`, `cpu`, or `auto`.
 - `--batch-size` — Batch size for evaluation (default from config or pipeline).
 - `--cv-folds` — Optional number of folds for lightweight cross-validation on the validation set (classification only; 0 disables CV).
+- `--xai-samples` — Number of samples for XAI probe set (default: 500; more = more accurate, slower).
 
 ### Behavior notes
 
@@ -103,7 +122,7 @@ report = analyze_model(
 # In-memory report
 print(report.metrics)
 print(report.per_class_accuracy)
-print(report.worst_predictions_list(5))
+print(report.failure_patterns_list())
 print(report.recommendations)
 
 # Save to disk
@@ -113,7 +132,7 @@ report.to_html("./analysis_out/report.html")
 
 ### `AnalysisReport`
 
-- **Attributes (core)**: `metrics`, `per_class_accuracy`, `confusion`, `xai_insights`, `xai_diagnoses`, `xai_quality_summary`, `data_quality_result`, `worst_predictions`, `failure_patterns`, `recommendations`.
+- **Attributes (core)**: `metrics`, `per_class_accuracy`, `confusion`, `xai_insights`, `xai_diagnoses`, `xai_quality_summary`, `data_quality_result`, `failure_patterns`, `recommendations`.
 - **Attributes (extended v0.2)**:
   - `schema_version` — report schema version string.
   - `executive_summary` — health badge/score, key findings, top actions, critical classes.
@@ -129,7 +148,6 @@ report.to_html("./analysis_out/report.html")
 - **Methods**:
   - `save(output_dir)` — writes `analysis_report.json` and optional artifact dirs.
   - `to_html(path)` — writes a single HTML report file.
-  - `worst_predictions_list(n=20)` — returns top-n worst predictions.
   - `failure_patterns_list()` — returns the list of failure patterns.
 
 For full API details, see `api_reference.md`.

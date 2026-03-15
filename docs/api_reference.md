@@ -28,7 +28,7 @@ This page documents only symbols exported publicly from `src/bnnr/__init__.py`.
 ## Analysis API (standalone model diagnostics)
 
 - `analyze_model` — run full analysis (metrics, XAI, data quality, failure analysis, patterns, recommendations) on an adapter and validation loader; returns `AnalysisReport`.
-- `AnalysisReport` — dataclass with attributes: `metrics`, `per_class_accuracy`, `confusion`, `xai_insights`, `xai_diagnoses`, `xai_quality_summary`, `data_quality_result`, `worst_predictions`, `failure_patterns`, `recommendations`; methods: `save(output_dir)`, `to_html(path)`, `worst_predictions_list(n)`, `failure_patterns_list()`.
+- `AnalysisReport` — dataclass with attributes: `metrics`, `per_class_accuracy`, `confusion`, `xai_insights`, `xai_diagnoses`, `xai_quality_summary`, `data_quality_result`, `failure_patterns`, `recommendations`, `executive_summary`, `findings`, `recommendations_structured`, `class_diagnostics`; methods: `save(output_dir)`, `to_html(path)`, `failure_patterns_list()`.
 
 See `analyze.md` for usage and CLI.
 
