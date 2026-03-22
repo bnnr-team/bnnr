@@ -10,7 +10,7 @@ Use this as the starting point when you need the shortest path to the page relev
 - `configuration.md` — all `BNNRConfig` fields and defaults from `src/bnnr/core.py`
 - `cli.md` — CLI commands and option reference from `src/bnnr/cli.py`
 - `dashboard.md` — live/replay/mobile/QR dashboard workflow
-- `api_reference.md` — public Python API usage
+- `api_reference.md` — public Python API usage (includes advanced YOLO loaders / Ultralytics notes under Detection)
 - `golden_path.md` — integrating BNNR with your own model and dataloaders
 - `augmentations.md` — presets and augmentation classes available in code
 - `examples.md` — production usage guide for all `examples/*.py` scripts
