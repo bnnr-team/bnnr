@@ -125,6 +125,12 @@ result = BNNRTrainer(adapter, train_loader, val_loader, augmentations, config).r
 print(result.best_metrics)  # map_50, map_50_95, loss
 ```
 
+### YOLO-format folders + torchvision vs Ultralytics
+
+The official example `examples/detection/showcase_yolo_coco128.py` uses **`build_pipeline("yolo", …)`**, which reads YOLO `data.yaml` but trains a **torchvision Faster R–CNN** (`DetectionAdapter`). Labels from disk use **`torchvision_label_offset=True`** internally (class `0` in `.txt` → label tensor `1`, background `0`).
+
+To train **Ultralytics YOLOv8** on the same folder layout, build loaders with `build_yolo_pipeline(..., torchvision_label_offset=False)` (or `build_pipeline(..., torchvision_label_offset=False)`), then wrap `UltralyticsDetectionAdapter` and pass those loaders to `BNNRTrainer`. Install **`ultralytics`** separately; it is not a hard dependency of the core package.
+
 ## 3) Multi-label integration (dashboard-first)
 
 ### Checklist

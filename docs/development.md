@@ -6,6 +6,10 @@ The repository's local developer workflow: setup, tests, linting, type checks, a
 ## When to use this page
 Use this when contributing changes or validating local modifications.
 
+## Local QA scripts
+
+The path `my_tests/` is gitignored so you can keep personal smoke scripts (e.g. dataset-specific Ultralytics runs) out of the main tree. Anything meant for all contributors should live under `examples/`.
+
 ## Install developer dependencies
 
 ```bash

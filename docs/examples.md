@@ -84,6 +84,8 @@ PYTHONPATH=src python3 examples/detection/showcase_voc.py \
 
 ## 4) Detection YOLO showcase
 
+Uses **torchvision** (Faster R–CNN) on disk layout compatible with YOLO `data.yaml`, not the Ultralytics training stack.
+
 Script:
 - `examples/detection/showcase_yolo_coco128.py`
 
@@ -94,6 +96,8 @@ What it demonstrates:
 
 Important:
 - `--data-path` must point to YOLO `data.yaml` (not BNNR config YAML).
+
+For **Ultralytics YOLOv8** inside `BNNRTrainer`, use `UltralyticsDetectionAdapter` from `bnnr.detection_adapter` with loaders from `build_yolo_pipeline(..., torchvision_label_offset=False)`; see `docs/api_reference.md` (Detection → Advanced) and `docs/troubleshooting.md`.
 
 ### Full showcase
 

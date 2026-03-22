@@ -132,6 +132,14 @@ Data helpers and metrics:
 - `detection_collate_fn_with_index`
 - `calculate_detection_metrics`
 
+### Advanced (not re-exported from `bnnr`)
+
+These live in submodules; import them explicitly when you need YOLO-format loaders or Ultralytics YOLOv8 inside `BNNRTrainer`.
+
+- `bnnr.pipelines.build_yolo_pipeline` — builds **torchvision Faster R–CNN** plus `DataLoader`s from a classic YOLO `data.yaml`. Keyword-only option `torchvision_label_offset` (default `True`): when `True`, label file class ids are shifted by `+1` so `0` is reserved for torchvision’s background class; set **`False`** if you reuse the same loaders with `UltralyticsDetectionAdapter` (YOLO expects classes `0 … nc-1`).
+- `bnnr.pipelines.build_pipeline(..., "yolo", ..., image_size=640, torchvision_label_offset=False)` — passes `image_size` / `torchvision_label_offset` through to `build_yolo_pipeline`.
+- `bnnr.detection_adapter.UltralyticsDetectionAdapter` — optional adapter around `ultralytics.YOLO` for training inside BNNR. Requires `pip install ultralytics`. Uses Ultralytics v8 `model.loss(batch_dict)` (`img`, `cls`, `bboxes`, `batch_idx`). **`use_amp=False`** is recommended unless you verify your torch/ultralytics pair. Detection XAI and probe snapshot paths in the trainer that call torchvision-style `model([chw, …])` are **skipped** for `ultralytics.nn.tasks` backbones (logged at INFO).
+
 ## Dashboard helper
 
 - `start_dashboard`
