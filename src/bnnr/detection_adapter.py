@@ -282,6 +282,7 @@ class UltralyticsDetectionAdapter:
     ) -> None:
         try:
             from ultralytics import YOLO
+            from ultralytics.cfg import get_cfg
         except ImportError as exc:
             raise ImportError(
                 "Ultralytics is required for UltralyticsDetectionAdapter. "
@@ -307,6 +308,21 @@ class UltralyticsDetectionAdapter:
         if model_ref is None or isinstance(model_ref, str):
             raise RuntimeError("Ultralytics adapter did not expose a usable torch model.")
         self._model: nn.Module = cast(nn.Module, model_ref)
+        self._model.to(self.device)
+        # ``YOLO().model`` loads with all parameters ``requires_grad=False`` (inference-ready).
+        for p in self._model.parameters():
+            p.requires_grad = True
+
+        # Checkpoints often store ``model.args`` as a small dict; v8 loss needs full hyperparameters
+        # (``box`` / ``cls`` / ``dfl`` gains, etc.) on an attribute-style namespace.
+        ckpt_args = getattr(self._model, "args", None)
+        if isinstance(ckpt_args, dict) or ckpt_args is None or not hasattr(ckpt_args, "box"):
+            hyp = get_cfg()
+            if isinstance(ckpt_args, dict):
+                for key, value in ckpt_args.items():
+                    if hasattr(hyp, key):
+                        setattr(hyp, key, value)
+            self._model.args = hyp
 
         # Optimizer — essential for weights to update during train_step
         if optimizer is not None:
@@ -320,45 +336,70 @@ class UltralyticsDetectionAdapter:
         self.scaler = torch.amp.GradScaler(enabled=self.use_amp)
 
     def train_step(self, batch: Any) -> dict[str, float]:
-        """Training step using Ultralytics' internal training mechanism."""
+        """Training step using Ultralytics' internal loss (v8 API).
+
+        Ultralytics 8.x expects ``model.loss(batch_dict)`` where ``batch_dict`` has
+        ``img`` (BCHW, typically 0–255 float), ``cls`` (N,1), ``bboxes`` (N,4) normalized
+        xywh, and ``batch_idx`` (N,) per-target image index — not a flat (N,6) tensor.
+        """
         images, targets = batch
         self._model.train()
+        # ``load_state_dict`` / checkpoints must not leave Ultralytics weights frozen.
+        for _p in self._model.parameters():
+            _p.requires_grad_(True)
 
         if isinstance(images, Tensor):
-            images = images.to(self.device)
+            images = images.to(self.device, dtype=torch.float32)
 
-        # Convert targets to Ultralytics format
-        # Ultralytics expects: Tensor[N, 6] where columns = [batch_idx, class, cx, cy, w, h] (normalized)
-        batch_targets = []
+        _b, _c, img_h, img_w = images.shape
+
+        cls_parts: list[Tensor] = []
+        bbox_parts: list[Tensor] = []
+        bi_parts: list[Tensor] = []
         for i, t in enumerate(targets):
-            boxes = t["boxes"]  # xyxy
+            boxes = t["boxes"]  # xyxy in pixel coords on resized image
             labels = t["labels"]
             if len(boxes) == 0:
                 continue
-            # Convert xyxy to cxcywh normalized
-            img_h, img_w = images.shape[-2], images.shape[-1]
-            cx = ((boxes[:, 0] + boxes[:, 2]) / 2) / img_w
-            cy = ((boxes[:, 1] + boxes[:, 3]) / 2) / img_h
-            w = (boxes[:, 2] - boxes[:, 0]) / img_w
-            h = (boxes[:, 3] - boxes[:, 1]) / img_h
-            batch_idx = torch.full((len(boxes),), i, dtype=torch.float32)
-            cls_col = labels.float()
-            target_row = torch.stack([batch_idx, cls_col, cx, cy, w, h], dim=1)
-            batch_targets.append(target_row)
+            boxes = boxes.to(self.device, dtype=torch.float32)
+            labels = labels.to(self.device)
+            x1, y1, x2, y2 = boxes.unbind(1)
+            w_n = (x2 - x1) / float(img_w)
+            h_n = (y2 - y1) / float(img_h)
+            cx = (x1 + x2) * 0.5 / float(img_w)
+            cy = (y1 + y2) * 0.5 / float(img_h)
+            xywh = torch.stack((cx, cy, w_n, h_n), dim=1)
+            cls_parts.append(labels.float().view(-1, 1))
+            bbox_parts.append(xywh)
+            bi_parts.append(
+                torch.full((len(boxes),), float(i), device=self.device, dtype=torch.float32),
+            )
 
-        if batch_targets:
-            batch_target_tensor = torch.cat(batch_targets, dim=0).to(self.device)
+        if cls_parts:
+            cls_t = torch.cat(cls_parts, dim=0)
+            bboxes_t = torch.cat(bbox_parts, dim=0)
+            batch_idx_t = torch.cat(bi_parts, dim=0)
         else:
-            batch_target_tensor = torch.zeros(0, 6, device=self.device)
+            cls_t = torch.zeros(0, 1, device=self.device, dtype=torch.float32)
+            bboxes_t = torch.zeros(0, 4, device=self.device, dtype=torch.float32)
+            batch_idx_t = torch.zeros(0, device=self.device, dtype=torch.float32)
 
-        # Forward + loss + optimizer step
+        # Match Ultralytics dataloader image scale (uint8-style 0–255).
+        ultra_batch = {
+            "img": (images * 255.0).clamp(0.0, 255.0).contiguous(),
+            "cls": cls_t,
+            "bboxes": bboxes_t,
+            "batch_idx": batch_idx_t,
+        }
+
         self.optimizer.zero_grad()
 
         yolo_model = cast(Any, self._model)
         with torch.amp.autocast(device_type=self.device.split(":")[0], enabled=self.use_amp):
-            preds = yolo_model(images)
-            loss = yolo_model.loss(preds, batch_target_tensor)
-            total_loss = loss if isinstance(loss, Tensor) else sum(loss.values())  # type: ignore[arg-type]
+            loss_out, _loss_items = yolo_model.loss(ultra_batch)
+            total_loss = loss_out.sum() if isinstance(loss_out, Tensor) else torch.as_tensor(
+                loss_out, device=self.device, dtype=torch.float32,
+            )
 
         self.scaler.scale(total_loss).backward()
         self.scaler.step(self.optimizer)
@@ -371,8 +412,12 @@ class UltralyticsDetectionAdapter:
         images, targets = batch
         self._model.eval()
 
+        if isinstance(images, Tensor):
+            src = (images.float().to(self.device) * 255.0).clamp(0.0, 255.0)
+        else:
+            src = images
         results = self._yolo.predict(
-            source=images if isinstance(images, Tensor) else images,
+            source=src,
             device=self.device,
             conf=self.score_threshold,
             verbose=False,

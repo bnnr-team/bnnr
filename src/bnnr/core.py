@@ -341,6 +341,19 @@ def copy_state_dict_inplace(dst: dict[str, Any], src: dict[str, Any]) -> None:
             dst[k] = copy.deepcopy(v)
 
 
+def _is_ultralytics_tasks_backbone(model: Any) -> bool:
+    """Ultralytics task modules use a BCHW tensor forward, not a list of CHW tensors like torchvision detection."""
+    mod = type(model).__module__
+    name = type(model).__name__
+    return mod.startswith("ultralytics.nn.tasks") and name in {
+        "DetectionModel",
+        "OBBModel",
+        "SegmentationModel",
+        "PoseModel",
+        "YOLOEModel",
+    }
+
+
 class BNNRTrainer:
     """Execute iterative BNNR training, evaluation, and augmentation selection.
 
@@ -990,6 +1003,13 @@ class BNNRTrainer:
 
             model_impl = model_getter()
             device = next(model_impl.parameters()).device
+            if _is_ultralytics_tasks_backbone(model_impl):
+                self._log(
+                    "Detection XAI skipped: Ultralytics task models expect a BCHW tensor; "
+                    "torchvision-style list inputs are not supported here."
+                )
+                return [], {}, {}
+
             # Generate XAI for ALL probe samples (activation method is
             # a single batched forward pass, so the cost is negligible).
             images = self._report_probe_images.to(device)
@@ -1888,6 +1908,11 @@ class BNNRTrainer:
             model = model_getter()
             device = next(model.parameters()).device
             images = self._report_probe_images.to(device)
+            if _is_ultralytics_tasks_backbone(model):
+                self._log(
+                    "Probe prediction snapshots skipped: Ultralytics backbone (use torchvision detection for this path)."
+                )
+                return
             with torch.no_grad():
                 preds = model([img for img in images])
 

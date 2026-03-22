@@ -406,6 +406,28 @@ class TestYoloHelpers:
         assert target["labels"][0].item() == 1
         assert target["labels"][1].item() == 2
 
+    def test_indexed_yolo_detection_ultralytics_labels_no_offset(self, tmp_path):
+        """YOLO-native class ids 0..nc-1 when torchvision_label_offset=False."""
+        from PIL import Image
+
+        from bnnr.pipelines import _IndexedYoloDetection
+
+        img_dir = tmp_path / "images" / "train"
+        img_dir.mkdir(parents=True)
+        label_dir = tmp_path / "labels" / "train"
+        label_dir.mkdir(parents=True)
+
+        img_path = img_dir / "sample.jpg"
+        Image.new("RGB", (64, 64), color="blue").save(img_path)
+
+        label_path = label_dir / "sample.txt"
+        label_path.write_text("0 0.5 0.5 0.4 0.4\n1 0.2 0.8 0.1 0.1\n")
+
+        ds = _IndexedYoloDetection([img_path], image_size=64, torchvision_label_offset=False)
+        _, target, _ = ds[0]
+        assert target["labels"][0].item() == 0
+        assert target["labels"][1].item() == 1
+
 
 # ---------------------------------------------------------------------------
 # COCO pipeline path validation

@@ -618,13 +618,27 @@ class _IndexedYoloDetection(Dataset):
     - images in an image directory (from data.yaml train/val)
     - labels in sibling ``labels`` directory, same stem and ``.txt`` extension
       with rows: ``class cx cy w h`` normalized to [0,1].
+
+    Parameters
+    ----------
+    torchvision_label_offset:
+        If ``True`` (default), add 1 to each class id so label 0 is reserved for
+        torchvision detection backgrounds. Set ``False`` for Ultralytics YOLO,
+        which expects class ids ``0 .. nc-1``.
     """
 
-    def __init__(self, image_paths: list[Path], image_size: int = 480) -> None:
+    def __init__(
+        self,
+        image_paths: list[Path],
+        image_size: int = 480,
+        *,
+        torchvision_label_offset: bool = True,
+    ) -> None:
         from PIL import Image
 
         self._image_paths = image_paths
         self._image_size = image_size
+        self._torchvision_label_offset = torchvision_label_offset
         self._to_tensor = transforms.ToTensor()
         self._resize = transforms.Resize((image_size, image_size))
         self._image_cls = Image
@@ -661,7 +675,8 @@ class _IndexedYoloDetection(Dataset):
                 if len(parts) != 5:
                     continue
                 cls, cx, cy, w, h = parts
-                cls_id = int(float(cls)) + 1  # reserve 0 for background
+                cls_raw = int(float(cls))
+                cls_id = cls_raw + 1 if self._torchvision_label_offset else cls_raw
                 cx_f = float(cx) * self._image_size
                 cy_f = float(cy) * self._image_size
                 w_f = float(w) * self._image_size
@@ -718,10 +733,16 @@ def build_yolo_pipeline(
     augmentation_preset: str = "none",
     num_classes: int | None = None,
     image_size: int = 480,
+    *,
+    torchvision_label_offset: bool = True,
 ) -> tuple[ModelAdapter, DataLoader, DataLoader, list[BaseAugmentation]]:
     """Build detection pipeline from classic YOLO dataset format.
 
     ``data_path`` points to ``data.yaml`` or a directory containing it.
+
+    ``torchvision_label_offset`` (default ``True``): add +1 to YOLO class ids for
+    torchvision detection (background = 0). Use ``False`` for Ultralytics training
+    with the same loaders (classes ``0 .. nc-1``).
     """
     from torchvision.models.detection import fasterrcnn_resnet50_fpn
 
@@ -746,8 +767,16 @@ def build_yolo_pipeline(
     if not train_images or not val_images:
         raise FileNotFoundError("YOLO train/val image lists resolved to empty sets.")
 
-    train_ds: Dataset = _IndexedYoloDetection(train_images, image_size=image_size)
-    val_ds: Dataset = _IndexedYoloDetection(val_images, image_size=image_size)
+    train_ds: Dataset = _IndexedYoloDetection(
+        train_images,
+        image_size=image_size,
+        torchvision_label_offset=torchvision_label_offset,
+    )
+    val_ds: Dataset = _IndexedYoloDetection(
+        val_images,
+        image_size=image_size,
+        torchvision_label_offset=torchvision_label_offset,
+    )
     train_ds = _maybe_subset(train_ds, max_train_samples)
     val_ds = _maybe_subset(val_ds, max_val_samples)
 
@@ -857,7 +886,17 @@ def build_pipeline(
                 "--data-path is required for yolo dataset. "
                 "Provide path to data.yaml (or its parent directory)."
             )
-        return build_yolo_pipeline(config, custom_data_path, batch_size, max_train_samples, max_val_samples, augmentation_preset, num_classes)
+        return build_yolo_pipeline(
+            config,
+            custom_data_path,
+            batch_size,
+            max_train_samples,
+            max_val_samples,
+            augmentation_preset,
+            num_classes,
+            image_size=int(kwargs.get("image_size", 480)),
+            torchvision_label_offset=bool(kwargs.get("torchvision_label_offset", True)),
+        )
     else:
         raise ValueError(
             f"Unknown dataset: '{dataset_name}'. Supported datasets: {', '.join(_SUPPORTED_DATASETS)}"
