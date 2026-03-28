@@ -994,7 +994,7 @@ class BNNRTrainer:
             from bnnr.detection_xai import (
                 compute_detection_box_saliency_occlusion,
                 generate_detection_saliency,
-                save_detection_xai_visualization,
+                save_detection_xai_panels,
             )
 
             self._initialize_report_probe_samples()
@@ -1150,7 +1150,7 @@ class BNNRTrainer:
                 }
                 self._latest_detection_xai_details.append(details_row)
 
-                out_path = save_detection_xai_visualization(
+                p_gt, p_sal, p_pred = save_detection_xai_panels(
                     image=np_images[idx],
                     saliency=sal,
                     boxes_gt=gt.get("boxes"),
@@ -1162,7 +1162,7 @@ class BNNRTrainer:
                     save_path=save_dir / f"xai_{idx}.png",
                     size=self.config.report_xai_size,
                 )
-                paths.append(out_path)
+                paths.extend((p_gt, p_sal, p_pred))
 
             # Enrich insight text with per-class AP for better detection diagnostics.
             # Prefer cached full-eval predictions when available (from epoch_end_eval).
@@ -1805,27 +1805,47 @@ class BNNRTrainer:
             model_obj = self.model.get_model() if hasattr(self.model, "get_model") else None
             if model_obj is None:
                 return {}, {}
-            model_obj.eval()
-            with torch.no_grad():
-                for raw_batch in self.val_loader:
-                    if len(raw_batch) == 3:
-                        images, targets, _ = raw_batch
-                    else:
-                        images, targets = raw_batch
-                    device = next(model_obj.parameters()).device
-                    images_list = [img.to(device) for img in images]
-                    preds = model_obj(images_list)
-                    for pred in preds:
-                        all_preds.append({
-                            "boxes": pred["boxes"].cpu(),
-                            "scores": pred["scores"].cpu(),
-                            "labels": pred["labels"].cpu(),
-                        })
-                    for target in targets:
-                        all_targets.append({
-                            "boxes": target["boxes"].cpu() if isinstance(target["boxes"], Tensor) else target["boxes"],
-                            "labels": target["labels"].cpu() if isinstance(target["labels"], Tensor) else target["labels"],
-                        })
+
+            # Ultralytics task models expect BCHW tensors, not a list like torchvision detection.
+            use_ultra_fallback = _is_ultralytics_tasks_backbone(model_obj) and hasattr(
+                self.model, "eval_step",
+            )
+            if use_ultra_fallback:
+                self.model._eval_preds = []  # type: ignore[attr-defined]
+                self.model._eval_targets = []  # type: ignore[attr-defined]
+                with torch.no_grad():
+                    for raw_batch in self.val_loader:
+                        if len(raw_batch) == 3:
+                            images, targets, _ = raw_batch
+                        else:
+                            images, targets = raw_batch
+                        self.model.eval_step((images, targets))
+                all_preds = copy.deepcopy(self.model._eval_preds)  # type: ignore[attr-defined]
+                all_targets = copy.deepcopy(self.model._eval_targets)  # type: ignore[attr-defined]
+                self.model._eval_preds = []  # type: ignore[attr-defined]
+                self.model._eval_targets = []  # type: ignore[attr-defined]
+            else:
+                model_obj.eval()
+                with torch.no_grad():
+                    for raw_batch in self.val_loader:
+                        if len(raw_batch) == 3:
+                            images, targets, _ = raw_batch
+                        else:
+                            images, targets = raw_batch
+                        device = next(model_obj.parameters()).device
+                        images_list = [img.to(device) for img in images]
+                        preds = model_obj(images_list)
+                        for pred in preds:
+                            all_preds.append({
+                                "boxes": pred["boxes"].cpu(),
+                                "scores": pred["scores"].cpu(),
+                                "labels": pred["labels"].cpu(),
+                            })
+                        for target in targets:
+                            all_targets.append({
+                                "boxes": target["boxes"].cpu() if isinstance(target["boxes"], Tensor) else target["boxes"],
+                                "labels": target["labels"].cpu() if isinstance(target["labels"], Tensor) else target["labels"],
+                            })
 
         if not all_preds or not all_targets:
             return {}, {}
@@ -1933,6 +1953,11 @@ class BNNRTrainer:
                     normalized_preview_pairs = list(getattr(latest, "preview_pairs", preview_pairs))
                     normalized_xai_paths = list(getattr(latest, "xai_paths", xai_paths))
 
+            n_probes = len(sample_ids)
+            xai_triplet_mode = (
+                n_probes > 0
+                and len(normalized_xai_paths) == 3 * n_probes
+            )
             for idx, sample_id in enumerate(sample_ids):
                 gt = self._report_probe_targets[idx]
                 pred = preds[idx]
@@ -1954,6 +1979,9 @@ class BNNRTrainer:
                 original_artifact = None
                 augmented_artifact = None
                 xai_artifact = None
+                xai_gt_artifact = None
+                xai_saliency_artifact = None
+                xai_pred_artifact = None
                 if idx < len(normalized_preview_pairs):
                     original_artifact = self._to_artifact_reference(normalized_preview_pairs[idx][0], reporter_run_dir)
                     augmented_artifact = self._to_artifact_reference(normalized_preview_pairs[idx][1], reporter_run_dir)
@@ -1961,7 +1989,17 @@ class BNNRTrainer:
                     # Keep Samples tab usable immediately after epoch_end:
                     # if full previews are not ready yet, expose a fast original.
                     original_artifact = self._to_artifact_reference(fallback_originals[idx], reporter_run_dir)
-                if idx < len(normalized_xai_paths):
+                if xai_triplet_mode:
+                    base = idx * 3
+                    xai_gt_artifact = self._to_artifact_reference(normalized_xai_paths[base], reporter_run_dir)
+                    xai_saliency_artifact = self._to_artifact_reference(
+                        normalized_xai_paths[base + 1], reporter_run_dir,
+                    )
+                    xai_pred_artifact = self._to_artifact_reference(
+                        normalized_xai_paths[base + 2], reporter_run_dir,
+                    )
+                    xai_artifact = xai_saliency_artifact
+                elif idx < len(normalized_xai_paths):
                     xai_artifact = self._to_artifact_reference(normalized_xai_paths[idx], reporter_run_dir)
 
                 detection_details: dict[str, Any] = {}
@@ -1980,6 +2018,9 @@ class BNNRTrainer:
                     original_artifact=original_artifact,
                     augmented_artifact=augmented_artifact,
                     xai_artifact=xai_artifact,
+                    xai_gt_artifact=xai_gt_artifact,
+                    xai_saliency_artifact=xai_saliency_artifact,
+                    xai_pred_artifact=xai_pred_artifact,
                     detection_details=detection_details,
                 )
             return

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 import time
@@ -11,6 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Protocol
+
+logger = logging.getLogger(__name__)
 
 EventType = Literal[
     "run_started",
@@ -119,6 +122,7 @@ class JsonlEventSink:
             )
             with self.target_file.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(event.to_dict(), ensure_ascii=True) + "\n")
+                handle.flush()
 
     def close(self) -> None:
         return None
@@ -143,7 +147,14 @@ def load_events(events_file: Path) -> list[dict[str, Any]]:
         line = line.strip()
         if not line:
             continue
-        rows.append(json.loads(line))
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            logger.warning(
+                "Skipping invalid JSONL line in %s: %s",
+                events_file,
+                exc,
+            )
     return rows
 
 
@@ -162,7 +173,15 @@ def load_events_from_offset(events_file: Path, byte_offset: int) -> tuple[list[d
             stripped = line.strip()
             if not stripped:
                 continue
-            rows.append(json.loads(stripped))
+            try:
+                rows.append(json.loads(stripped))
+            except json.JSONDecodeError as exc:
+                logger.warning(
+                    "Skipping invalid JSONL line in %s (from offset %s): %s",
+                    events_file,
+                    byte_offset,
+                    exc,
+                )
         new_offset = fh.tell()
     return rows, new_offset
 
@@ -497,6 +516,10 @@ def _apply_events_to_state(
                         "original": incoming_artifacts.get("original") or existing_artifacts.get("original"),
                         "augmented": incoming_artifacts.get("augmented") or existing_artifacts.get("augmented"),
                         "xai": incoming_artifacts.get("xai") or existing_artifacts.get("xai"),
+                        "xai_gt": incoming_artifacts.get("xai_gt") or existing_artifacts.get("xai_gt"),
+                        "xai_saliency": incoming_artifacts.get("xai_saliency")
+                        or existing_artifacts.get("xai_saliency"),
+                        "xai_pred": incoming_artifacts.get("xai_pred") or existing_artifacts.get("xai_pred"),
                     }
                     _raw_ex_details = row.get("detection_details")
                     existing_details: dict[str, Any] = _raw_ex_details if isinstance(_raw_ex_details, dict) else {}

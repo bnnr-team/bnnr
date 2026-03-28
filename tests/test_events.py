@@ -40,6 +40,78 @@ def test_event_sink_rejects_base64_payload(temp_dir) -> None:
         sink.emit("sample_snapshot", {"blob": "A" * 300})
 
 
+def test_load_events_skips_corrupt_line(temp_dir) -> None:
+    """Interrupted writes may leave a truncated last line; replay should not crash."""
+    events_file = temp_dir / "events.jsonl"
+    good = '{"schema_version": "2.1", "sequence": 1, "run_id": "r", "timestamp": "t", "type": "run_started", "payload": {}}\n'
+    events_file.write_text(good + "not valid json {{{\n" + good, encoding="utf-8")
+    events = load_events(events_file)
+    assert len(events) == 2
+    assert events[0]["type"] == "run_started"
+    assert events[1]["type"] == "run_started"
+
+
+def test_sample_prediction_snapshot_merges_split_xai_artifacts() -> None:
+    """Later partial snapshots should fill xai_gt / xai_saliency / xai_pred like other artifact keys."""
+    events = [
+        {
+            "type": "sample_prediction_snapshot",
+            "payload": {
+                "sample_id": "p1",
+                "branch_id": "iter_0:baseline",
+                "iteration": 0,
+                "epoch": 1,
+                "branch": "baseline",
+                "true_class": 0,
+                "predicted_class": 0,
+                "confidence": 0.9,
+                "loss_local": None,
+                "artifacts": {
+                    "original": "a/orig.png",
+                    "augmented": None,
+                    "xai": "a/x.png",
+                    "xai_gt": "a/gt.png",
+                    "xai_saliency": None,
+                    "xai_pred": None,
+                },
+                "detection_details": {},
+            },
+        },
+        {
+            "type": "sample_prediction_snapshot",
+            "payload": {
+                "sample_id": "p1",
+                "branch_id": "iter_0:baseline",
+                "iteration": 0,
+                "epoch": 1,
+                "branch": "baseline",
+                "true_class": 0,
+                "predicted_class": 0,
+                "confidence": 0.9,
+                "loss_local": None,
+                "artifacts": {
+                    "original": None,
+                    "augmented": "a/aug.png",
+                    "xai": None,
+                    "xai_gt": None,
+                    "xai_saliency": "a/sal.png",
+                    "xai_pred": "a/pr.png",
+                },
+                "detection_details": {},
+            },
+        },
+    ]
+    state = replay_events(events)
+    rows = state["sample_timelines"]["p1"]
+    assert len(rows) == 1
+    art = rows[0]["artifacts"]
+    assert art["original"] == "a/orig.png"
+    assert art["augmented"] == "a/aug.png"
+    assert art["xai_gt"] == "a/gt.png"
+    assert art["xai_saliency"] == "a/sal.png"
+    assert art["xai_pred"] == "a/pr.png"
+
+
 def test_event_sink_throttling(temp_dir) -> None:
     events_file = temp_dir / "events.jsonl"
     sink = JsonlEventSink(events_file, run_id="run_test", sample_every_epochs=2, xai_every_epochs=3)

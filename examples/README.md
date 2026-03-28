@@ -57,7 +57,7 @@ PYTHONPATH=src python3 examples/detection/showcase_voc.py \
   --max-train-samples 4 --max-val-samples 2 --batch-size 1 \
   --m-epochs 1 --decisions 0 --target-size 128
 
-# YOLO showcase + dashboard
+# YOLO showcase + dashboard (COCO128 auto-downloads if data/coco128/data.yaml is missing)
 PYTHONPATH=src python3 examples/detection/showcase_yolo_coco128.py \
   --data-path data/coco128/data.yaml --with-dashboard
 ```

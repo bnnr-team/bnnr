@@ -12,8 +12,13 @@ build/
 
 # Virtual environments
 .venv/
+.venv-*/
 venv/
 env/
+
+# uv (lockfile & local tool state — not committed)
+uv.lock
+.uv/
 
 # IDE
 .idea/
@@ -37,6 +42,10 @@ htmlcov/
 # Node (dashboard_web)
 node_modules/
 dashboard_web/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
 # Runtime outputs
 checkpoints/
@@ -65,3 +74,10 @@ my_tests/
 
 .aider*
 out_analyze/
+out_analyze_*/
+
+# Local scratch / dumps
+*.bak
+*.tmp
+.tmp/
+tmp/

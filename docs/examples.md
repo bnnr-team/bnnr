@@ -97,6 +97,8 @@ What it demonstrates:
 Important:
 - `--data-path` must point to YOLO `data.yaml` (not BNNR config YAML).
 
+If the default path `data/coco128/data.yaml` (or any `…/coco128/data.yaml`) is missing, the showcase **downloads Ultralytics COCO128** automatically (~7 MB). Use `--no-auto-download` to disable that behavior.
+
 For **Ultralytics YOLOv8** inside `BNNRTrainer`, use `UltralyticsDetectionAdapter` from `bnnr.detection_adapter` with loaders from `build_yolo_pipeline(..., torchvision_label_offset=False)`; see `docs/api_reference.md` (Detection → Advanced) and `docs/troubleshooting.md`.
 
 ### Full showcase

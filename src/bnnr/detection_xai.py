@@ -6,8 +6,8 @@ Provides tools for visualizing how detection models make decisions:
   detection models using the model's backbone features.
 - ``draw_detection_overlay``: Draws boxes, labels, and optional saliency
   heatmap on an image.
-- ``save_detection_xai_visualization``: Saves a composite XAI image
-  (original + saliency + box overlay) to disk.
+- ``save_detection_xai_panels``: Saves three separate PNGs per sample
+  (GT overlay, saliency, pred overlay) to disk.
 """
 
 from __future__ import annotations
@@ -361,11 +361,68 @@ def compute_detection_box_saliency_occlusion(
 
 
 # ---------------------------------------------------------------------------
-#  Composite visualization
+#  Three-panel visualization (separate files)
 # ---------------------------------------------------------------------------
 
 
-def save_detection_xai_visualization(
+def _build_detection_xai_panels(
+    image: np.ndarray,
+    saliency: np.ndarray | None,
+    boxes_gt: np.ndarray | Tensor | None = None,
+    labels_gt: np.ndarray | Tensor | None = None,
+    boxes_pred: np.ndarray | Tensor | None = None,
+    labels_pred: np.ndarray | Tensor | None = None,
+    scores_pred: np.ndarray | Tensor | None = None,
+    class_names: list[str] | None = None,
+    size: int = 512,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Build three RGB uint8 panels (each size×size), same visuals as legacy composite."""
+    h, w = image.shape[:2]
+    image_resized = cv2.resize(image, (size, size), interpolation=cv2.INTER_LINEAR)
+
+    panel1 = image_resized.copy()
+    if boxes_gt is not None:
+        if isinstance(boxes_gt, Tensor):
+            boxes_gt_arr = boxes_gt.detach().cpu().numpy().copy()
+        else:
+            boxes_gt_arr = np.array(boxes_gt, dtype=np.float32).copy()
+        boxes_gt_arr[:, [0, 2]] *= size / w
+        boxes_gt_arr[:, [1, 3]] *= size / h
+        panel1 = draw_boxes_on_image(
+            panel1, boxes_gt_arr, labels_gt, class_names=class_names, thickness=2,
+        )
+
+    if saliency is not None:
+        panel2 = overlay_saliency_heatmap(image_resized, saliency, alpha=0.5)
+    else:
+        panel2 = image_resized.copy()
+
+    if saliency is not None:
+        panel3 = overlay_saliency_heatmap(image_resized, saliency, alpha=0.3)
+    else:
+        panel3 = image_resized.copy()
+    if boxes_pred is not None:
+        if isinstance(boxes_pred, Tensor):
+            boxes_pred_arr = boxes_pred.detach().cpu().numpy().copy()
+        else:
+            boxes_pred_arr = np.array(boxes_pred, dtype=np.float32).copy()
+        boxes_pred_arr[:, [0, 2]] *= size / w
+        boxes_pred_arr[:, [1, 3]] *= size / h
+        panel3 = draw_boxes_on_image(
+            panel3, boxes_pred_arr, labels_pred, scores_pred,
+            class_names=class_names, thickness=2,
+        )
+
+    return panel1, panel2, panel3
+
+
+def _write_panel_png(panel_rgb: np.ndarray, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    bgr = cv2.cvtColor(panel_rgb, cv2.COLOR_RGB2BGR)
+    cv2.imwrite(str(path), bgr)
+
+
+def save_detection_xai_panels(
     image: np.ndarray,
     saliency: np.ndarray | None,
     boxes_gt: np.ndarray | Tensor | None = None,
@@ -376,82 +433,31 @@ def save_detection_xai_visualization(
     class_names: list[str] | None = None,
     save_path: Path | str = "detection_xai.png",
     size: int = 512,
-) -> Path:
-    """Save a composite detection XAI visualization.
+) -> tuple[Path, Path, Path]:
+    """Save detection XAI as three separate PNG files (GT | saliency | pred).
 
-    Creates a 1×3 panel: [Original + GT] | [Saliency Heatmap] | [Pred + Saliency].
-
-    Parameters
-    ----------
-    image : np.ndarray
-        HWC uint8 image.
-    saliency : np.ndarray | None
-        2D saliency map. If None, panels 2-3 show boxes only.
-    boxes_gt / labels_gt : ground-truth annotations.
-    boxes_pred / labels_pred / scores_pred : model predictions.
-    class_names : class name mapping.
-    save_path : output file path.
-    size : resize each panel to (size, size).
-
-    Returns
-    -------
-    Path to the saved visualization.
+    *save_path* may include a suffix (e.g. ``xai_0.png``); outputs use the stem:
+    ``{stem}_gt.png``, ``{stem}_sal.png``, ``{stem}_pred.png``.
     """
-    save_path = Path(save_path)
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-
-    h, w = image.shape[:2]
-    image_resized = cv2.resize(image, (size, size), interpolation=cv2.INTER_LINEAR)
-
-    # Panel 1: Original + GT boxes
-    panel1 = image_resized.copy()
-    if boxes_gt is not None:
-        # Scale GT boxes to resized image
-        if isinstance(boxes_gt, Tensor):
-            boxes_gt = boxes_gt.detach().cpu().numpy().copy()
-        else:
-            boxes_gt = np.array(boxes_gt, dtype=np.float32).copy()
-        boxes_gt[:, [0, 2]] *= size / w
-        boxes_gt[:, [1, 3]] *= size / h
-        panel1 = draw_boxes_on_image(
-            panel1, boxes_gt, labels_gt, class_names=class_names, thickness=2,
-        )
-
-    # Panel 2: Saliency heatmap
-    if saliency is not None:
-        panel2 = overlay_saliency_heatmap(image_resized, saliency, alpha=0.5)
-    else:
-        panel2 = image_resized.copy()
-
-    # Panel 3: Predictions + saliency
-    if saliency is not None:
-        panel3 = overlay_saliency_heatmap(image_resized, saliency, alpha=0.3)
-    else:
-        panel3 = image_resized.copy()
-    if boxes_pred is not None:
-        if isinstance(boxes_pred, Tensor):
-            boxes_pred = boxes_pred.detach().cpu().numpy().copy()
-        else:
-            boxes_pred = np.array(boxes_pred, dtype=np.float32).copy()
-        boxes_pred[:, [0, 2]] *= size / w
-        boxes_pred[:, [1, 3]] *= size / h
-        panel3 = draw_boxes_on_image(
-            panel3, boxes_pred, labels_pred, scores_pred,
-            class_names=class_names, thickness=2,
-        )
-
-    # Concatenate panels horizontally
-    composite = np.concatenate([panel1, panel2, panel3], axis=1)
-
-    # NOTE: No text labels burned into pixels — the dashboard provides
-    # its own HTML labels above each panel crop, keeping the image data
-    # clean for downstream analysis and higher-quality rendering.
-
-    # The preview pipeline works in RGB, while OpenCV writes BGR on disk.
-    # Convert explicitly at save time to preserve correct colors in dashboard/export.
-    composite_bgr = cv2.cvtColor(composite, cv2.COLOR_RGB2BGR)
-    cv2.imwrite(str(save_path), composite_bgr)
-    return save_path
+    stem = Path(save_path).with_suffix("")
+    panel1, panel2, panel3 = _build_detection_xai_panels(
+        image,
+        saliency,
+        boxes_gt=boxes_gt,
+        labels_gt=labels_gt,
+        boxes_pred=boxes_pred,
+        labels_pred=labels_pred,
+        scores_pred=scores_pred,
+        class_names=class_names,
+        size=size,
+    )
+    p_gt = stem.parent / f"{stem.name}_gt.png"
+    p_sal = stem.parent / f"{stem.name}_sal.png"
+    p_pred = stem.parent / f"{stem.name}_pred.png"
+    _write_panel_png(panel1, p_gt)
+    _write_panel_png(panel2, p_sal)
+    _write_panel_png(panel3, p_pred)
+    return p_gt, p_sal, p_pred
 
 
 __all__ = [
@@ -459,5 +465,5 @@ __all__ = [
     "overlay_saliency_heatmap",
     "generate_detection_saliency",
     "compute_detection_box_saliency_occlusion",
-    "save_detection_xai_visualization",
+    "save_detection_xai_panels",
 ]

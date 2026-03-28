@@ -11,6 +11,8 @@ Quick test:
     PYTHONPATH=src python examples/detection/showcase_yolo_coco128.py \
         --data-path data/coco128/data.yaml --with-dashboard --quick
 
+COCO128 is fetched automatically when ``.../coco128/data.yaml`` is missing (see ``--no-auto-download``).
+
 Without dashboard:
     PYTHONPATH=src python examples/detection/showcase_yolo_coco128.py \
         --data-path data/coco128/data.yaml --without-dashboard --quick
@@ -26,6 +28,7 @@ import torch
 
 from bnnr import BNNRConfig, BNNRTrainer, start_dashboard
 from bnnr.config import load_config
+from bnnr.example_data import resolve_yolo_example_data_yaml
 from bnnr.detection_augmentations import (
     DetectionHorizontalFlip,
     DetectionMixUp,
@@ -56,6 +59,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("data/coco128/data.yaml"),
         help="Path to YOLO data.yaml (default: data/coco128/data.yaml).",
+    )
+    p.add_argument(
+        "--no-auto-download",
+        action="store_true",
+        help="Do not download COCO128 when .../coco128/data.yaml is missing.",
     )
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument(
@@ -192,13 +200,20 @@ def _build_detection_augmentations(seed: int, quick: bool = False) -> list:
 def main() -> None:
     args = parse_args()
 
-    if not args.data_path.exists():
-        print(f"[error] Missing YOLO data file: {args.data_path}")
-        print("        Expected COCO128-style data.yaml path.")
-        print("        Example: --data-path data/coco128/data.yaml")
-        raise SystemExit(2)
-    if not args.data_path.is_file():
-        print(f"[error] --data-path must point to YOLO data.yaml file: {args.data_path}")
+    try:
+        data_yaml = resolve_yolo_example_data_yaml(
+            args.data_path,
+            auto_download=not args.no_auto_download,
+        )
+    except FileNotFoundError as exc:
+        print(f"[error] {exc}")
+        raise SystemExit(2) from exc
+    except RuntimeError as exc:
+        print(f"[error] {exc}")
+        raise SystemExit(2) from exc
+
+    if not data_yaml.is_file():
+        print(f"[error] --data-path must point to YOLO data.yaml file: {data_yaml}")
         raise SystemExit(2)
 
     try:
@@ -213,7 +228,7 @@ def main() -> None:
         args.decisions = 1
 
     try:
-        data_spec = _load_yolo_data_spec(args.data_path)
+        data_spec = _load_yolo_data_spec(data_yaml)
     except ValueError as exc:
         print(f"[error] {exc}")
         raise SystemExit(2)
@@ -246,7 +261,7 @@ def main() -> None:
     print("=" * 68)
     print("  BNNR  ·  YOLO COCO128  Detection Showcase")
     print("-" * 68)
-    print(f"  Dataset path            : {args.data_path}")
+    print(f"  Dataset path            : {data_yaml}")
     print(f"  Max main-path epochs    : ~{total_epochs}")
     print(f"  Decision rounds         : {args.decisions}")
     print(f"  Epochs per branch       : {args.m_epochs}")
@@ -265,7 +280,7 @@ def main() -> None:
         max_train_samples=args.max_train_samples,
         max_val_samples=args.max_val_samples,
         augmentation_preset="none",
-        custom_data_path=args.data_path,
+        custom_data_path=data_yaml,
         num_classes=len(names_with_bg) if names_with_bg else None,
     )
     augmentations = _build_detection_augmentations(seed=config.seed, quick=args.quick)

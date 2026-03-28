@@ -475,6 +475,7 @@ class UltralyticsDetectionAdapter:
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
         self._model.load_state_dict(state["model"])
+        self._model.to(self.device)
         if "optimizer" in state:
             self.optimizer.load_state_dict(state["optimizer"])
         if self.use_amp and "scaler" in state:

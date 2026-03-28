@@ -12,7 +12,7 @@ from bnnr.detection_xai import (
     draw_boxes_on_image,
     generate_detection_saliency,
     overlay_saliency_heatmap,
-    save_detection_xai_visualization,
+    save_detection_xai_panels,
 )
 
 # ---------------------------------------------------------------------------
@@ -171,14 +171,14 @@ class TestGenerateSaliency:
 
 
 # ---------------------------------------------------------------------------
-#  save_detection_xai_visualization
+#  save_detection_xai_panels
 # ---------------------------------------------------------------------------
 
 
 class TestSaveVisualization:
-    def test_save_composite(self, sample_image: np.ndarray, sample_boxes: Tensor, sample_labels: Tensor, tmp_path) -> None:
+    def test_save_three_files(self, sample_image: np.ndarray, sample_boxes: Tensor, sample_labels: Tensor, tmp_path) -> None:
         saliency = np.random.rand(128, 128).astype(np.float32)
-        path = save_detection_xai_visualization(
+        p_gt, p_sal, p_pred = save_detection_xai_panels(
             sample_image,
             saliency,
             boxes_gt=sample_boxes,
@@ -190,44 +190,43 @@ class TestSaveVisualization:
             save_path=tmp_path / "xai_test.png",
             size=256,
         )
-        assert path.exists()
-        import cv2
-        img = cv2.imread(str(path))
-        assert img is not None
-        # 3 panels side by side, each 256×256
-        assert img.shape[1] == 256 * 3
-        assert img.shape[0] == 256
+        for p in (p_gt, p_sal, p_pred):
+            assert p.exists()
+            img = cv2.imread(str(p))
+            assert img is not None
+            assert img.shape[0] == 256
+            assert img.shape[1] == 256
 
     def test_save_without_saliency(self, sample_image: np.ndarray, sample_boxes: Tensor, tmp_path) -> None:
         """Without saliency, panels 2-3 should just show boxes."""
-        path = save_detection_xai_visualization(
+        p_gt, p_sal, p_pred = save_detection_xai_panels(
             sample_image,
             saliency=None,
             boxes_gt=sample_boxes,
             save_path=tmp_path / "no_sal.png",
         )
-        assert path.exists()
+        assert p_gt.exists() and p_sal.exists() and p_pred.exists()
 
     def test_save_without_boxes(self, sample_image: np.ndarray, tmp_path) -> None:
         saliency = np.random.rand(128, 128).astype(np.float32)
-        path = save_detection_xai_visualization(
+        p_gt, p_sal, p_pred = save_detection_xai_panels(
             sample_image,
             saliency,
             save_path=tmp_path / "no_boxes.png",
         )
-        assert path.exists()
+        assert p_gt.exists() and p_sal.exists() and p_pred.exists()
 
     def test_save_preserves_rgb_colors(self, tmp_path) -> None:
-        # Pure red in RGB should remain red after save/load round-trip.
+        # Pure red in RGB should remain red after save/load round-trip (GT panel).
         image = np.zeros((64, 64, 3), dtype=np.uint8)
         image[..., 0] = 255
-        path = save_detection_xai_visualization(
+        p_gt, _, _ = save_detection_xai_panels(
             image=image,
             saliency=None,
             save_path=tmp_path / "rgb_roundtrip.png",
             size=64,
         )
-        saved_bgr = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        saved_bgr = cv2.imread(str(p_gt), cv2.IMREAD_COLOR)
         assert saved_bgr is not None
         saved_rgb = cv2.cvtColor(saved_bgr, cv2.COLOR_BGR2RGB)
         sample_px = saved_rgb[10, 10]

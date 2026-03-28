@@ -293,10 +293,24 @@ class Reporter:
         original_artifact: str | None = None,
         augmented_artifact: str | None = None,
         xai_artifact: str | None = None,
+        xai_gt_artifact: str | None = None,
+        xai_saliency_artifact: str | None = None,
+        xai_pred_artifact: str | None = None,
         detection_details: dict[str, Any] | None = None,
     ) -> None:
         if self._event_sink is None:
             return
+        artifacts: dict[str, str | None] = {
+            "original": original_artifact,
+            "augmented": augmented_artifact,
+            "xai": xai_saliency_artifact or xai_artifact,
+        }
+        if xai_gt_artifact is not None:
+            artifacts["xai_gt"] = xai_gt_artifact
+        if xai_saliency_artifact is not None:
+            artifacts["xai_saliency"] = xai_saliency_artifact
+        if xai_pred_artifact is not None:
+            artifacts["xai_pred"] = xai_pred_artifact
         self._event_sink.emit(
             "sample_prediction_snapshot",
             {
@@ -309,11 +323,7 @@ class Reporter:
                 "predicted_class": predicted_class,
                 "confidence": confidence,
                 "loss_local": loss_local,
-                "artifacts": {
-                    "original": original_artifact,
-                    "augmented": augmented_artifact,
-                    "xai": xai_artifact,
-                },
+                "artifacts": artifacts,
                 "detection_details": detection_details or {},
             },
         )
