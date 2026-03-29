@@ -18,4 +18,3 @@ Use this as the starting point when you need the shortest path to the page relev
 - `artifacts.md` — on-disk run outputs (`report.json`, `events.jsonl`, artifacts)
 - `troubleshooting.md` — real failure modes and fixes
 - `development.md` — tests, linting, type checks, dashboard frontend build
-- `release_pypi.md` — jak włączyć publikację na PyPI w CI (dzień premiery)
