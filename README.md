@@ -15,6 +15,7 @@ BNNR is a PyTorch toolkit that makes vision models production-ready through a cl
 
 Supported tasks in code:
 - Classification (`task: classification`)
+- Object detection (`task: detection`)
 - Multi-label classification (`task: multilabel`)
 
 ## Quickstart
@@ -40,6 +41,10 @@ git clone https://github.com/bnnr-team/bnnr.git
 cd bnnr
 pip install -e ".[dev,dashboard]"
 ```
+
+### Examples, notebooks, and markdown docs
+
+The PyPI **wheel** ships the `bnnr` package only. **Runnable scripts** (`examples/`), **notebooks**, and the **documentation tree** (`docs/`) live in the [GitHub repository](https://github.com/bnnr-team/bnnr). After cloning, follow [docs/examples.md](docs/examples.md) (for example `PYTHONPATH=src python3 examples/...` from the repo root).
 
 ### 2) Create a minimal config
 
@@ -114,6 +119,7 @@ For custom models and dataloaders:
 - `BNNRConfig`
 - `BNNRTrainer`
 - `SimpleTorchAdapter`
+- `DetectionAdapter`
 - `quick_run()`
 
 See `docs/api_reference.md` and `docs/golden_path.md`.

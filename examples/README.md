@@ -28,6 +28,8 @@ PYTHONPATH=src python3 examples/classification/showcase_stl10.py \
   --m-epochs 1 --decisions 1
 ```
 
+The STL-10 showcase downloads data on first use (network required). Use `--quick` for a shorter run; see the script docstring for details.
+
 ### Multi-label
 
 - `multilabel/multilabel_demo.py`

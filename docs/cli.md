@@ -25,6 +25,10 @@ python3 -m bnnr train --config CONFIG [OPTIONS]
 - `cifar10`
 - `imagefolder`
 
+### Multi-label classification
+
+`bnnr train` with any of the datasets above always builds **single-label** pipelines (`CrossEntropyLoss`, one class index per sample). Setting `task: multilabel` in your config YAML **does not** change that behavior. For multi-label, use the Python API ([golden_path.md](golden_path.md)) or the scripts under `examples/multilabel/` ([examples.md](examples.md)).
+
 ### Main options
 
 - `--config, -c` (required)

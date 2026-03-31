@@ -19,19 +19,41 @@ Use this on a fresh machine or first setup.
 - `pip`
 - Optional GPU support depends on your local PyTorch/CUDA installation
 
-## 2) Create a clean venv and install
+## 2) Install BNNR
+
+If `python3 -m venv` fails with `ensurepip is not available`, install your OS venv package (for example `python3.12-venv` on Ubuntu) and retry.
+If you see `externally-managed-environment`, you're using system Python directly — activate the venv and run install commands inside it.
+
+### Option A — From PyPI (library + CLI)
 
 ```bash
+python3 -m venv /tmp/bnnr-venv
+source /tmp/bnnr-venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install "bnnr[dashboard]"
+```
+
+Use this when you only need `import bnnr` and `python -m bnnr …`. Example scripts and notebooks under `examples/` are **not** inside the wheel; clone the [GitHub repository](https://github.com/bnnr-team/bnnr) if you want to run them (see [examples.md](examples.md)).
+
+Optional extras from PyPI:
+
+```bash
+python -m pip install "bnnr[gpu]"
+python -m pip install "bnnr[albumentations]"
+```
+
+### Option B — From a cloned repository (editable install)
+
+```bash
+git clone https://github.com/bnnr-team/bnnr.git
+cd bnnr
 python3 -m venv /tmp/bnnr-venv
 source /tmp/bnnr-venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dashboard]"
 ```
 
-If `python3 -m venv` fails with `ensurepip is not available`, install your OS venv package (for example `python3.12-venv` on Ubuntu) and retry.
-If you see `externally-managed-environment`, you're using system Python directly — activate the venv and run install commands inside it.
-
-Optional extras:
+Optional extras (editable):
 
 ```bash
 python -m pip install -e ".[gpu]"
@@ -64,7 +86,7 @@ candidate_pruning_enabled: false
 YAML
 ```
 
-For multi-label classification, set `task: multilabel` and use `nn.BCEWithLogitsLoss` as criterion. See [configuration.md](configuration.md) and [golden_path.md](golden_path.md) for full multilabel setup.
+**Multi-label classification:** `python -m bnnr train` with built-in datasets (`cifar10`, `mnist`, `imagefolder`, …) always uses single-label heads and `CrossEntropyLoss`. Putting `task: multilabel` in YAML **does not** switch the CLI to multi-label. Use the Python API (`task="multilabel"`, `SimpleTorchAdapter(multilabel=True)`, `BCEWithLogitsLoss`) or `examples/multilabel/multilabel_demo.py` — see [configuration.md](configuration.md), [golden_path.md](golden_path.md), [cli.md](cli.md), and [examples.md](examples.md).
 
 ## 5) First run in live dashboard mode (recommended)
 
@@ -95,7 +117,8 @@ Important: in live dashboard mode, process stays alive after training to keep se
 When using the Python API (not CLI), call `start_dashboard()` **before** `trainer.run()` so the dashboard captures all events from the start:
 
 ```python
-from bnnr.dashboard.serve import start_dashboard
+from bnnr import start_dashboard
+
 start_dashboard(config.report_dir)
 result = trainer.run()
 ```

@@ -169,3 +169,5 @@ task: multilabel
 selection_metric: fbeta_0.5
 metrics: [fbeta_0.5, f1_samples, accuracy, loss]
 ```
+
+**CLI note:** `python -m bnnr train` with built-in datasets does not construct multi-label loaders or `BCEWithLogitsLoss`; use the Python API or `examples/multilabel/` for end-to-end multi-label runs.

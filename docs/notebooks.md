@@ -12,15 +12,6 @@ This guide covers all user notebooks in `examples/` and how to run them in a way
 | `examples/multilabel/bnnr_multilabel_demo.ipynb` | Multi-label training flow (`task="multilabel"`) | Required (live tracking) | Medium |
 | `examples/bnnr_custom_data.ipynb` | Bring-your-own classification data patterns | Recommended | Medium |
 
-## Phase C Benchmark Notebooks (`benchmarks/notebooks/phase_c/`)
-
-| Notebook | Goal | Runtime usage | Typical runtime |
-|---|---|---|---|
-| `00_setup_private_wheel.ipynb` | Mount Drive, install private wheel, unpack benchmark bundle, verify files | Required first step | Short |
-| `01_eurosat.ipynb` | Run EuroSAT benchmark matrix (4 variants x seeds) with resume | Benchmark execution | Medium |
-| `02_isic2019.ipynb` | Run ISIC benchmark matrix with Kaggle-first ingest + ZIP fallback | Benchmark execution | Long |
-| `04_aggregate_results.ipynb` | Validate produced JSON/MD summaries for README/paper tables | Post-processing | Short |
-
 ## Recommended order
 1. `bnnr_augmentations_guide.ipynb`
 2. `classification/bnnr_classification_demo.ipynb`
