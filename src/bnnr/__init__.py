@@ -58,7 +58,7 @@ from bnnr.xai_analysis import (
 )
 from bnnr.xai_cache import XAICache
 
-__version__ = "0.1.0"
+__version__ = "0.1.0.post2"
 
 __all__ = [
     "AugmentationRunner",
