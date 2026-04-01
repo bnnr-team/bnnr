@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bnnr"
-version = "0.1.0.post2"
+version = "0.1.0.post3"
 description = "BNNR — Train → Explain → Improve → Prove"
 readme = "README.md"
 license = { text = "MIT" }
@@ -92,8 +92,15 @@ Issues = "https://github.com/bnnr-team/bnnr/issues"
 Documentation = "https://github.com/bnnr-team/bnnr/tree/main/docs"
 Changelog = "https://github.com/bnnr-team/bnnr/blob/main/CHANGELOG.md"
 
+# Default sdist respects .gitignore; UI build output must still land in the tarball.
+[tool.hatch.build.targets.sdist.force-include]
+"src/bnnr/dashboard/frontend/dist" = "src/bnnr/dashboard/frontend/dist"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/bnnr"]
+# Wheel is often built from sdist; map packaged tree → site-packages layout.
+[tool.hatch.build.targets.wheel.force-include]
+"src/bnnr/dashboard/frontend/dist" = "bnnr/dashboard/frontend/dist"
 
 [tool.ruff]
 line-length = 100

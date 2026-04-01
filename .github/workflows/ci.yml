@@ -116,6 +116,19 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboard_web/package-lock.json
+
+      - name: Build dashboard frontend (bundled in wheel)
+        run: |
+          cd dashboard_web
+          npm ci
+          npm run build
+
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip
@@ -131,7 +144,7 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-  # Publikuje na PyPI przy pushu tagu v* (tag musi odpowiadać wersji w pyproject.toml, np. v0.1.0.post2).
+  # Publikuje na PyPI przy pushu tagu v* (tag musi odpowiadać wersji w pyproject.toml, np. v0.1.0.post3).
   publish-pypi:
     name: publish-pypi
     runs-on: ubuntu-latest
