@@ -334,7 +334,7 @@ def _apply_events_to_state(
                 "f1_macro": float(raw_metrics.get("f1_macro", 0.0)),
                 # Multilabel metrics (may be 0 for non-multilabel runs)
                 "f1_samples": float(raw_metrics.get("f1_samples", 0.0)),
-                # Detection metrics (may be 0 for classification runs)
+                # Optional metric slots (e.g. legacy event files; unused in v0.1.0 classification builds)
                 "map_50": float(raw_metrics.get("map_50", 0.0)),
                 "map_50_95": float(raw_metrics.get("map_50_95", 0.0)),
                 "is_best_epoch": bool(payload.get("is_best_epoch", False)),

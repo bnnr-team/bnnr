@@ -1851,7 +1851,7 @@ class BNNRTrainer:
             train_metrics = self._train_epoch(self.train_loader, augmentations=active)
             epoch_metrics = self._evaluate(self.val_loader)
 
-            # Preserve training loss (eval pops dummy loss for detection).
+            # Preserve training loss when eval metrics omit it.
             if "loss" not in epoch_metrics and "loss" in train_metrics:
                 epoch_metrics["loss"] = train_metrics["loss"]
 
@@ -2094,7 +2094,7 @@ class BNNRTrainer:
                     epoch_end_fn()
 
                 sel_m = self.config.selection_metric
-                # For detection, loss comes from train_metrics (eval has no loss)
+                # Prefer val loss; fall back to train loss if missing
                 display_loss = val_metrics.get("loss", train_metrics.get("loss", 0))
                 print(
                     f"  baseline epoch {epoch}/{self.config.m_epochs} "

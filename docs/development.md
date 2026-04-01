@@ -38,4 +38,4 @@ npm run build
 
 Notes:
 - Backend can auto-build frontend when using `start_dashboard(...)` if `dashboard_web/` exists and `npm` is available.
-- Bundled frontend assets also exist under `src/bnnr/dashboard/frontend/dist`.
+- Build output goes to `dashboard_web/dist/` (gitignored). To ship static UI inside the wheel, copy that tree into `src/bnnr/dashboard/frontend/dist/` before `hatch build`.

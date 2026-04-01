@@ -193,53 +193,7 @@ if __name__ == "__main__":
 
 - or set `num_workers=0` in your DataLoader.
 
-## 16) Ultralytics: `RuntimeError: Input type (HalfTensor) and weight type (FloatTensor)`
-
-Cause:
-
-- mixed precision / autocast mismatch, or inputs in FP16 while conv weights stay FP32.
-
-Fix:
-
-- construct `UltralyticsDetectionAdapter(..., use_amp=False)` unless you have verified AMP for your stack,
-- the adapter forces FP32 image tensors in train/eval; upgrade BNNR if you are on an older revision without that guard.
-
-## 17) Ultralytics: `IndexError` / `AttributeError` in `v8DetectionLoss` during `train_step`
-
-Cause:
-
-- Ultralytics v8 expects `DetectionModel.loss(batch_dict)` with `img`, `cls`, `bboxes`, `batch_idx` — not a flat `(N,6)` target tensor or `loss(preds, tensor)` as in older snippets.
-
-Fix:
-
-- use current `bnnr.detection_adapter.UltralyticsDetectionAdapter` (v8 batch-dict path),
-- ensure `model.args` exposes loss gains (`box`, `cls`, `dfl`): the adapter merges checkpoint args with `ultralytics.cfg.get_cfg()` when needed.
-
-## 18) Detection XAI / probe snapshots skipped (Ultralytics backbone)
-
-Symptom:
-
-- log line: *Detection XAI skipped: Ultralytics task models expect a BCHW tensor…* or *Probe prediction snapshots skipped…*
-
-Cause:
-
-- BNNR’s detection XAI and sample snapshot code call torchvision-style `model(list_of_CHW_tensors)`; `ultralytics.nn.tasks` models expect a **BCHW** tensor forward.
-
-Fix:
-
-- expected behavior for YOLO backbones today; use **torchvision** `DetectionAdapter` if you need those artifacts, or disable `xai_enabled` to reduce noise. Future versions may add a dedicated Ultralytics path.
-
-## 19) YOLO `.txt` labels wrong class ids with Ultralytics
-
-Cause:
-
-- `build_yolo_pipeline` defaults to `torchvision_label_offset=True` (+1 per class for Faster R–CNN background).
-
-Fix:
-
-- `build_yolo_pipeline(..., torchvision_label_offset=False)` (or the same via `build_pipeline` kwargs) when feeding the same loaders to `UltralyticsDetectionAdapter`.
-
-## 20) Multi-label: `task: multilabel` in YAML but training still looks single-label
+## 16) Multi-label: `task: multilabel` in YAML but training still looks single-label
 
 Cause:
 
