@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.0.post4] — 2026-04-01
+
+- CI: run `npm ci` + Vite build **before every** `pip install -e ".[dev,dashboard]"` so `src/bnnr/dashboard/frontend/dist` exists; hatch `force-include` no longer breaks editable installs on lint/test jobs.
+
 ## [0.1.0.post3] — 2026-04-01
 
 - Dashboard: production Vite build is **bundled in the PyPI wheel** under `bnnr/dashboard/frontend/dist`, so `pip install "bnnr[dashboard]"` can serve the full React UI without cloning the repo.
