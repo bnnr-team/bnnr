@@ -38,6 +38,17 @@ htmlcov/
 node_modules/
 dashboard_web/dist/
 
+# Packaged dashboard build output (build: cd dashboard_web && npm run build)
+src/bnnr/dashboard/frontend/dist/
+
+# Aider / local AI assistant
+.aider*
+
+# Local experiments & demo outputs (not part of the library)
+demo_output/
+multilabel_demo_output/
+my_tests/
+
 # Runtime outputs
 checkpoints/
 checkpoints_*/
