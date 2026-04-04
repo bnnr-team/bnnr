@@ -23,7 +23,6 @@ This page documents only symbols exported publicly from `src/bnnr/__init__.py`.
 - `ModelAdapter`
 - `XAICapableModel`
 - `SimpleTorchAdapter`
-- `DetectionAdapter`
 
 ## Reporting and events API
 
@@ -107,39 +106,6 @@ ICD variants:
 - `ICD`
 - `AICD`
 
-## Detection API
-
-Augmentations and presets:
-
-- `BboxAwareAugmentation`
-- `AlbumentationsBboxAugmentation`
-- `DetectionHorizontalFlip`
-- `DetectionVerticalFlip`
-- `DetectionRandomRotate90`
-- `DetectionRandomScale`
-- `MosaicAugmentation`
-- `DetectionMixUp`
-- `get_detection_preset`
-
-XAI-driven detection augmentations:
-
-- `DetectionICD`
-- `DetectionAICD`
-
-Data helpers and metrics:
-
-- `detection_collate_fn`
-- `detection_collate_fn_with_index`
-- `calculate_detection_metrics`
-
-### Advanced (not re-exported from `bnnr`)
-
-These live in submodules; import them explicitly when you need YOLO-format loaders or Ultralytics YOLOv8 inside `BNNRTrainer`.
-
-- `bnnr.pipelines.build_yolo_pipeline` — builds **torchvision Faster R–CNN** plus `DataLoader`s from a classic YOLO `data.yaml`. Keyword-only option `torchvision_label_offset` (default `True`): when `True`, label file class ids are shifted by `+1` so `0` is reserved for torchvision’s background class; set **`False`** if you reuse the same loaders with `UltralyticsDetectionAdapter` (YOLO expects classes `0 … nc-1`).
-- `bnnr.pipelines.build_pipeline(..., "yolo", ..., image_size=640, torchvision_label_offset=False)` — passes `image_size` / `torchvision_label_offset` through to `build_yolo_pipeline`.
-- `bnnr.detection_adapter.UltralyticsDetectionAdapter` — optional adapter around `ultralytics.YOLO` for training inside BNNR. Requires `pip install ultralytics`. Uses Ultralytics v8 `model.loss(batch_dict)` (`img`, `cls`, `bboxes`, `batch_idx`). **`use_amp=False`** is recommended unless you verify your torch/ultralytics pair. Detection XAI and probe snapshot paths in the trainer that call torchvision-style `model([chw, …])` are **skipped** for `ultralytics.nn.tasks` backbones (logged at INFO).
-
 ## Dashboard helper
 
 - `start_dashboard`
@@ -168,30 +134,6 @@ trainer = BNNRTrainer(adapter, train_loader, val_loader, auto_select_augmentatio
 result = trainer.run()
 print(result.best_metrics)
 ```
-
-## Minimal detection integration
-
-```python
-import torch
-from bnnr import BNNRConfig, BNNRTrainer
-from bnnr import DetectionAdapter, DetectionHorizontalFlip
-
-model = ...
-optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9)
-adapter = DetectionAdapter(model=model, optimizer=optimizer, device="cpu")
-
-config = BNNRConfig(task="detection", m_epochs=1, max_iterations=1, device="cpu")
-augmentations = [DetectionHorizontalFlip(probability=0.5, random_state=42)]
-
-trainer = BNNRTrainer(adapter, train_loader, val_loader, augmentations, config)
-result = trainer.run()
-```
-
-Detection dataloader contract:
-
-- batch item: `(image, target, index)`
-- `target["boxes"]`: `FloatTensor[N,4]`
-- `target["labels"]`: `IntTensor[N]`
 
 ## `quick_run()` helper
 

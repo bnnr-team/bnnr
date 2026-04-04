@@ -2,7 +2,7 @@
 
 Covers the _IndexedDataset wrapper, CNN model architectures,
 augmentation preset resolution, subset trimming, build dispatcher,
-ImageFolder validation, YOLO format helpers, and detection collate.
+ImageFolder validation.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from torch.utils.data import TensorDataset
 
 from bnnr.core import BNNRConfig
 from bnnr.pipelines import (
-    _detection_collate_fn,
     _IndexedDataset,
     _maybe_subset,
     _resolve_augmentations,
@@ -34,11 +33,11 @@ class TestListDatasets:
     def test_returns_list(self):
         ds = list_datasets()
         assert isinstance(ds, list)
-        assert len(ds) >= 5
+        assert len(ds) >= 4
 
     def test_contains_expected_names(self):
         ds = list_datasets()
-        for name in ("mnist", "fashion_mnist", "cifar10", "imagefolder", "coco_mini", "yolo"):
+        for name in ("mnist", "fashion_mnist", "cifar10", "imagefolder"):
             assert name in ds
 
 
@@ -167,31 +166,6 @@ class TestBuiltinCNNModels:
 
 
 # ---------------------------------------------------------------------------
-# _detection_collate_fn
-# ---------------------------------------------------------------------------
-
-
-class TestDetectionCollateFn:
-    def test_basic_collate(self):
-        batch = [
-            (torch.randn(3, 32, 32), {"boxes": torch.tensor([[1, 2, 3, 4]]), "labels": torch.tensor([0])}, 0),
-            (torch.randn(3, 32, 32), {"boxes": torch.tensor([[5, 6, 7, 8]]), "labels": torch.tensor([1])}, 1),
-        ]
-        images, targets, indices = _detection_collate_fn(batch)
-        assert images.shape == (2, 3, 32, 32)
-        assert len(targets) == 2
-        assert indices == [0, 1]
-
-    def test_empty_boxes(self):
-        batch = [
-            (torch.randn(3, 16, 16), {"boxes": torch.zeros(0, 4), "labels": torch.zeros(0, dtype=torch.long)}, 0),
-        ]
-        images, targets, indices = _detection_collate_fn(batch)
-        assert images.shape == (1, 3, 16, 16)
-        assert targets[0]["boxes"].shape == (0, 4)
-
-
-# ---------------------------------------------------------------------------
 # build_pipeline dispatcher
 # ---------------------------------------------------------------------------
 
@@ -206,16 +180,6 @@ class TestBuildPipelineDispatcher:
         cfg = BNNRConfig()
         with pytest.raises(ValueError, match="--data-path is required"):
             build_pipeline("imagefolder", cfg)
-
-    def test_coco_mini_without_data_path_raises(self):
-        cfg = BNNRConfig()
-        with pytest.raises(ValueError, match="--data-path is required"):
-            build_pipeline("coco_mini", cfg)
-
-    def test_yolo_without_data_path_raises(self):
-        cfg = BNNRConfig()
-        with pytest.raises(ValueError, match="--data-path is required"):
-            build_pipeline("yolo", cfg)
 
     def test_case_insensitive_dataset_name(self):
         cfg = BNNRConfig()

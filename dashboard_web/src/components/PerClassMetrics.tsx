@@ -19,14 +19,13 @@ const COLORS = [
 
 interface Props {
   perClassTimeline: Record<string, PerClassRow[]>;
-  task?: "classification" | "detection" | "multilabel";
+  task?: "classification" | "multilabel";
   classNames?: string[];
 }
 
 export function PerClassMetrics({ perClassTimeline, task = "classification", classNames }: Props) {
   const cc = useChartColors();
-  const isDetection = task === "detection";
-  const yLabel = isDetection ? "AP@0.5 %" : task === "multilabel" ? "F1 %" : "Accuracy %";
+  const yLabel = task === "multilabel" ? "F1 %" : "Accuracy %";
 
   const classKeys = useMemo(
     () => Object.keys(perClassTimeline).sort((a, b) => Number(a) - Number(b)),

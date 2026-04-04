@@ -6,7 +6,8 @@ import abc
 import math
 import random
 import warnings
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import cv2
 import numpy as np
@@ -365,9 +366,11 @@ class DifPresets(BaseAugmentation):
             radius = min(self._rnd.randint(*self.radius_range), min(h, w) // 2)
             cx = self._rnd.randint(radius, max(radius + 1, w - radius))
             cy = self._rnd.randint(radius, max(radius + 1, h - radius))
-            mask = np.zeros((h, w), dtype=np.uint8)
-            cv2.circle(mask, (cx, cy), radius, 255, -1)
-            mask = cv2.GaussianBlur(mask, (self.feather * 2 + 1, self.feather * 2 + 1), 0).astype(np.float32) / 255.0
+            mask_u8 = np.zeros((h, w), dtype=np.uint8)
+            cv2.circle(mask_u8, (cx, cy), radius, 255, -1)
+            mask = cv2.GaussianBlur(mask_u8, (self.feather * 2 + 1, self.feather * 2 + 1), 0).astype(
+                np.float32
+            ) / 255.0
             aug: np.ndarray = self._apply_augmentation(image, self._rnd.choice(kinds)).astype(np.float32)
             final = aug * mask[..., None] + final * (1.0 - mask[..., None])
         return np.clip(final, 0, 255).astype(np.uint8)
@@ -572,12 +575,12 @@ class TeaStains(BaseAugmentation):
         texture_threshold = self._rnd.randint(80, 120)
 
         small_h, small_w = max(1, h // current_scale), max(1, w // current_scale)
-        noise_low = _np_rng(self._rnd).integers(0, 255, size=(small_h, small_w), dtype=np.uint8)
-        noise_low = cv2.resize(noise_low, (w, h), interpolation=cv2.INTER_CUBIC)
+        noise_low_small = _np_rng(self._rnd).integers(0, 255, size=(small_h, small_w), dtype=np.uint8)
+        noise_low = cv2.resize(noise_low_small, (w, h), interpolation=cv2.INTER_CUBIC)
         _, mask_shape = cv2.threshold(noise_low, shape_threshold, 255, cv2.THRESH_BINARY)
 
-        noise_high = _np_rng(self._rnd).integers(0, 255, size=(h, w), dtype=np.uint8)
-        noise_high = cv2.GaussianBlur(noise_high, (3, 3), 0)
+        noise_high_u8 = _np_rng(self._rnd).integers(0, 255, size=(h, w), dtype=np.uint8)
+        noise_high = cv2.GaussianBlur(noise_high_u8, (3, 3), 0)
         _, mask_texture = cv2.threshold(noise_high, texture_threshold, 255, cv2.THRESH_BINARY)
 
         final_mask = cv2.bitwise_and(mask_shape, mask_texture)

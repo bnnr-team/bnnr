@@ -1024,28 +1024,6 @@ select:focus, input[type="number"]:focus {
   border: 1px solid var(--border);
   background: var(--bg-subtle);
 }
-.detection-xai-split {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-/* Split-file runs: saliency sits beside Original; GT + Pred below (no 3-in-a-row strip). */
-.detection-xai-split-extra {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  width: 100%;
-  justify-items: center;
-  margin-top: 4px;
-}
-.detection-xai-split-extra figure {
-  margin: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
 .composite-slice {
   width: 100%;
   max-width: 512px;
@@ -1980,12 +1958,6 @@ select:focus, input[type="number"]:focus {
   .preview-grid--2col {
     grid-template-columns: 1fr;
     gap: 16px;
-  }
-  .detection-xai-split {
-    grid-template-columns: 1fr;
-  }
-  .detection-xai-split-extra {
-    grid-template-columns: 1fr;
   }
   .bbox-crop-grid-inner {
     grid-template-columns: 1fr;

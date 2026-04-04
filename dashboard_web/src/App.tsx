@@ -48,8 +48,7 @@ export function App() {
     () => (state?.run?.class_names as string[] | undefined) ?? [],
     [state?.run],
   );
-  const runTask = (state?.task ?? "classification") as "classification" | "detection" | "multilabel";
-  const isDetection = runTask === "detection";
+  const runTask = (state?.task ?? "classification") as "classification" | "multilabel";
   const isMultilabel = runTask === "multilabel";
 
   /* KPI summary — best from ALL observations, current from last entry */
@@ -61,15 +60,12 @@ export function App() {
     const branchCount = Object.keys(state.branches).length;
     const decisionCount = decisions.length;
 
-    // Detect task type
-    const det = runTask === "detection";
     const ml = runTask === "multilabel";
 
     // Helper to extract primary metric per task
     const primaryMetric = (r: typeof last) =>
-      det ? (r.map_50 ?? 0) : ml ? (r.f1_samples ?? r.f1_macro ?? 0) : (r.accuracy ?? 0);
-    const secondaryMetric = (r: typeof last) =>
-      det ? (r.map_50_95 ?? 0) : (r.f1_macro ?? 0);
+      ml ? (r.f1_samples ?? r.f1_macro ?? 0) : (r.accuracy ?? 0);
+    const secondaryMetric = (r: typeof last) => r.f1_macro ?? 0;
 
     // Best = max across ALL metrics (any branch, any epoch)
     const bestAccuracy = Math.max(...tl.map(primaryMetric));
@@ -417,7 +413,7 @@ export function App() {
                       {(kpi.bestAccuracy * 100).toFixed(1) + "%"}
                     </div>
                     <div className="kpi-label">
-                      {isDetection ? "Best mAP@0.5 ★" : isMultilabel ? "Best F1 (samples) ★" : "Best Accuracy ★"}
+                      {isMultilabel ? "Best F1 (samples) ★" : "Best Accuracy ★"}
                     </div>
                   </div>
                   <div className="kpi-card">
@@ -425,14 +421,14 @@ export function App() {
                       {(kpi.currentAccuracy * 100).toFixed(1) + "%"}
                     </div>
                     <div className="kpi-label">
-                      {isDetection ? "Current mAP@0.5" : isMultilabel ? "Current F1 (samples)" : "Current Accuracy"}
+                      {isMultilabel ? "Current F1 (samples)" : "Current Accuracy"}
                     </div>
                   </div>
                   <div className="kpi-card best">
                     <div className="kpi-value">
                       {(kpi.bestF1 * 100).toFixed(1) + "%"}
                     </div>
-                    <div className="kpi-label">{isDetection ? "Best mAP@[.5:.95] ★" : "Best F1 (macro) ★"}</div>
+                    <div className="kpi-label">Best F1 (macro) ★</div>
                   </div>
                   <div className="kpi-card">
                     <div className="kpi-value"
@@ -509,7 +505,7 @@ export function App() {
               </div>
               <div className="grid-2">
                 <div className="card">
-                  <h3>{isDetection ? "Per-Class AP" : "Per-Class Accuracy"}</h3>
+                  <h3>{isMultilabel ? "Per-Label F1" : "Per-Class Accuracy"}</h3>
                   <PerClassMetrics perClassTimeline={state.per_class_timeline} task={runTask} classNames={state.dataset_profile?.class_names} />
                 </div>
                 <div className="card">
@@ -535,15 +531,9 @@ export function App() {
                 />
               </div>
               <div className="card">
-                <h3>
-                  {isDetection
-                    ? "XAI Insights — Per-Class Detection Explanations (Global + BBox)"
-                    : "XAI Insights — Per-Class Explanations"}
-                </h3>
+                <h3>XAI Insights — Per-Class Explanations</h3>
                 <p className="muted" style={{ fontSize: 11, marginBottom: 10 }}>
-                  {isDetection
-                    ? "Detection-specific explanations using both global image saliency and bbox-level overlays with AP context."
-                    : "Human-readable analysis of what the model focuses on for each class, generated from saliency maps."}
+                  Human-readable analysis of what the model focuses on for each class, generated from saliency maps.
                 </p>
                 <XAIInsights
                   perClassTimeline={state.per_class_timeline}
@@ -585,7 +575,7 @@ export function App() {
                   <CandidateRadar decisions={decisions} task={runTask} />
                 </div>
                 <div className="card">
-                  <h3>{isDetection ? "Loss & mAP Landscape" : "Loss & Accuracy Landscape"}</h3>
+                  <h3>Loss & Accuracy Landscape</h3>
                   <LossLandscape
                     timeline={state.metrics_timeline}
                     decisions={decisions}
@@ -598,9 +588,7 @@ export function App() {
               <div className="card">
                 <h3>Per-Class Δ Heatmap</h3>
                 <p className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
-                  {isDetection
-                    ? "AP change per class after each augmentation decision. Green = improvement, red = regression."
-                    : "Accuracy change per class after each augmentation decision. Green = improvement, red = regression."}
+                  Accuracy change per class after each augmentation decision. Green = improvement, red = regression.
                 </p>
                 <PerClassDeltaHeatmap
                   decisions={decisions}
@@ -618,7 +606,7 @@ export function App() {
                   />
                 </div>
                 <div className="card">
-                  <h3>{isDetection ? "mAP Gain Rate" : "Accuracy Gain Rate"}</h3>
+                  <h3>Accuracy Gain Rate</h3>
                   <AccuracyGainRate
                     timeline={state.metrics_timeline}
                     selectedPath={state.selected_path}
@@ -635,12 +623,7 @@ export function App() {
 
               {/* Confusion Matrix */}
               <div className="card">
-                <h3>{isDetection ? "Detection Confusion Matrix (IoU-matched)" : "Confusion Matrix"}</h3>
-                {isDetection && (
-                  <p className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
-                    Rows=true class, cols=pred class. Background row/column captures misses and false positives.
-                  </p>
-                )}
+                <h3>Confusion Matrix</h3>
                 <ConfusionMatrix
                   confusionTimeline={state.confusion_timeline}
                   classNames={classNames}

@@ -38,22 +38,10 @@ Cause:
 Applies to:
 
 - `imagefolder`
-- `coco_mini`
-- `yolo`
 
 Fix: pass `--data-path`.
 
-## 4) `Could not find YOLO data.yaml`
-
-Cause:
-
-- `--data-path` does not point to a `data.yaml` file or a directory containing it.
-
-Fix:
-
-- validate path and required `train`/`val` entries in YAML.
-
-## 5) Dashboard shows zero runs
+## 4) Dashboard shows zero runs
 
 Cause:
 
@@ -64,16 +52,11 @@ Fix:
 - use a parent folder containing `run_*` directories, or
 - point directly at a run directory that has `events.jsonl`.
 
-## 6) CI on Python 3.9 fails with `unsupported operand type(s) for |`
+## 6) (Historical) Python 3.9 and union types in CLI/FastAPI
 
-Cause:
+**Supported releases (0.1.1+)** require **Python >=3.10**; this scenario does not apply to current wheels.
 
-- runtime evaluation of `X | None` annotations in CLI/FastAPI paths on Python 3.9.
-
-Fix:
-
-- keep compatible annotations in runtime-introspected paths,
-- keep dependency `eval-type-backport` for `python < 3.10`.
+If you run an **older checkout** on Python 3.9, you could see `unsupported operand type(s) for |` from runtime-evaluated `X | None` annotations. Mitigations were: compatible annotations in introspected paths, or `eval-type-backport` for `python < 3.10` (removed when 3.9 support was dropped).
 
 ## 7) CI/test import error: `ModuleNotFoundError: No module named 'httpx'`
 
@@ -205,48 +188,12 @@ if __name__ == "__main__":
 
 - or set `num_workers=0` in your DataLoader.
 
-## 16) Ultralytics: `RuntimeError: Input type (HalfTensor) and weight type (FloatTensor)`
+## 16) Multi-label: `task: multilabel` in YAML but training still looks single-label
 
 Cause:
 
-- mixed precision / autocast mismatch, or inputs in FP16 while conv weights stay FP32.
+- `bnnr train` preset pipelines (`build_*_pipeline` in `pipelines.py`) always use `CrossEntropyLoss` and single-label targets, regardless of `task` in the config file.
 
 Fix:
 
-- construct `UltralyticsDetectionAdapter(..., use_amp=False)` unless you have verified AMP for your stack,
-- the adapter forces FP32 image tensors in train/eval; upgrade BNNR if you are on an older revision without that guard.
-
-## 17) Ultralytics: `IndexError` / `AttributeError` in `v8DetectionLoss` during `train_step`
-
-Cause:
-
-- Ultralytics v8 expects `DetectionModel.loss(batch_dict)` with `img`, `cls`, `bboxes`, `batch_idx` — not a flat `(N,6)` target tensor or `loss(preds, tensor)` as in older snippets.
-
-Fix:
-
-- use current `bnnr.detection_adapter.UltralyticsDetectionAdapter` (v8 batch-dict path),
-- ensure `model.args` exposes loss gains (`box`, `cls`, `dfl`): the adapter merges checkpoint args with `ultralytics.cfg.get_cfg()` when needed.
-
-## 18) Detection XAI / probe snapshots skipped (Ultralytics backbone)
-
-Symptom:
-
-- log line: *Detection XAI skipped: Ultralytics task models expect a BCHW tensor…* or *Probe prediction snapshots skipped…*
-
-Cause:
-
-- BNNR’s detection XAI and sample snapshot code call torchvision-style `model(list_of_CHW_tensors)`; `ultralytics.nn.tasks` models expect a **BCHW** tensor forward.
-
-Fix:
-
-- expected behavior for YOLO backbones today; use **torchvision** `DetectionAdapter` if you need those artifacts, or disable `xai_enabled` to reduce noise. Future versions may add a dedicated Ultralytics path.
-
-## 19) YOLO `.txt` labels wrong class ids with Ultralytics
-
-Cause:
-
-- `build_yolo_pipeline` defaults to `torchvision_label_offset=True` (+1 per class for Faster R–CNN background).
-
-Fix:
-
-- `build_yolo_pipeline(..., torchvision_label_offset=False)` (or the same via `build_pipeline` kwargs) when feeding the same loaders to `UltralyticsDetectionAdapter`.
+- integrate multi-label data with `SimpleTorchAdapter(multilabel=True)` and `BCEWithLogitsLoss` ([golden_path.md](golden_path.md)), or run `examples/multilabel/multilabel_demo.py`; do not expect `--dataset cifar10` (or similar) alone to become multi-label.

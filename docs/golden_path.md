@@ -1,9 +1,8 @@
 # Golden Path: Integrate BNNR Into Your Project
 
 ## What you will find here
-Production-style, code-first templates for the three supported tasks:
+Production-style, code-first templates for the two supported tasks:
 - classification,
-- detection,
 - multi-label.
 
 Each template includes dashboard-first training flow.
@@ -64,74 +63,7 @@ result = BNNRTrainer(adapter, train_loader, val_loader, augmentations, config).r
 print(result.best_metrics)
 ```
 
-## 2) Detection integration (dashboard-first)
-
-### Checklist
-
-1. Use detection batches `(image, target, index)`.
-2. Ensure targets contain `boxes` (`xyxy`) and `labels`.
-3. Use `task="detection"` in config.
-4. Use detection-safe augmentations.
-5. Validate `map_50` and `map_50_95` in outputs.
-
-### Template
-
-```python
-import torch
-from torch.utils.data import DataLoader
-from bnnr import (
-    BNNRConfig,
-    BNNRTrainer,
-    DetectionAdapter,
-    DetectionHorizontalFlip,
-    DetectionRandomScale,
-    DetectionICD,
-    detection_collate_fn_with_index,
-    start_dashboard,
-)
-
-model = ...  # torchvision-style detection model
-train_dataset = ...  # returns (image, target, index)
-val_dataset = ...
-
-train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, collate_fn=detection_collate_fn_with_index)
-val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False, collate_fn=detection_collate_fn_with_index)
-
-adapter = DetectionAdapter(
-    model=model,
-    optimizer=torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9),
-    device="auto",
-)
-
-augmentations = [
-    DetectionHorizontalFlip(probability=0.5, random_state=42),
-    DetectionRandomScale(probability=0.5, scale_range=(0.85, 1.15), random_state=43),
-    DetectionICD(probability=0.5, random_state=44),
-]
-
-config = BNNRConfig(
-    task="detection",
-    m_epochs=3,
-    max_iterations=2,
-    report_dir="reports/detection_run",
-    checkpoint_dir="checkpoints/detection_run",
-    detection_bbox_format="xyxy",
-)
-
-dashboard_url = start_dashboard(config.report_dir, port=8080, auto_open=True)
-print("Dashboard:", dashboard_url)
-
-result = BNNRTrainer(adapter, train_loader, val_loader, augmentations, config).run()
-print(result.best_metrics)  # map_50, map_50_95, loss
-```
-
-### YOLO-format folders + torchvision vs Ultralytics
-
-The official example `examples/detection/showcase_yolo_coco128.py` uses **`build_pipeline("yolo", …)`**, which reads YOLO `data.yaml` but trains a **torchvision Faster R–CNN** (`DetectionAdapter`). Labels from disk use **`torchvision_label_offset=True`** internally (class `0` in `.txt` → label tensor `1`, background `0`).
-
-To train **Ultralytics YOLOv8** on the same folder layout, build loaders with `build_yolo_pipeline(..., torchvision_label_offset=False)` (or `build_pipeline(..., torchvision_label_offset=False)`), then wrap `UltralyticsDetectionAdapter` and pass those loaders to `BNNRTrainer`. Install **`ultralytics`** separately; it is not a hard dependency of the core package.
-
-## 3) Multi-label integration (dashboard-first)
+## 2) Multi-label integration (dashboard-first)
 
 ### Checklist
 
@@ -178,7 +110,7 @@ result = BNNRTrainer(adapter, train_loader, val_loader, augmentations, config).r
 print(result.best_metrics)  # f1_samples, f1_macro, accuracy, loss
 ```
 
-## 4) Dashboard operational notes
+## 3) Dashboard operational notes
 
 - `start_dashboard(...)` prints Local URL, Network URL, and terminal QR code.
 - For mobile, phone must be on same network.
@@ -189,7 +121,7 @@ print(result.best_metrics)  # f1_samples, f1_macro, accuracy, loss
 python3 -m bnnr dashboard export --run-dir <run_dir> --out exported_dashboard
 ```
 
-## 5) Hardening checklist
+## 4) Hardening checklist
 
 - Fix `seed` for reproducibility.
 - Version-control every YAML/config used in runs.

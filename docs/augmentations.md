@@ -4,7 +4,7 @@
 Implemented presets and augmentation classes currently available in code, with constraints by task/backend.
 
 ## When to use this page
-Use this when selecting augmentation candidates for classification, detection, or multi-label runs.
+Use this when selecting augmentation candidates for classification or multi-label runs.
 
 ## Presets (`src/bnnr/presets.py`)
 
@@ -40,22 +40,6 @@ Main classes used by presets:
 - `ProCAM`
 - `Smugs`
 - `TeaStains`
-
-## Detection augmentations
-
-From `src/bnnr/detection_augmentations.py` and `src/bnnr/detection_icd.py`:
-
-- `DetectionHorizontalFlip`
-- `DetectionVerticalFlip`
-- `DetectionRandomRotate90`
-- `DetectionRandomScale`
-- `MosaicAugmentation`
-- `DetectionMixUp`
-- `AlbumentationsBboxAugmentation`
-- `DetectionICD`
-- `DetectionAICD`
-
-Detection augmentations are bbox-aware and must preserve valid box/label structure.
 
 ## Multi-label note
 

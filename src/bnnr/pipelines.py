@@ -847,7 +847,7 @@ def build_pipeline(
     data_dir:
         Directory for dataset download/storage (torchvision datasets).
     custom_data_path:
-        Path to custom dataset (required for imagefolder/coco_mini).
+        Path to custom dataset (required for imagefolder).
     augmentation_preset:
         Augmentation preset name (auto, gpu, standard, aggressive, light, none).
     num_classes:
@@ -858,7 +858,7 @@ def build_pipeline(
     ValueError
         If dataset_name is not recognized.
     FileNotFoundError
-        If imagefolder/coco_mini paths don't exist.
+        If imagefolder paths don't exist.
     """
     ds = dataset_name.lower().strip()
 

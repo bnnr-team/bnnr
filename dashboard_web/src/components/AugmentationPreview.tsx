@@ -22,13 +22,6 @@ function chipKey(entry: SamplePoint, idx: number): string {
 
 type XaiPanel = "gt" | "saliency" | "pred";
 
-/** New runs: three separate artifact paths; old runs: single wide composite under `xai`. */
-function hasDetectionXaiFileSplit(artifacts: SamplePoint["artifacts"] | undefined): boolean {
-  return Boolean(
-    artifacts?.xai_gt && artifacts?.xai_saliency && artifacts?.xai_pred,
-  );
-}
-
 function panelToIndex(panel: XaiPanel): number {
   if (panel === "gt") return 0;
   if (panel === "saliency") return 1;
@@ -200,41 +193,7 @@ export function AugmentationPreview({ state, activeRun, offline }: Props) {
   }, [timeline]);
 
   const isBaseline = current?.branch === "baseline";
-  const isDetection = (state.task ?? "classification") === "detection";
-  const xaiFileSplit = current ? hasDetectionXaiFileSplit(current.artifacts) : false;
-  const saliencyXaiRef = current?.artifacts?.xai_saliency ?? current?.artifacts?.xai;
   const originalSrc = current ? resolveArtifact(current.artifacts?.original, activeRun, offline) : "";
-
-  const [bboxSource, setBboxSource] = useState<"gt" | "pred">("pred");
-  const [bboxIdx, setBboxIdx] = useState(0);
-  const [globalXaiView, setGlobalXaiView] = useState<"saliency" | "pred">("saliency");
-  const [gtClassFilter, setGtClassFilter] = useState<number | "all">("all");
-
-  const bboxRows = useMemo(() => {
-    if (!current?.detection_details) return [];
-    return bboxSource === "gt"
-      ? (current.detection_details.gt ?? [])
-      : (current.detection_details.pred ?? []);
-  }, [current, bboxSource]);
-
-  const gtRows = useMemo(() => current?.detection_details?.gt ?? [], [current]);
-  const gtClassOptions = useMemo(
-    () => Array.from(new Set(gtRows.map((r) => r.label))).sort((a, b) => a - b),
-    [gtRows],
-  );
-  const gtRowsFiltered = useMemo(
-    () => gtRows.filter((r) => gtClassFilter === "all" || r.label === gtClassFilter),
-    [gtRows, gtClassFilter],
-  );
-
-  useEffect(() => {
-    setBboxIdx(0);
-  }, [bboxSource, current?.sample_id, current?.iteration, current?.epoch]);
-  useEffect(() => {
-    if (gtClassFilter !== "all" && !gtClassOptions.includes(gtClassFilter)) {
-      setGtClassFilter("all");
-    }
-  }, [gtClassFilter, gtClassOptions]);
 
   if (probes.length === 0) {
     return <p className="muted">No probe samples available.</p>;
@@ -320,50 +279,13 @@ export function AugmentationPreview({ state, activeRun, offline }: Props) {
             )}
           </figure>
           <figure>
-            <figcaption>{isDetection ? "Global Image XAI" : "XAI Heatmap"}</figcaption>
-            {isDetection &&
-            xaiFileSplit &&
-            current.artifacts?.xai_gt &&
-            current.artifacts?.xai_saliency &&
-            current.artifacts?.xai_pred ? (
-              <>
-                <div className="muted" style={{ fontSize: 11, marginBottom: 6, maxWidth: 512, width: "100%" }}>
-                  Saliency map (separate asset; main view next to original)
-                </div>
-                <img
-                  src={resolveArtifact(current.artifacts.xai_saliency, activeRun, offline)}
-                  alt="xai-saliency"
-                  className="preview-img"
-                />
-              </>
-            ) : current.artifacts?.xai ? (
-              isDetection ? (
-                <div>
-                  <div className="preview-controls" style={{ marginBottom: 6 }}>
-                    <label>
-                      Global view:
-                      <select
-                        value={globalXaiView}
-                        onChange={(e) => setGlobalXaiView(e.target.value as "saliency" | "pred")}
-                      >
-                        <option value="saliency">Saliency (Global)</option>
-                        <option value="pred">Pred + Saliency</option>
-                      </select>
-                    </label>
-                  </div>
-                  <ImageRegionCanvas
-                    src={resolveArtifact(current.artifacts.xai, activeRun, offline)}
-                    alt={`xai-${globalXaiView}`}
-                    panel={globalXaiView === "pred" ? "pred" : "saliency"}
-                  />
-                </div>
-              ) : (
-                <img
-                  src={resolveArtifact(current.artifacts.xai, activeRun, offline)}
-                  alt="xai"
-                  className="preview-img"
-                />
-              )
+            <figcaption>XAI Heatmap</figcaption>
+            {current.artifacts?.xai ? (
+              <img
+                src={resolveArtifact(current.artifacts.xai, activeRun, offline)}
+                alt="xai"
+                className="preview-img"
+              />
             ) : (
               <div className="empty-box">
                 <div style={{ textAlign: "center" }}>
@@ -376,161 +298,6 @@ export function AugmentationPreview({ state, activeRun, offline }: Props) {
               </div>
             )}
           </figure>
-          {isDetection &&
-            xaiFileSplit &&
-            current.artifacts?.xai_gt &&
-            current.artifacts?.xai_saliency &&
-            current.artifacts?.xai_pred ? (
-              <div className="detection-xai-split-extra">
-                <figure>
-                  <figcaption>GT panel</figcaption>
-                  <img
-                    src={resolveArtifact(current.artifacts.xai_gt, activeRun, offline)}
-                    alt="xai-gt"
-                    className="preview-img"
-                  />
-                </figure>
-                <figure>
-                  <figcaption>Pred + saliency</figcaption>
-                  <img
-                    src={resolveArtifact(current.artifacts.xai_pred, activeRun, offline)}
-                    alt="xai-pred"
-                    className="preview-img"
-                  />
-                </figure>
-              </div>
-            ) : null}
-        </div>
-      )}
-
-      {/* Detection-specific bbox explorer */}
-      {current && isDetection && saliencyXaiRef && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <h4 style={{ marginTop: 0, marginBottom: 8 }}>Detection Explorer</h4>
-          <div className="preview-controls">
-            <label>
-              Source:
-              <select value={bboxSource} onChange={(e) => setBboxSource(e.target.value as "gt" | "pred")}>
-                <option value="pred">Predictions</option>
-                <option value="gt">Ground truth</option>
-              </select>
-            </label>
-            <label>
-              Box:
-              <select
-                value={bboxIdx}
-                onChange={(e) => setBboxIdx(Number(e.target.value))}
-                disabled={bboxRows.length === 0}
-              >
-                {bboxRows.map((row, i) => {
-                  const clsName = state.dataset_profile?.class_names?.[row.label] ?? `cls ${row.label}`;
-                  const score = (row as Record<string, unknown>).score as number | undefined;
-                  return (
-                    <option key={i} value={i}>
-                      #{i} {clsName}
-                      {score !== undefined ? ` (${(score * 100).toFixed(0)}%)` : ""}
-                    </option>
-                  );
-                })}
-              </select>
-            </label>
-          </div>
-          {bboxRows.length === 0 ? (
-            <p className="muted">No {bboxSource === "pred" ? "predicted" : "GT"} boxes for this sample.</p>
-          ) : (
-            <div className="detection-xai-split">
-              <div>
-                <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Image with box</div>
-                <BoxOverlayPreview
-                  src={resolveArtifact(current.artifacts?.original, activeRun, offline)}
-                  alt="bbox-original"
-                  box={bboxRows[bboxIdx]!.box}
-                  imageSize={current.detection_details?.image_size ?? [1, 1]}
-                />
-              </div>
-              <div>
-                <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Attention map</div>
-                <BoxOverlayPreview
-                  src={resolveArtifact(saliencyXaiRef, activeRun, offline)}
-                  alt="bbox-saliency"
-                  box={bboxRows[bboxIdx]!.box}
-                  imageSize={current.detection_details?.image_size ?? [1, 1]}
-                  panel={xaiFileSplit ? undefined : "saliency"}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* GT object crops with attention overlay */}
-      {current && isDetection && saliencyXaiRef && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <h4 style={{ marginTop: 0, marginBottom: 8 }}>Object Attention Crops</h4>
-          <div className="preview-controls">
-            <label>
-              Class:
-              <select
-                value={gtClassFilter}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setGtClassFilter(value === "all" ? "all" : Number(value));
-                }}
-              >
-                <option value="all">All classes</option>
-                {gtClassOptions.map((cid) => (
-                  <option key={cid} value={cid}>
-                    {state.dataset_profile?.class_names?.[cid] ?? `class ${cid}`}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          {gtRowsFiltered.length === 0 ? (
-            <p className="muted">No GT boxes for selected class.</p>
-          ) : (
-            <div className="bbox-crop-grid">
-              {gtRowsFiltered.map((row, idx) => {
-                const imageSize = current.detection_details?.image_size ?? [1, 1];
-                const xaiSrc = resolveArtifact(saliencyXaiRef, activeRun, offline);
-                const origSrc = resolveArtifact(current.artifacts?.original, activeRun, offline);
-                const className = state.dataset_profile?.class_names?.[row.label] ?? `class ${row.label}`;
-                return (
-                  <div key={`${row.label}_${idx}`} className="bbox-crop-card">
-                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-                      {className}
-                    </div>
-                    <div className="bbox-crop-grid-inner">
-                      <div>
-                        <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Crop</div>
-                        <ImageRegionCanvas
-                          src={origSrc}
-                          alt={`gt-orig-${idx}`}
-                          crop={row.box}
-                          imageSize={imageSize}
-                          className="bbox-crop-canvas"
-                          outSize={256}
-                        />
-                      </div>
-                      <div>
-                        <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Attention</div>
-                        <ImageRegionCanvas
-                          src={xaiSrc}
-                          alt={`gt-sal-${idx}`}
-                          panel={xaiFileSplit ? undefined : "saliency"}
-                          crop={row.box}
-                          imageSize={imageSize}
-                          className="bbox-crop-canvas"
-                          outSize={256}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
       )}
 

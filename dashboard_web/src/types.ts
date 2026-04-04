@@ -25,9 +25,6 @@ export type MetricPoint = {
   f1_macro: number;
   // Multilabel metrics (present when task=multilabel)
   f1_samples?: number;
-  // Detection metrics (present when task=detection)
-  map_50?: number;
-  map_50_95?: number;
   is_best_epoch?: boolean;
 };
 
@@ -67,7 +64,7 @@ export type DecisionRecord = {
   selected_branch_label: string;
   decision_reason: string;
   baseline_accuracy: number | null;
-  results: Record<string, { accuracy?: number; f1_macro?: number; loss?: number; map_50?: number; map_50_95?: number }>;
+  results: Record<string, { accuracy?: number; f1_macro?: number; loss?: number }>;
 };
 
 export type ConfusionEntry = {
@@ -110,8 +107,6 @@ export type XAIDiagnosis = {
   confused_with: ConfusedWith[];
   trend: "improving" | "stable" | "declining" | "new";
   short_text: string;
-  ap_50?: number;
-  detections?: number;
   mean_confidence?: number;
   quality_breakdown?: Record<string, number>;
   augmentation_impact?: string;
@@ -165,7 +160,7 @@ export type DatasetProfile = {
 
 export type StatePayload = {
   run: Record<string, unknown>;
-  task?: "classification" | "detection" | "multilabel";
+  task?: "classification" | "multilabel";
   selected_path: string[];
   selected_path_edges?: BranchEdge[];
   branches: Record<string, { metrics?: Record<string, number>; best_epoch?: number; total_epochs?: number }>;

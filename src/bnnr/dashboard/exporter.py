@@ -99,19 +99,9 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
         run_cfg = state.get("run", {}).get("config", {})
         task = run_cfg.get("task", "classification") if isinstance(run_cfg, dict) else "classification"
     is_multilabel = task == "multilabel"
-    is_detection = task == "detection"
 
     # Best metrics — task-aware primary/secondary metric keys
-    if is_detection:
-        primary_key = "map_50"
-        secondary_key = "map_50_95"
-        primary_label = "Best mAP@0.5 ★"
-        secondary_label = "Best mAP@[.5:.95] ★"
-        final_label = "Final mAP@0.5"
-        primary_chart_label = "mAP@0.5 (%)"
-        secondary_chart_label = "mAP@[.5:.95] (%)"
-        decision_metric_label = "mAP@0.5"
-    elif is_multilabel:
+    if is_multilabel:
         primary_key = "f1_samples"
         secondary_key = "f1_macro"
         primary_label = "Best F1 Samples ★"
@@ -211,16 +201,12 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
                 pass
 
             support = latest.get("support")
-            ap = latest.get("ap")
             acc = latest.get("accuracy")
-            if is_detection:
-                main_value = f"{ap * 100:.1f}%" if isinstance(ap, (int, float)) else "—"
-            else:
-                main_value = (
-                    f"{acc * 100:.1f}%"
-                    if isinstance(acc, (int, float))
-                    else (f"{ap * 100:.1f}%" if isinstance(ap, (int, float)) else "—")
-                )
+            main_value = (
+                f"{acc * 100:.1f}%"
+                if isinstance(acc, (int, float))
+                else "—"
+            )
             support_value = str(support) if support is not None else "—"
             per_class_rows += f"<tr><td>{html.escape(class_name)}</td><td>{main_value}</td><td>{support_value}</td></tr>"
 
