@@ -248,13 +248,7 @@ def _apply_events_to_state(
                 # Determine task type from config embedded in the payload
                 config = payload.get("config", {})
                 task = config.get("task", "classification") if isinstance(config, dict) else "classification"
-                if task == "detection":
-                    payload["metric_units"] = {
-                        "map_50": "%",
-                        "map_50_95": "%",
-                        "loss": "unitless",
-                    }
-                elif task == "multilabel":
+                if task == "multilabel":
                     payload["metric_units"] = {
                         "f1_samples": "%",
                         "f1_macro": "%",
@@ -335,12 +329,12 @@ def _apply_events_to_state(
                 "epoch": int(payload.get("epoch", 0)),
                 "branch": str(payload.get("branch", "baseline")),
                 "loss": float(raw_metrics.get("loss", 0.0)),
-                # Classification metrics (may be 0 for detection runs)
+                # Classification metrics
                 "accuracy": float(raw_metrics.get("accuracy", 0.0)),
                 "f1_macro": float(raw_metrics.get("f1_macro", 0.0)),
                 # Multilabel metrics (may be 0 for non-multilabel runs)
                 "f1_samples": float(raw_metrics.get("f1_samples", 0.0)),
-                # Detection metrics (may be 0 for classification runs)
+                # Optional metric slots (e.g. legacy event files; unused in v0.1.0 classification builds)
                 "map_50": float(raw_metrics.get("map_50", 0.0)),
                 "map_50_95": float(raw_metrics.get("map_50_95", 0.0)),
                 "is_best_epoch": bool(payload.get("is_best_epoch", False)),
@@ -498,15 +492,10 @@ def _apply_events_to_state(
                         "augmented": incoming_artifacts.get("augmented") or existing_artifacts.get("augmented"),
                         "xai": incoming_artifacts.get("xai") or existing_artifacts.get("xai"),
                     }
-                    _raw_ex_details = row.get("detection_details")
-                    existing_details: dict[str, Any] = _raw_ex_details if isinstance(_raw_ex_details, dict) else {}
-                    _raw_in_details = payload.get("detection_details")
-                    incoming_details: dict[str, Any] = _raw_in_details if isinstance(_raw_in_details, dict) else {}
                     rows[idx] = {
                         **row,
                         **payload,
                         "artifacts": merged_artifacts,
-                        "detection_details": {**existing_details, **incoming_details},
                     }
                     merged = True
                     break

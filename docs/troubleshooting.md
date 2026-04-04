@@ -38,22 +38,10 @@ Cause:
 Applies to:
 
 - `imagefolder`
-- `coco_mini`
-- `yolo`
 
 Fix: pass `--data-path`.
 
-## 4) `Could not find YOLO data.yaml`
-
-Cause:
-
-- `--data-path` does not point to a `data.yaml` file or a directory containing it.
-
-Fix:
-
-- validate path and required `train`/`val` entries in YAML.
-
-## 5) Dashboard shows zero runs
+## 4) Dashboard shows zero runs
 
 Cause:
 
@@ -64,16 +52,11 @@ Fix:
 - use a parent folder containing `run_*` directories, or
 - point directly at a run directory that has `events.jsonl`.
 
-## 6) CI on Python 3.9 fails with `unsupported operand type(s) for |`
+## 6) (Historical) Python 3.9 and union types in CLI/FastAPI
 
-Cause:
+**Supported releases (0.1.1+)** require **Python >=3.10**; this scenario does not apply to current wheels.
 
-- runtime evaluation of `X | None` annotations in CLI/FastAPI paths on Python 3.9.
-
-Fix:
-
-- keep compatible annotations in runtime-introspected paths,
-- keep dependency `eval-type-backport` for `python < 3.10`.
+If you run an **older checkout** on Python 3.9, you could see `unsupported operand type(s) for |` from runtime-evaluated `X | None` annotations. Mitigations were: compatible annotations in introspected paths, or `eval-type-backport` for `python < 3.10` (removed when 3.9 support was dropped).
 
 ## 7) CI/test import error: `ModuleNotFoundError: No module named 'httpx'`
 
@@ -204,3 +187,13 @@ if __name__ == "__main__":
 ```
 
 - or set `num_workers=0` in your DataLoader.
+
+## 16) Multi-label: `task: multilabel` in YAML but training still looks single-label
+
+Cause:
+
+- `bnnr train` preset pipelines (`build_*_pipeline` in `pipelines.py`) always use `CrossEntropyLoss` and single-label targets, regardless of `task` in the config file.
+
+Fix:
+
+- integrate multi-label data with `SimpleTorchAdapter(multilabel=True)` and `BCEWithLogitsLoss` ([golden_path.md](golden_path.md)), or run `examples/multilabel/multilabel_demo.py`; do not expect `--dataset cifar10` (or similar) alone to become multi-label.

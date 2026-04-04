@@ -100,10 +100,11 @@ class Reporter:
                 min_interval_seconds=config.event_min_interval_seconds,
             )
             task = config.task if hasattr(config, "task") else "classification"
-            if task == "detection":
+            if task == "multilabel":
                 metric_units = {
-                    "map_50": "%",
-                    "map_50_95": "%",
+                    "f1_samples": "%",
+                    "f1_macro": "%",
+                    "accuracy": "%",
                     "loss": "unitless",
                 }
             else:
@@ -293,7 +294,6 @@ class Reporter:
         original_artifact: str | None = None,
         augmented_artifact: str | None = None,
         xai_artifact: str | None = None,
-        detection_details: dict[str, Any] | None = None,
     ) -> None:
         if self._event_sink is None:
             return
@@ -314,7 +314,6 @@ class Reporter:
                     "augmented": augmented_artifact,
                     "xai": xai_artifact,
                 },
-                "detection_details": detection_details or {},
             },
         )
 
@@ -401,11 +400,7 @@ class Reporter:
                 "metrics_per_class": per_class or {},
                 "candidate_idx": candidate_idx,
                 "total_candidates": total_candidates,
-                "metric_units": (
-                    {"map_50": "%", "map_50_95": "%", "loss": "unitless"}
-                    if self._config is not None and getattr(self._config, "task", "classification") == "detection"
-                    else {"accuracy": "%", "f1_macro": "%", "loss": "unitless"}
-                ),
+                "metric_units": {"accuracy": "%", "f1_macro": "%", "loss": "unitless"},
             },
         )
         # Also emit epoch_end so the metrics timeline updates live

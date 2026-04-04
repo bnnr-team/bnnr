@@ -99,19 +99,9 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
         run_cfg = state.get("run", {}).get("config", {})
         task = run_cfg.get("task", "classification") if isinstance(run_cfg, dict) else "classification"
     is_multilabel = task == "multilabel"
-    is_detection = task == "detection"
 
     # Best metrics — task-aware primary/secondary metric keys
-    if is_detection:
-        primary_key = "map_50"
-        secondary_key = "map_50_95"
-        primary_label = "Best mAP@0.5 ★"
-        secondary_label = "Best mAP@[.5:.95] ★"
-        final_label = "Final mAP@0.5"
-        primary_chart_label = "mAP@0.5 (%)"
-        secondary_chart_label = "mAP@[.5:.95] (%)"
-        decision_metric_label = "mAP@0.5"
-    elif is_multilabel:
+    if is_multilabel:
         primary_key = "f1_samples"
         secondary_key = "f1_macro"
         primary_label = "Best F1 Samples ★"
@@ -211,16 +201,12 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
                 pass
 
             support = latest.get("support")
-            ap = latest.get("ap")
             acc = latest.get("accuracy")
-            if is_detection:
-                main_value = f"{ap * 100:.1f}%" if isinstance(ap, (int, float)) else "—"
-            else:
-                main_value = (
-                    f"{acc * 100:.1f}%"
-                    if isinstance(acc, (int, float))
-                    else (f"{ap * 100:.1f}%" if isinstance(ap, (int, float)) else "—")
-                )
+            main_value = (
+                f"{acc * 100:.1f}%"
+                if isinstance(acc, (int, float))
+                else "—"
+            )
             support_value = str(support) if support is not None else "—"
             per_class_rows += f"<tr><td>{html.escape(class_name)}</td><td>{main_value}</td><td>{support_value}</td></tr>"
 
@@ -254,30 +240,6 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
                     "</div>"
                 )
 
-            def _detection_xai_panels(src: object) -> str:
-                if not isinstance(src, str) or not src:
-                    return ""
-                esc_src = html.escape(src)
-                return (
-                    "<div class='xai-triptych-row'>"
-                    "<div class='xai-triptych-title'>XAI Panels</div>"
-                    "<div class='xai-triptych'>"
-                    "<div class='img-block'>"
-                    f"<img src='./{esc_src}' alt='XAI GT' class='xai-panel xai-panel-gt'/>"
-                    "<div class='caption'>GT</div>"
-                    "</div>"
-                    "<div class='img-block'>"
-                    f"<img src='./{esc_src}' alt='XAI Saliency' class='xai-panel xai-panel-saliency'/>"
-                    "<div class='caption'>Saliency</div>"
-                    "</div>"
-                    "<div class='img-block'>"
-                    f"<img src='./{esc_src}' alt='XAI Pred+Saliency' class='xai-panel xai-panel-pred'/>"
-                    "<div class='caption'>Pred + Saliency</div>"
-                    "</div>"
-                    "</div>"
-                    "</div>"
-                )
-
             info = (
                 f"sample={html.escape(str(sample_id))} · "
                 f"branch={html.escape(str(entry.get('branch', '')))} · "
@@ -288,10 +250,7 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
             )
             conf = entry.get("confidence")
             conf_txt = f"{conf * 100:.1f}%" if isinstance(conf, (int, float)) else "—"
-            main_blocks = f"{_img(original, 'Original')}{_img(augmented, 'Augmented')}"
-            if not is_detection:
-                main_blocks += _img(xai, "XAI")
-            detection_panels = _detection_xai_panels(xai) if is_detection else ""
+            main_blocks = f"{_img(original, 'Original')}{_img(augmented, 'Augmented')}{_img(xai, 'XAI')}"
             sample_cards.append(
                 "<div class='sample-card'>"
                 f"<div class='sample-title'>{info}</div>"
@@ -299,7 +258,6 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
                 "<div class='img-row'>"
                 f"{main_blocks}"
                 "</div>"
-                f"{detection_panels}"
                 "</div>"
             )
             if len(sample_cards) >= 18:

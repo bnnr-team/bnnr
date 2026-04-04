@@ -27,42 +27,6 @@ class TestBNNRConfigValidators:
         with pytest.raises(ValidationError, match="task"):
             BNNRConfig(task="segmentation")
 
-    def test_invalid_detection_bbox_format(self):
-        with pytest.raises(ValidationError, match="detection_bbox_format"):
-            BNNRConfig(detection_bbox_format="pascal_voc")
-
-    def test_invalid_detection_targets_mode(self):
-        with pytest.raises(ValidationError, match="detection_targets_mode"):
-            BNNRConfig(detection_targets_mode="never")
-
-    def test_invalid_detection_score_threshold(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_score_threshold=1.5)
-
-    def test_invalid_detection_nms_threshold(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_nms_threshold=-0.1)
-
-    def test_invalid_detection_min_box_area(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_min_box_area=-1.0)
-
-    def test_invalid_detection_max_truncation(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_max_truncation=2.0)
-
-    def test_invalid_detection_xai_grid_size(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_xai_grid_size=0)
-
-    def test_invalid_detection_xai_max_gt_boxes(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_xai_max_gt_boxes=0)
-
-    def test_invalid_detection_xai_max_pred_boxes(self):
-        with pytest.raises(ValidationError):
-            BNNRConfig(detection_xai_max_pred_boxes=-1)
-
     def test_invalid_selection_mode(self):
         with pytest.raises(ValidationError, match="selection_mode"):
             BNNRConfig(selection_mode="median")
@@ -115,27 +79,12 @@ class TestBNNRConfigValidators:
         with pytest.raises(ValidationError, match="multilabel_threshold"):
             BNNRConfig(multilabel_threshold=1.0)
 
-    def test_valid_detection_config(self):
-        cfg = BNNRConfig(
-            task="detection",
-            selection_metric="map_50",
-            detection_bbox_format="xyxy",
-            detection_targets_mode="auto",
-        )
-        assert cfg.task == "detection"
-
     def test_valid_multilabel_config(self):
         cfg = BNNRConfig(
             task="multilabel",
             multilabel_threshold=0.5,
         )
         assert cfg.task == "multilabel"
-
-    def test_auto_detection_defaults_adjusts_metric(self):
-        """When task=detection and selection_metric is left at default
-        'accuracy', it should be auto-adjusted to 'map_50'."""
-        cfg = BNNRConfig(task="detection")
-        assert cfg.selection_metric == "map_50"
 
     def test_report_probe_controls_validation(self):
         with pytest.raises(ValidationError):
@@ -147,17 +96,6 @@ class TestBNNRConfigValidators:
         for method in ("opticam", "gradcam", "craft", "nmf", "nmf_concepts", "real_craft"):
             cfg = BNNRConfig(xai_method=method)
             assert cfg.xai_method == method
-
-    def test_valid_all_bbox_formats(self):
-        for fmt in ("xyxy", "xywh", "cxcywh"):
-            cfg = BNNRConfig(detection_bbox_format=fmt)
-            assert cfg.detection_bbox_format == fmt
-
-    def test_valid_all_targets_modes(self):
-        for mode in ("auto", "image_only", "bbox_aware"):
-            cfg = BNNRConfig(detection_targets_mode=mode)
-            assert cfg.detection_targets_mode == mode
-
 
 # ---------------------------------------------------------------------------
 # BNNRTrainer helper methods

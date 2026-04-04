@@ -210,22 +210,3 @@ class TestRunDataQualityAnalysis:
         result = run_data_quality_analysis(loader, max_samples=10)
         dq = result["data_quality"]
         assert dq["scanned_samples"] == 10
-
-    def test_detection_loader_format(self) -> None:
-        """Should handle (images, targets, ids) detection format."""
-        imgs = torch.rand(6, 3, 32, 32)
-        targets = [{"labels": torch.tensor([0, 1]), "boxes": torch.rand(2, 4)} for _ in range(6)]
-        # Create a custom collate that returns (images, targets)
-        from torch.utils.data import Dataset
-
-        class DetDS(Dataset):
-            def __len__(self) -> int:
-                return 6
-
-            def __getitem__(self, idx: int):
-                return imgs[idx], targets[idx]
-
-        loader = DataLoader(DetDS(), batch_size=3, collate_fn=lambda b: (torch.stack([x[0] for x in b]), [x[1] for x in b]))
-        result = run_data_quality_analysis(loader, is_detection=True)
-        dq = result["data_quality"]
-        assert dq["scanned_samples"] == 6

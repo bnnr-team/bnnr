@@ -65,18 +65,6 @@ def validate_config(config: BNNRConfig) -> list[str]:
         warnings.append("event_xai_every_epochs should be > 0")
     if config.event_min_interval_seconds < 0:
         warnings.append("event_min_interval_seconds should be >= 0")
-    # Detection-specific validation
-    if config.task == "detection":
-        detection_metrics = {"map_50", "map_50_95", "loss"}
-        if config.selection_metric not in detection_metrics:
-            warnings.append(
-                f"For task='detection', selection_metric should be one of "
-                f"{sorted(detection_metrics)}, got '{config.selection_metric}'"
-            )
-        if config.detection_bbox_format not in {"xyxy", "xywh", "cxcywh"}:
-            warnings.append("detection_bbox_format should be 'xyxy', 'xywh' or 'cxcywh'")
-        if config.detection_targets_mode not in {"auto", "image_only", "bbox_aware"}:
-            warnings.append("detection_targets_mode should be 'auto', 'image_only' or 'bbox_aware'")
     # Classification-specific validation
     if config.task == "classification":
         cls_metrics = {

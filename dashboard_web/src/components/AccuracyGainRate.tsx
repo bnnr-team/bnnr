@@ -31,16 +31,9 @@ const COLORS = {
  * phase of training: baseline and each augmentation iteration.
  * Positive bars = improvement, negative = regression.
  */
-export function AccuracyGainRate({ timeline, selectedPath, task }: Props) {
+export function AccuracyGainRate({ timeline, selectedPath }: Props) {
   const cc = useChartColors();
-
-  const isDetection = useMemo(() => {
-    if (task === "detection") return true;
-    if (task === "classification") return false;
-    return timeline.some((p) => (p.map_50 ?? 0) > 0) && !timeline.some((p) => p.accuracy > 0);
-  }, [timeline, task]);
-
-  const metricLabel = isDetection ? "mAP@0.5" : "Accuracy";
+  const metricLabel = "Accuracy";
 
   const bars = useMemo(() => {
     if (timeline.length === 0) return [];
@@ -78,7 +71,7 @@ export function AccuracyGainRate({ timeline, selectedPath, task }: Props) {
       if (points.length === 0) continue;
 
       const startAcc = iter === 0 ? 0 : prevEndAcc;
-      const endAcc = Math.max(...points.map((p) => isDetection ? (p.map_50 ?? 0) : p.accuracy));
+      const endAcc = Math.max(...points.map((p) => p.accuracy));
       const delta = endAcc - startAcc;
       const epochCount = points.length;
       const branch = points[0].branch;
@@ -97,7 +90,7 @@ export function AccuracyGainRate({ timeline, selectedPath, task }: Props) {
     }
 
     return result;
-  }, [timeline, selectedPath, isDetection]);
+  }, [timeline, selectedPath]);
 
   if (bars.length === 0) {
     return <p className="muted">No training data yet.</p>;

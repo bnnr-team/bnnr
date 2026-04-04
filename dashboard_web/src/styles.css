@@ -1024,11 +1024,6 @@ select:focus, input[type="number"]:focus {
   border: 1px solid var(--border);
   background: var(--bg-subtle);
 }
-.detection-xai-split {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
 .composite-slice {
   width: 100%;
   max-width: 512px;
@@ -1963,9 +1958,6 @@ select:focus, input[type="number"]:focus {
   .preview-grid--2col {
     grid-template-columns: 1fr;
     gap: 16px;
-  }
-  .detection-xai-split {
-    grid-template-columns: 1fr;
   }
   .bbox-crop-grid-inner {
     grid-template-columns: 1fr;

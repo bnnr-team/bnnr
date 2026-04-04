@@ -154,13 +154,13 @@ def train_command(
     dataset: str = typer.Option(
         "mnist",
         "--dataset",
-        help="Dataset: mnist, fashion_mnist, cifar10, stl10, imagefolder, coco_mini, yolo",
+        help="Dataset: mnist, fashion_mnist, cifar10, stl10, imagefolder",
     ),
     data_dir: Path = typer.Option(Path("data"), "--data-dir", help="Directory for dataset download/storage"),
     data_path: Optional[Path] = typer.Option(
         None,
         "--data-path",
-        help="Custom data path (imagefolder/coco_mini/yolo)",
+        help="Custom data path (required for imagefolder)",
     ),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory for checkpoints and reports"),
     device: Optional[str] = typer.Option(None, "--device", "-d", help="Device: cuda, cpu, auto"),

@@ -19,7 +19,7 @@ const COLORS = [
 
 interface Props {
   decisions: DecisionRecord[];
-  task?: "classification" | "detection" | "multilabel";
+  task?: "classification" | "multilabel";
 }
 
 export function CandidateRadar({ decisions, task = "classification" }: Props) {
@@ -35,21 +35,13 @@ export function CandidateRadar({ decisions, task = "classification" }: Props) {
     return Object.keys(decision.results);
   }, [decision]);
 
-  const isDetection = task === "detection";
-
   const radarData = useMemo(() => {
     if (!decision) return [];
 
-    // Choose axes based on task type
-    const metricAxes: { key: string; label: string }[] = isDetection
-      ? [
-          { key: "map_50", label: "mAP@0.5" },
-          { key: "map_50_95", label: "mAP@[.5:.95]" },
-        ]
-      : [
-          { key: "accuracy", label: "Accuracy" },
-          { key: "f1_macro", label: "F1 Macro" },
-        ];
+    const metricAxes: { key: string; label: string }[] = [
+      { key: "accuracy", label: "Accuracy" },
+      { key: "f1_macro", label: "F1 Macro" },
+    ];
 
     // Compute inverted loss as a normalized axis
     const allLoss = Object.values(decision.results).map((r) => r.loss ?? 0);
@@ -74,7 +66,7 @@ export function CandidateRadar({ decisions, task = "classification" }: Props) {
           return row;
         })(),
       ]);
-  }, [decision, candidates, isDetection]);
+  }, [decision, candidates]);
 
   if (decisions.length === 0) {
     return <p className="muted">No branch decisions recorded yet.</p>;

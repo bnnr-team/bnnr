@@ -14,7 +14,7 @@ Use this as the starting point when you need the shortest path to the page relev
 - `analyze.md` — standalone model analysis (`bnnr analyze`): metrics, XAI, data quality, failure analysis
 - `golden_path.md` — integrating BNNR with your own model and dataloaders
 - `augmentations.md` — presets and augmentation classes available in code
-- `examples.md` — production usage guide for all `examples/*.py` scripts
+- `examples.md` — production usage guide for Python scripts under `examples/` (by subdirectory)
 - `notebooks.md` — notebook execution and validation guide
 - `artifacts.md` — on-disk run outputs (`report.json`, `events.jsonl`, artifacts)
 - `troubleshooting.md` — real failure modes and fixes

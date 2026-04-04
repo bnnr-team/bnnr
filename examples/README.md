@@ -28,6 +28,8 @@ PYTHONPATH=src python3 examples/classification/showcase_stl10.py \
   --m-epochs 1 --decisions 1
 ```
 
+The STL-10 showcase downloads data on first use (network required). Use `--quick` for a shorter run; see the script docstring for details.
+
 ### Multi-label
 
 - `multilabel/multilabel_demo.py`
@@ -42,32 +44,11 @@ PYTHONPATH=src python3 examples/multilabel/multilabel_demo.py \
   --n-train 64 --n-val 32 --batch-size 16 --m-epochs 1 --decisions 1
 ```
 
-### Detection
-
-- `detection/showcase_voc.py`
-- `detection/showcase_yolo_coco128.py`
-
-```bash
-# VOC showcase + dashboard
-PYTHONPATH=src python3 examples/detection/showcase_voc.py --with-dashboard
-
-# VOC tiny smoke (baseline-only completion)
-PYTHONPATH=src python3 examples/detection/showcase_voc.py \
-  --without-dashboard --no-dashboard-auto-open \
-  --max-train-samples 4 --max-val-samples 2 --batch-size 1 \
-  --m-epochs 1 --decisions 0 --target-size 128
-
-# YOLO showcase + dashboard
-PYTHONPATH=src python3 examples/detection/showcase_yolo_coco128.py \
-  --data-path data/coco128/data.yaml --with-dashboard
-```
-
 ## Notebooks (`.ipynb`)
 
 - `bnnr_augmentations_guide.ipynb`
 - `bnnr_custom_data.ipynb`
 - `classification/bnnr_classification_demo.ipynb`
-- `detection/bnnr_detection_demo.ipynb`
 - `multilabel/bnnr_multilabel_demo.ipynb`
 
 See `docs/notebooks.md` for local and CI-style execution (`jupyter nbconvert --execute`).

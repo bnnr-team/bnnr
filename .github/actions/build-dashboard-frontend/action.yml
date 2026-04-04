@@ -1,0 +1,19 @@
+name: Build dashboard frontend
+description: >
+  Produces src/bnnr/dashboard/frontend/dist so hatch wheel/sdist force-include
+  and pip install -e (editable) succeed. Required on every job that installs bnnr.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: npm
+        cache-dependency-path: dashboard_web/package-lock.json
+
+    - name: npm ci and vite build
+      shell: bash
+      run: |
+        cd dashboard_web
+        npm ci
+        npm run build

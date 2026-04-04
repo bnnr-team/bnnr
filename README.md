@@ -13,9 +13,8 @@
 
 BNNR is a PyTorch toolkit that makes vision models production-ready through a closed loop: train a model, explain its decisions with XAI, improve it with intelligent augmentation, and prove the result with structured reports and a live dashboard.
 
-Supported tasks in code:
-- Classification (`task: classification`)
-- Object detection (`task: detection`)
+Supported tasks in **v0.1.2**:
+- Single-label classification (`task: classification`)
 - Multi-label classification (`task: multilabel`)
 
 ## Quickstart
@@ -39,8 +38,14 @@ For development from source:
 ```bash
 git clone https://github.com/bnnr-team/bnnr.git
 cd bnnr
+# Dashboard UI must exist before editable install (hatch force-include).
+(cd dashboard_web && npm ci && npm run build)
 pip install -e ".[dev,dashboard]"
 ```
+
+### Examples, notebooks, and markdown docs
+
+The PyPI **wheel** ships the `bnnr` package only. **Runnable scripts** (`examples/`), **notebooks**, and the **documentation tree** (`docs/`) live in the [GitHub repository](https://github.com/bnnr-team/bnnr). After cloning, follow [docs/examples.md](docs/examples.md) (for example `PYTHONPATH=src python3 examples/...` from the repo root).
 
 ### 2) Create a minimal config
 
@@ -115,7 +120,6 @@ For custom models and dataloaders:
 - `BNNRConfig`
 - `BNNRTrainer`
 - `SimpleTorchAdapter`
-- `DetectionAdapter`
 - `quick_run()`
 
 See `docs/api_reference.md` and `docs/golden_path.md`.
@@ -138,7 +142,7 @@ See `docs/api_reference.md` and `docs/golden_path.md`.
 ## Requirements
 
 From `pyproject.toml`:
-- Python `>=3.9`
+- Python `>=3.10`
 - Core dependencies include `torch`, `torchvision`, `numpy`, `typer`, `pydantic`, `pyyaml`
 - Dashboard extra adds `fastapi`, `uvicorn`, `websockets`, `qrcode`
 

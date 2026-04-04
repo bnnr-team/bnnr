@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bnnr"
-version = "0.1.0"
+version = "0.1.2"
 description = "BNNR — Train → Explain → Improve → Prove"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
   { name = "Mateusz Walo" },
   { name = "Diana Morzhak" },
@@ -35,7 +35,6 @@ classifiers = [
   "Intended Audience :: Science/Research",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -50,7 +49,6 @@ dependencies = [
   "numpy>=1.24.0,<3.0",
   "opencv-python>=4.8.0,<5.0",
   "pydantic>=2.0.0,<3.0",
-  "eval-type-backport>=0.2.0; python_version < '3.10'",
   "typer>=0.9.0,<1.0",
   "pyyaml>=6.0.0,<7.0",
   "tqdm>=4.65.0,<5.0",
@@ -61,11 +59,6 @@ dependencies = [
 [project.optional-dependencies]
 gpu = [
   "kornia>=0.7.0,<1.0",
-]
-phasec = [
-  "ultralytics>=8.0.0,<9.0",
-  "torchmetrics>=1.4.0,<2.0",
-  "kaggle>=1.6.0,<2.0",
 ]
 albumentations = [
   "albumentations>=1.3.0,<2.0",
@@ -97,19 +90,33 @@ Issues = "https://github.com/bnnr-team/bnnr/issues"
 Documentation = "https://github.com/bnnr-team/bnnr/tree/main/docs"
 Changelog = "https://github.com/bnnr-team/bnnr/blob/main/CHANGELOG.md"
 
+[tool.uv]
+constraint-dependencies = [
+  "filelock>=3.20.3",
+  "pygments>=2.20.0",
+  "pillow>=12.1.1",
+]
+
+# Default sdist respects .gitignore; UI build output must still land in the tarball.
+[tool.hatch.build.targets.sdist.force-include]
+"src/bnnr/dashboard/frontend/dist" = "src/bnnr/dashboard/frontend/dist"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/bnnr"]
+# Wheel is often built from sdist; map packaged tree → site-packages layout.
+[tool.hatch.build.targets.wheel.force-include]
+"src/bnnr/dashboard/frontend/dist" = "bnnr/dashboard/frontend/dist"
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["E501", "UP007", "UP045"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
@@ -126,8 +133,6 @@ module = [
   "bnnr.augmentation_runner",
   "bnnr.craft",
   "bnnr.data_quality",
-  "bnnr.detection_xai",
-  "bnnr.detection_icd",
 ]
 # numpy/opencv return types are inherently Any; narrow ignore.
 disable_error_code = ["no-any-return"]

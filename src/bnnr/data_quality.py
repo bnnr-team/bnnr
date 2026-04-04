@@ -296,7 +296,6 @@ def run_data_quality_analysis(
     train_loader: torch.utils.data.DataLoader,
     *,
     max_samples: int = MAX_SAMPLES,
-    is_detection: bool = False,
     save_dir: Path | None = None,
     run_dir: Path | None = None,
     duplicate_threshold: int = DUPLICATE_HAMMING_THRESHOLD,
@@ -338,17 +337,11 @@ def run_data_quality_analysis(
         if processed >= max_samples:
             break
 
-        # Unpack batch
-        if is_detection:
-            if len(raw_batch) == 3:
-                images, _, _ = raw_batch
-            else:
-                images, _ = raw_batch
+        # Unpack batch (classification/multilabel: image, label, index)
+        if len(raw_batch) == 3:
+            images, _, _ = raw_batch
         else:
-            if len(raw_batch) == 3:
-                images, _, _ = raw_batch
-            else:
-                images, _ = raw_batch
+            images, _ = raw_batch
 
         if images.ndim != 4:
             sample_cursor += images.shape[0]

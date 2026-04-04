@@ -49,6 +49,16 @@ demo_output/
 multilabel_demo_output/
 my_tests/
 
+# Local scratch, editor rules, quick analyze demos (not part of the library)
+.cursorrules
+01-technical-roadmap.md
+config_quick.yaml
+config_quick_stl10.yaml
+run_analyze_demo.py
+run_analyze_demo.sh
+test_analyze_api.py
+out_analyze/
+
 # Runtime outputs
 checkpoints/
 checkpoints_*/

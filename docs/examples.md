@@ -1,11 +1,13 @@
 # Examples Guide (Production Usage)
 
 ## What you will find here
-A practical guide for all `examples/*.py` scripts with:
+A practical guide for Python scripts under `examples/` (for example `examples/classification/`, `examples/multilabel/`) with:
 - what each script demonstrates,
 - exact run commands,
 - which dashboard flow to use,
 - smoke commands for fast verification.
+
+These paths assume a **cloned repository** with installs from source (`pip install -e ".[…]"`). They are not shipped inside the PyPI wheel; see the root [README.md](../README.md).
 
 ## 1) Classification showcase
 
@@ -32,6 +34,8 @@ PYTHONPATH=src python3 examples/classification/showcase_stl10.py \
   --m-epochs 1 --decisions 1
 ```
 
+**First run:** STL-10 is downloaded automatically (needs network). For a shorter interactive run, the script supports `--quick`; see the module docstring for timings and GPU/CPU notes.
+
 ## 2) Multi-label showcase
 
 Script:
@@ -56,60 +60,35 @@ PYTHONPATH=src python3 examples/multilabel/multilabel_demo.py \
   --n-train 64 --n-val 32 --batch-size 16 --m-epochs 1 --decisions 1
 ```
 
-## 3) Detection VOC showcase
+## 3) Classification: full pipeline demo (synthetic)
 
 Script:
-- `examples/detection/showcase_voc.py`
+- `examples/classification/demo_full_pipeline.py`
 
 What it demonstrates:
-- detection branch-selection loop,
-- bbox-aware augmentations,
-- detection metrics (`map_50`, `map_50_95`),
-- detection dashboard integration.
+- all built-in BNNR augmentations and optional torchvision / Kornia / Albumentations wrappers (when those extras are installed),
+- ICD/AICD, XAI cache, OptiCAM, and a short branch-selection loop on a tiny synthetic dataset (no dataset download).
 
-### Full showcase
+Run from repository root (no live dashboard; typically well under a minute on CPU):
 
 ```bash
-PYTHONPATH=src python3 examples/detection/showcase_voc.py --with-dashboard
+PYTHONPATH=src python3 examples/classification/demo_full_pipeline.py
 ```
 
-### Fast smoke (baseline-only completion)
+Optional: install `albumentations` and/or `kornia` extras (`pip install -e ".[albumentations]"`, `pip install -e ".[gpu]"`) so the corresponding wrapper branches execute.
+
+## 4) Lightning / Accelerate adapters (reference module)
+
+File:
+- `examples/classification/lightning_adapter.py`
+
+This file is **reference code**, not a `main` entrypoint: it defines `LightningAdapter` and `AccelerateAdapter` for use with `BNNRTrainer`. PyTorch Lightning and Hugging Face Accelerate are optional dependencies:
 
 ```bash
-PYTHONPATH=src python3 examples/detection/showcase_voc.py \
-  --without-dashboard --no-dashboard-auto-open \
-  --max-train-samples 4 --max-val-samples 2 --batch-size 1 \
-  --m-epochs 1 --decisions 0 --target-size 128
+pip install pytorch-lightning accelerate
 ```
 
-## 4) Detection YOLO showcase
-
-Script:
-- `examples/detection/showcase_yolo_coco128.py`
-
-What it demonstrates:
-- YOLO `data.yaml` ingestion,
-- detection augmentations + ICD/AICD,
-- dashboard-compatible detection run artifacts.
-
-Important:
-- `--data-path` must point to YOLO `data.yaml` (not BNNR config YAML).
-
-### Full showcase
-
-```bash
-PYTHONPATH=src python3 examples/detection/showcase_yolo_coco128.py \
-  --data-path data/coco128/data.yaml --with-dashboard
-```
-
-### Fast smoke
-
-```bash
-PYTHONPATH=src python3 examples/detection/showcase_yolo_coco128.py \
-  --without-dashboard --no-dashboard-auto-open \
-  --data-path /tmp/b11_tiny_yolo/data.yaml \
-  --batch-size 2 --max-train-samples 8 --max-val-samples 4 --quick
-```
+See the module docstring and inline comments for wiring; also [api_reference.md](api_reference.md).
 
 ## 5) Dashboard workflow for examples
 
@@ -140,36 +119,3 @@ After each example run, verify:
 - `artifacts.md`
 - `troubleshooting.md`
 - `notebooks.md`
-
-## 8) Phase C Benchmark Commands (Colab / production)
-
-Single run (resume-safe):
-
-```bash
-python -m benchmarks.phase_c.run_phase_c \
-  --dataset eurosat \
-  --variant bnnr_auto \
-  --seed 42 \
-  --config benchmarks/configs/phase_c/default.yaml \
-  --resume
-```
-
-Full matrix per dataset:
-
-```bash
-python -m benchmarks.bench_eurosat --config benchmarks/configs/phase_c/default.yaml --resume
-python -m benchmarks.bench_isic2019 --config benchmarks/configs/phase_c/default.yaml --resume
-python -m benchmarks.bench_voc_detection --config benchmarks/configs/phase_c/default.yaml --resume
-```
-
-Dry-run smoke (no dataset download):
-
-```bash
-python -m benchmarks.phase_c.run_phase_c \
-  --dataset eurosat \
-  --variant no_aug \
-  --seed 42 \
-  --config benchmarks/configs/phase_c/quick.yaml \
-  --resume \
-  --dry-run
-```

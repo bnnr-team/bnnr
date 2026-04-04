@@ -35,11 +35,9 @@ export function TrainingTimeBreakdown({ decisions, timeline }: Props) {
 
     // Baseline epochs
     const baselineEpochs = timeline.filter((p) => p.branch === "baseline").length;
-    // Use the correct primary metric based on available data
-    const det = timeline.some((p) => (p.map_50 ?? 0) > 0) && !timeline.some((p) => p.accuracy > 0);
     const baselineAcc = timeline
       .filter((p) => p.branch === "baseline")
-      .reduce((max, p) => Math.max(max, det ? (p.map_50 ?? 0) : p.accuracy), 0);
+      .reduce((max, p) => Math.max(max, p.accuracy), 0);
     if (baselineEpochs > 0) {
       phases.push({ name: "Baseline", epochs: baselineEpochs, accuracy: baselineAcc });
     }
@@ -51,7 +49,7 @@ export function TrainingTimeBreakdown({ decisions, timeline }: Props) {
       phases.push({
         name: `I${d.iteration}: ${d.selected_branch_label}`,
         epochs: iterEpochs,
-        accuracy: det ? (winnerMetrics.map_50 ?? 0) : (winnerMetrics.accuracy ?? 0),
+        accuracy: winnerMetrics.accuracy ?? 0,
       });
     }
 
