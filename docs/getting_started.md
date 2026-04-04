@@ -15,7 +15,7 @@ Use this on a fresh machine or first setup.
 
 ## 1) Requirements
 
-- Python `>=3.9`
+- Python `>=3.10`
 - `pip`
 - Optional GPU support depends on your local PyTorch/CUDA installation
 

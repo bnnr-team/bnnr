@@ -52,16 +52,11 @@ Fix:
 - use a parent folder containing `run_*` directories, or
 - point directly at a run directory that has `events.jsonl`.
 
-## 6) CI on Python 3.9 fails with `unsupported operand type(s) for |`
+## 6) (Historical) Python 3.9 and union types in CLI/FastAPI
 
-Cause:
+**Supported releases (0.1.1+)** require **Python >=3.10**; this scenario does not apply to current wheels.
 
-- runtime evaluation of `X | None` annotations in CLI/FastAPI paths on Python 3.9.
-
-Fix:
-
-- keep compatible annotations in runtime-introspected paths,
-- keep dependency `eval-type-backport` for `python < 3.10`.
+If you run an **older checkout** on Python 3.9, you could see `unsupported operand type(s) for |` from runtime-evaluated `X | None` annotations. Mitigations were: compatible annotations in introspected paths, or `eval-type-backport` for `python < 3.10` (removed when 3.9 support was dropped).
 
 ## 7) CI/test import error: `ModuleNotFoundError: No module named 'httpx'`
 
