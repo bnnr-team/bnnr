@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.1] — 2026-04-04
+
+- Security: `constraint-dependencies` in `pyproject.toml` (uv) — `filelock>=3.20.3`, `pillow>=12.1.1`, `pygments>=2.20.0` to address Dependabot alerts; regenerated `uv.lock`.
+- **Breaking:** minimum Python is now **3.10** (required for patched Pillow 12.x).
+
 ## [0.1.0.post4] — 2026-04-01
 
 - CI: run `npm ci` + Vite build **before every** `pip install -e ".[dev,dashboard]"` so `src/bnnr/dashboard/frontend/dist` exists; hatch `force-include` no longer breaks editable installs on lint/test jobs.
