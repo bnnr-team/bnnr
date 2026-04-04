@@ -53,14 +53,14 @@ python3 -m bnnr analyze --model PATH --data PATH_OR_DATASET --output DIR [OPTION
 
 ### Main options
 
-- `--task` — `classification` (default), `multilabel`, or `detection`. Detection in v0.2 is metrics-only (no XAI/failure analysis).
+- `--task` — `classification` (default) or `multilabel` only. **Detection is not supported** by `analyze` until the main BNNR stack ships detection training end-to-end.
 - `--config` — Optional path to a BNNR config YAML (for device, metrics, num_classes, etc.).
 - `--max-worst` — Number of worst predictions to keep (default: 20).
 - `--no-xai` — Disable XAI analysis.
 - `--no-data-quality` — Disable data quality checks.
 - `--device` — `cuda`, `cpu`, or `auto`.
 - `--batch-size` — Batch size for evaluation (default from config or pipeline).
-- `--cv-folds` — Optional number of folds for lightweight cross-validation on the validation set (classification only; 0 disables CV).
+- `--cv-folds` — Optional number of folds for lightweight cross-validation on the validation set (`classification`: stratified single-label; `multilabel`: macro F1 / subset accuracy per fold; 0 disables).
 - `--xai-samples` — Number of samples for XAI probe set (default: 500; more = more accurate, slower).
 
 ### Behavior notes
@@ -152,9 +152,9 @@ report.to_html("./analysis_out/report.html")
 
 For full API details, see `api_reference.md`.
 
-## Limitations (v0.2.0)
+## Limitations (v0.2.x)
 
-- **Detection**: Only metrics (e.g. mAP) are supported; no XAI or per-sample failure analysis for detection.
+- **Detection**: Not supported by `bnnr analyze` or `analyze_model`; use classification or multi-label only.
 - **Compare**: No built-in comparison of two models (e.g. pre vs post fine-tuning); planned for a later release.
 - **Events**: Analyze does not emit events to `events.jsonl`; it produces standalone artifacts only.
 

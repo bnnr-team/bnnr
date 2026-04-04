@@ -35,6 +35,7 @@ def build_findings(
     _detect_recall_issues(class_diagnostics, raw_findings, patterns)
     _detect_confused_pairs(matrix, labels_list, raw_findings, patterns)
     _detect_xai_issues(xai_diagnoses, raw_findings, patterns)
+    _detect_calibration_ece(metrics, raw_findings, patterns)
     _detect_global_issues(metrics, pred_dist, true_dist, raw_findings, patterns)
 
     grouped = _group_findings(raw_findings)
@@ -195,6 +196,208 @@ def _detect_xai_issues(
                 severity="medium",
                 confidence="medium",
                 class_ids=[str(cls_id)],
+            ))
+
+
+def _detect_calibration_ece(
+    metrics: dict[str, Any],
+    findings: list[Finding],
+    patterns: list[FailurePattern],
+) -> None:
+    ece = metrics.get("ece")
+    if ece is None:
+        return
+    try:
+        ece_f = float(ece)
+    except (TypeError, ValueError):
+        return
+    if ece_f < 0.12:
+        return
+    sev = "high" if ece_f >= 0.25 else "medium"
+    findings.append(Finding(
+        title="Confidence calibration gap",
+        finding_type="miscalibration_top1",
+        description=(
+            f"Top-1 ECE={ece_f:.3f}: predicted probabilities may not match "
+            f"empirical accuracy (see metrics)."
+        ),
+        evidence=[f"ece={ece_f:.4f}"],
+        severity=sev,
+        confidence="high" if ece_f >= 0.2 else "medium",
+        recommended_action="Consider temperature scaling or isotonic calibration on a held-out set.",
+    ))
+    patterns.append(FailurePattern(
+        pattern_type="miscalibration_top1",
+        description=f"ECE={ece_f:.3f}",
+        severity=sev,
+        count=1,
+    ))
+
+
+def build_findings_multilabel(
+    report: Any,
+    class_diagnostics: list[Any],
+    true_dist: dict[str, int],
+    pred_dist: dict[str, int],
+) -> tuple[list[Finding], list[FailurePattern]]:
+    """Findings for multi-label reports (no multi-class confusion matrix)."""
+    raw_findings: list[Finding] = []
+    patterns: list[FailurePattern] = []
+    metrics = getattr(report, "metrics", {}) or {}
+
+    _detect_recall_issues(class_diagnostics, raw_findings, patterns)
+    _detect_multilabel_threshold_hints(class_diagnostics, report, raw_findings, patterns)
+    _detect_global_issues_multilabel(metrics, pred_dist, true_dist, raw_findings, patterns)
+
+    grouped = _group_findings(raw_findings)
+    sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    grouped.sort(key=lambda f: (sev_order.get(f.severity, 9), f.title))
+    return grouped[:12], patterns
+
+
+def _detect_multilabel_threshold_hints(
+    class_diagnostics: list[Any],
+    report: Any,
+    findings: list[Finding],
+    patterns: list[FailurePattern],
+) -> None:
+    confusion = getattr(report, "confusion", {}) or {}
+    per_label = confusion.get("per_label", [])
+    labels_list = confusion.get("labels", [])
+    if not isinstance(per_label, list):
+        return
+
+    for d in class_diagnostics:
+        if getattr(d, "support", 0) == 0:
+            continue
+        idx = None
+        for i, lid in enumerate(labels_list):
+            if str(lid) == str(d.class_id):
+                idx = i
+                break
+        if idx is None:
+            try:
+                idx = int(d.class_id)
+            except ValueError:
+                continue
+        if idx < 0 or idx >= len(per_label):
+            continue
+        cell = per_label[idx]
+        if not isinstance(cell, dict):
+            continue
+        fp = int(cell.get("fp", 0))
+        fn = int(cell.get("fn", 0))
+        tp = int(cell.get("tp", 0))
+        if tp + fp + fn < 5:
+            continue
+        if fp >= 3 * max(fn, 1) and fp >= 5:
+            findings.append(Finding(
+                title="Label predicted too often",
+                finding_type="multilabel_fp_bias",
+                description=(
+                    f"Label {d.class_id}: many false positives (fp={fp}) vs false negatives (fn={fn}). "
+                    "Raising the decision threshold for this label may help."
+                ),
+                evidence=[f"fp={fp}", f"fn={fn}"],
+                severity="medium",
+                confidence="medium",
+                class_ids=[str(d.class_id)],
+            ))
+            patterns.append(FailurePattern(
+                pattern_type="multilabel_fp_bias",
+                description=f"Label {d.class_id}: fp-heavy",
+                severity="medium",
+                count=fp,
+                class_a=str(d.class_id),
+            ))
+        elif fn >= 3 * max(fp, 1) and fn >= 5:
+            findings.append(Finding(
+                title="Label rarely predicted",
+                finding_type="multilabel_fn_bias",
+                description=(
+                    f"Label {d.class_id}: many false negatives (fn={fn}) vs false positives (fp={fp}). "
+                    "Lowering the decision threshold for this label may help."
+                ),
+                evidence=[f"fn={fn}", f"fp={fp}"],
+                severity="medium",
+                confidence="medium",
+                class_ids=[str(d.class_id)],
+            ))
+            patterns.append(FailurePattern(
+                pattern_type="multilabel_fn_bias",
+                description=f"Label {d.class_id}: fn-heavy",
+                severity="medium",
+                count=fn,
+                class_a=str(d.class_id),
+            ))
+
+
+def _detect_global_issues_multilabel(
+    metrics: dict[str, Any],
+    pred_dist: dict[str, int],
+    true_dist: dict[str, int],
+    findings: list[Finding],
+    patterns: list[FailurePattern],
+) -> None:
+    f1m = metrics.get("f1_macro")
+    if f1m is not None and float(f1m) < 0.35:
+        findings.append(Finding(
+            title="Low macro F1 (multi-label)",
+            finding_type="low_multilabel_f1_macro",
+            description=f"Macro F1={float(f1m):.0%} — several labels may be poorly modeled.",
+            evidence=[f"f1_macro={float(f1m):.3f}"],
+            severity="critical",
+            confidence="high",
+        ))
+    acc = metrics.get("accuracy")
+    if acc is not None and float(acc) < 0.4:
+        findings.append(Finding(
+            title="Low subset accuracy",
+            finding_type="low_overall_accuracy",
+            description=f"Subset accuracy {float(acc):.0%} is very low for multi-label.",
+            evidence=[f"accuracy={float(acc):.3f}"],
+            severity="high",
+            confidence="high",
+        ))
+
+    total_pred = sum(pred_dist.values())
+    if total_pred > 0:
+        pred_max = max(pred_dist.values()) if pred_dist else 0
+        if pred_max > total_pred * 0.6:
+            dominant = next((c for c, v in pred_dist.items() if v == pred_max), "")
+            findings.append(Finding(
+                title="Possible prediction imbalance",
+                finding_type="class_collapse_suspected",
+                description=(
+                    f"Label {dominant} is predicted positive in {pred_max/total_pred:.0%} "
+                    "of all sample×label slots (check threshold and class balance)."
+                ),
+                evidence=[f"pred_pos_max={pred_max}", f"total_pred_pos={total_pred}"],
+                severity="high",
+                confidence="medium",
+                class_ids=[dominant],
+            ))
+            patterns.append(FailurePattern(
+                pattern_type="class_collapse_suspected",
+                description=f"Heavy positive predictions: {dominant}",
+                severity="high",
+                count=pred_max,
+                class_a=dominant,
+            ))
+
+    total_true = sum(true_dist.values())
+    if total_true <= 0:
+        return
+    for cls_id, true_count in true_dist.items():
+        if true_count > 0 and true_count <= max(3, int(0.01 * total_true)):
+            findings.append(Finding(
+                title="Rare positive label",
+                finding_type="minority_class_suppression",
+                description=f"Label {cls_id}: few positives ({true_count}) in the eval set.",
+                evidence=[f"support={true_count}"],
+                severity="medium",
+                confidence="medium",
+                class_ids=[cls_id],
             ))
 
 

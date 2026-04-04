@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-REPORT_SCHEMA_VERSION = "0.2.0"
+REPORT_SCHEMA_VERSION = "0.2.1"
 
 
 @dataclass
@@ -58,6 +58,8 @@ class Recommendation:
     priority: int = 0  # lower = higher priority
     linked_finding_ids: list[str] = field(default_factory=list)
     example_command: str = ""
+    evidence_from_run: list[str] = field(default_factory=list)
+    literature_note: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -507,7 +507,7 @@ def _kpi_cards(metrics: dict[str, Any], num_classes: int = 0, num_samples: int =
         return ""
     parts: list[str] = []
 
-    ordered = ["accuracy", "f1_macro", "loss", "cohen_kappa"]
+    ordered = ["accuracy", "f1_macro", "loss", "cohen_kappa", "ece"]
     for key in ordered:
         if key not in metrics:
             continue
@@ -521,11 +521,16 @@ def _kpi_cards(metrics: dict[str, Any], num_classes: int = 0, num_samples: int =
             best = " best"
         if key == "loss":
             disp = f"{v:.4f}"
-        elif key == "cohen_kappa":
+        elif key in ("cohen_kappa", "ece"):
             disp = f"{v:.3f}"
         else:
             disp = f"{v:.1%}"
-        label = "Cohen\u2019s \u03ba" if key == "cohen_kappa" else key
+        if key == "cohen_kappa":
+            label = "Cohen\u2019s \u03ba"
+        elif key == "ece":
+            label = "ECE (top-1)"
+        else:
+            label = key
         parts.append(f'<div class="kpi-card{best}"><div class="kpi-value">{disp}</div>'
                      f'<div class="kpi-label">{_esc(label)}</div></div>')
 
@@ -725,7 +730,30 @@ def _findings_block(findings: list[dict[str, Any]]) -> str:
 
 # ─── Confusion Matrix Heatmap ──────────────────────────────────────────────
 
+def _multilabel_per_label_table(confusion: dict[str, Any]) -> str:
+    labels_list = confusion.get("labels", [])
+    per_label = confusion.get("per_label", [])
+    n_samples = confusion.get("n_samples", "")
+    if not isinstance(per_label, list) or not labels_list:
+        return '<p class="empty">No per-label confusion data.</p>'
+    h = f'<p class="muted" style="margin-bottom:8px;">Multi-label (N={_esc(str(n_samples))}) — TP/FP/FN per label.</p>'
+    h += '<div class="table-wrap"><table><thead><tr>'
+    h += "<th>Label</th><th>TP</th><th>FP</th><th>FN</th></tr></thead><tbody>"
+    for i, cell in enumerate(per_label):
+        if not isinstance(cell, dict):
+            continue
+        lid = str(labels_list[i]) if i < len(labels_list) else str(i)
+        h += f'<tr><td>{_esc(lid)}</td>'
+        h += f'<td>{cell.get("tp", 0)}</td>'
+        h += f'<td>{cell.get("fp", 0)}</td>'
+        h += f'<td>{cell.get("fn", 0)}</td></tr>'
+    h += "</tbody></table></div>"
+    return h
+
+
 def _confusion_heatmap(confusion: dict[str, Any]) -> str:
+    if confusion.get("type") == "multilabel_per_label":
+        return _multilabel_per_label_table(confusion)
     matrix = confusion.get("matrix")
     labels_list = confusion.get("labels", [])
     if not isinstance(matrix, list) or not matrix or not labels_list:
@@ -1144,13 +1172,19 @@ def _cv_block(cv: dict[str, Any]) -> str:
 
     h = '<div class="cv-global">'
     h += f'<div class="cv-metric"><div class="cv-metric-value">{n_folds}</div><div class="cv-metric-label">Folds</div></div>'
-    metric_keys = [
-        ("mean_accuracy", "Accuracy"),
-        ("mean_precision_macro", "Precision"),
-        ("mean_recall_macro", "Recall"),
-        ("mean_f1_macro", "F1"),
-        ("mean_cohen_kappa", "\u03ba"),
-    ]
+    if "mean_subset_accuracy" in gm:
+        metric_keys = [
+            ("mean_f1_macro", "F1 macro"),
+            ("mean_subset_accuracy", "Subset acc"),
+        ]
+    else:
+        metric_keys = [
+            ("mean_accuracy", "Accuracy"),
+            ("mean_precision_macro", "Precision"),
+            ("mean_recall_macro", "Recall"),
+            ("mean_f1_macro", "F1"),
+            ("mean_cohen_kappa", "\u03ba"),
+        ]
     for key, label in metric_keys:
         if key in gm:
             std_key = key.replace("mean_", "std_")
@@ -1161,19 +1195,28 @@ def _cv_block(cv: dict[str, Any]) -> str:
 
     if per_fold:
         h += '<div class="table-wrap"><table><thead><tr>'
-        h += "<th>Fold</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>\u03ba</th><th>Support</th>"
-        h += "</tr></thead><tbody>"
-        for fm in per_fold:
-            acc = fm.get("accuracy", 0)
-            h += f'<tr><td>{fm.get("fold","")}</td>'
-            h += f'<td>{acc:.3f} '
-            h += (f'<span class="metric-bar-track"><span class="metric-bar-fill" '
-                  f'style="width:{acc*100:.0f}%;background:{_bar_color(acc)};"></span></span></td>')
-            h += f'<td>{fm.get("precision_macro", 0):.3f}</td>'
-            h += f'<td>{fm.get("recall_macro", 0):.3f}</td>'
-            h += f'<td>{fm.get("f1_macro", 0):.3f}</td>'
-            h += f'<td>{fm.get("cohen_kappa", 0):.3f}</td>'
-            h += f'<td>{fm.get("support",0)}</td></tr>'
+        if per_fold and "subset_accuracy" in per_fold[0]:
+            h += "<th>Fold</th><th>F1 macro</th><th>Subset acc</th><th>Support</th>"
+            h += "</tr></thead><tbody>"
+            for fm in per_fold:
+                h += f'<tr><td>{fm.get("fold","")}</td>'
+                h += f'<td>{fm.get("f1_macro", 0):.3f}</td>'
+                h += f'<td>{fm.get("subset_accuracy", 0):.3f}</td>'
+                h += f'<td>{fm.get("support",0)}</td></tr>'
+        else:
+            h += "<th>Fold</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>\u03ba</th><th>Support</th>"
+            h += "</tr></thead><tbody>"
+            for fm in per_fold:
+                acc = fm.get("accuracy", 0)
+                h += f'<tr><td>{fm.get("fold","")}</td>'
+                h += f'<td>{acc:.3f} '
+                h += (f'<span class="metric-bar-track"><span class="metric-bar-fill" '
+                      f'style="width:{acc*100:.0f}%;background:{_bar_color(acc)};"></span></span></td>')
+                h += f'<td>{fm.get("precision_macro", 0):.3f}</td>'
+                h += f'<td>{fm.get("recall_macro", 0):.3f}</td>'
+                h += f'<td>{fm.get("f1_macro", 0):.3f}</td>'
+                h += f'<td>{fm.get("cohen_kappa", 0):.3f}</td>'
+                h += f'<td>{fm.get("support",0)}</td></tr>'
         h += "</tbody></table></div>"
     return h
 
@@ -1198,6 +1241,11 @@ def _rec_block(recs_struct: list[dict[str, Any]], recs_legacy: list[str]) -> str
             if why:
                 truncated = why[:400] + "..." if len(why) > 400 else why
                 h += f'<div class="rec-why">{_esc(truncated)}</div>'
+            ev_run = r.get("evidence_from_run") or []
+            if isinstance(ev_run, list) and ev_run:
+                h += '<div class="rec-evidence" style="font-size:11px;color:var(--muted);margin-top:4px;">'
+                h += "<strong>From this run:</strong> " + _esc("; ".join(str(x) for x in ev_run[:5]))
+                h += "</div>"
             action = r.get("action", "")
             if action:
                 h += f'<div class="rec-action">\u2192 {_esc(action)}</div>'
@@ -1228,10 +1276,11 @@ def _rec_block(recs_struct: list[dict[str, Any]], recs_legacy: list[str]) -> str
 def render_analysis_html(report: Any) -> str:
     """Generate full HTML report aligned with BNNR dashboard design language."""
 
-    schema_version = getattr(report, "schema_version", "0.2.0")
+    schema_version = getattr(report, "schema_version", "0.2.1")
     metrics = getattr(report, "metrics", {}) or {}
     confusion = getattr(report, "confusion", {}) or {}
     summary = getattr(report, "executive_summary", {}) or {}
+    analysis_scope = getattr(report, "analysis_scope", {}) or {}
     diagnostics = getattr(report, "class_diagnostics", []) or []
     findings = getattr(report, "findings", []) or []
     xai_summary = getattr(report, "xai_quality_summary", {}) or {}
@@ -1251,6 +1300,9 @@ def render_analysis_html(report: Any) -> str:
 
     num_classes = len(true_dist) if true_dist else (len(diagnostics) if diagnostics else 0)
     num_samples = sum(true_dist.values()) if true_dist else 0
+    task_label = str(analysis_scope.get("task", "classification")).replace("_", "-")
+    scope_reason = analysis_scope.get("reason", "")
+    scope_notes = analysis_scope.get("notes", "")
 
     has_xai = bool(xai_summary or xai_per_class or xai_examples or best_worst)
     has_dq = bool(data_quality)
@@ -1294,9 +1346,29 @@ def render_analysis_html(report: Any) -> str:
         "<h1>BNNR Analysis Report</h1>",
         '<div class="report-meta">',
         f'<span>v{_esc(schema_version)}</span>',
-        '<span>Classification</span>',
+        f'<span>{_esc(task_label.title())}</span>',
         f'<span>{num_classes} classes \u00b7 {num_samples:,} samples</span>' if num_samples else "",
         '</div></div></div>',
+        *(
+            [
+                '<div class="confidence-legend" style="margin-bottom:12px;background:rgba(234,179,8,0.12);'
+                'border:1px solid rgba(234,179,8,0.35);border-radius:8px;padding:10px 14px;">',
+                f'<strong>Scope:</strong> {_esc(scope_reason)}',
+                "</div>",
+            ]
+            if scope_reason
+            else []
+        ),
+        *(
+            [
+                '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;padding:8px 12px;'
+                'background:var(--card);border-radius:6px;">',
+                f'<strong>Note:</strong> {_esc(scope_notes)}',
+                "</div>",
+            ]
+            if scope_notes
+            else []
+        ),
         # Confidence legend
         '<div class="confidence-legend">',
         '<span class="legend-label">Confidence levels:</span>',

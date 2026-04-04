@@ -2,8 +2,8 @@
 
 Provides run_evaluation (metrics + per_class + confusion) and
 collect_eval_predictions (per-sample preds, labels, indices, confidences, losses)
-for classification, used by the training loop and by bnnr analyze without
-duplicating eval logic.
+for classification and multi-label, used by the training loop and by bnnr analyze
+without duplicating eval logic.
 """
 
 from __future__ import annotations
@@ -42,9 +42,9 @@ def run_evaluation(
     """Run evaluation on the given adapter and loader.
 
     Returns (metrics, per_class_accuracy, confusion, preds, labels).
-    For detection, preds and labels are None. For classification/multilabel,
-    preds/labels are returned when return_preds_labels is True (or always
-    when we have them, for use by trainer custom_metrics).
+    For detection, preds and labels are None. For classification, preds/labels
+    are 1-D when ``return_preds_labels`` is True. For multi-label, preds/labels
+    are 2-D (``N × L``) when ``return_preds_labels`` is True.
     """
     task = getattr(config, "task", "classification")
     is_detection = task == "detection"
@@ -56,10 +56,12 @@ def run_evaluation(
         m, p, c, _, _ = _run_evaluation_detection(adapter, loader, config)
         return m, p, c, None, None
     if is_multilabel:
-        m, p, c, _, _ = _run_evaluation_multilabel(
+        m, p, c, preds, labels = _run_evaluation_multilabel(
             adapter, loader, config, metrics_list, custom_metrics
         )
-        return m, p, c, None, None
+        if not return_preds_labels:
+            preds, labels = None, None
+        return m, p, c, preds, labels
     m, p, c, preds, labels = _run_evaluation_classification(
         adapter, loader, config, metrics_list, custom_metrics
     )
@@ -156,23 +158,27 @@ def _run_evaluation_multilabel(
     config: Any,
     metrics_list: list[str],
     custom_metrics: dict[str, Any] | None,
-) -> tuple[dict[str, float], dict[str, dict[str, float | int]], dict[str, Any], None, None]:
-    can_cache = isinstance(adapter, XAICapableModel)
-    all_metrics = []
-    preds_rows = []
-    label_rows = []
+) -> tuple[
+    dict[str, float],
+    dict[str, dict[str, float | int]],
+    dict[str, Any],
+    np.ndarray | None,
+    np.ndarray | None,
+]:
+    """Always capture logits via forward hook so per-label confusion is defined."""
+    all_metrics: list[dict[str, float]] = []
+    preds_rows: list[torch.Tensor] = []
+    label_rows: list[torch.Tensor] = []
     threshold = getattr(config, "multilabel_threshold", 0.5)
 
+    model_impl = adapter.get_model()
+    model_impl.eval()
     _captured_logits: list[torch.Tensor] = []
-    _hook_handle = None
-    if can_cache:
-        model_impl = adapter.get_model()
-        model_impl.eval()
 
-        def _capture_hook(_module: Any, _inp: Any, output: Any) -> None:
-            _captured_logits.append(output.detach())
+    def _capture_hook(_module: Any, _inp: Any, output: Any) -> None:
+        _captured_logits.append(output.detach())
 
-        _hook_handle = model_impl.register_forward_hook(_capture_hook)
+    _hook_handle = model_impl.register_forward_hook(_capture_hook)
 
     try:
         for raw_batch in loader:
@@ -184,15 +190,12 @@ def _run_evaluation_multilabel(
                 images, labels = raw_batch[0], raw_batch[1]
             _captured_logits.clear()
             all_metrics.append(adapter.eval_step(batch))
-            if can_cache and _captured_logits:
+            if _captured_logits:
                 logits = _captured_logits[-1]
-                preds_rows.append(
-                    (torch.sigmoid(logits) >= threshold).int().cpu()
-                )
+                preds_rows.append((torch.sigmoid(logits) >= threshold).int().cpu())
                 label_rows.append(labels.cpu())
     finally:
-        if _hook_handle is not None:
-            _hook_handle.remove()
+        _hook_handle.remove()
 
     result_metrics = _average_metrics(all_metrics)
     last_eval_preds = torch.cat(preds_rows).numpy() if preds_rows else None
@@ -210,6 +213,7 @@ def _run_evaluation_multilabel(
 
     preds = last_eval_preds
     labels = last_eval_labels
+    n_samples = int(preds.shape[0])
     n_labels = preds.shape[1] if preds.ndim == 2 else 0
     if n_labels == 0:
         return result_metrics, {}, {}, None, None
@@ -233,12 +237,13 @@ def _run_evaluation_multilabel(
             "support": support,
         }
         confusion_per_label.append({"tp": tp, "fp": fp, "fn": fn})
-    confusion = {
+    confusion: dict[str, Any] = {
         "type": "multilabel_per_label",
         "labels": list(range(n_labels)),
         "per_label": confusion_per_label,
+        "n_samples": n_samples,
     }
-    return result_metrics, per_label, confusion, None, None
+    return result_metrics, per_label, confusion, preds, labels
 
 
 def _run_evaluation_detection(
@@ -318,13 +323,12 @@ def collect_eval_predictions(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
     """Collect per-sample predictions, labels, indices, confidences and losses.
 
-    Classification only. Requires XAICapableModel and adapter with .criterion.
+    Supports ``classification`` and ``multilabel``. Requires a model with
+    ``get_model()`` and a ``criterion`` (same as training).
     Returns (preds, labels, indices, confidences, losses) or None if unavailable.
     """
     task = getattr(config, "task", "classification")
-    if task != "classification":
-        return None
-    if not isinstance(adapter, XAICapableModel):
+    if task == "detection":
         return None
     model = adapter.get_model()
     criterion = getattr(adapter, "criterion", None)
@@ -339,6 +343,7 @@ def collect_eval_predictions(
     confidences_list: list[np.ndarray] = []
     losses_list: list[np.ndarray] = []
     sample_offset = 0
+    threshold = getattr(config, "multilabel_threshold", 0.5)
 
     with torch.no_grad():
         for raw_batch in loader:
@@ -356,27 +361,53 @@ def collect_eval_predictions(
                 sample_offset += batch_size
             images = images.to(device)
             labels_batch = labels_batch.to(device)
-            if labels_batch.ndim > 1 and labels_batch.shape[-1] == 1:
-                labels_batch = labels_batch.squeeze(-1)
             logits = model(images)
-            if hasattr(criterion, "reduction"):
-                old_red = getattr(criterion, "reduction", "mean")
-                try:
-                    criterion.reduction = "none"  # type: ignore[assignment]
-                    loss_per = criterion(logits, labels_batch)
-                finally:
-                    criterion.reduction = old_red  # type: ignore[assignment]
+
+            if task == "multilabel":
+                labels_batch = labels_batch.float()
+                probs = torch.sigmoid(logits)
+                preds = (probs >= threshold).int().cpu().numpy()
+                conf, _ = probs.max(dim=1)
+                if hasattr(criterion, "reduction"):
+                    old_red = getattr(criterion, "reduction", "mean")
+                    try:
+                        criterion.reduction = "none"  # type: ignore[assignment]
+                        loss_per = criterion(logits, labels_batch)
+                    finally:
+                        criterion.reduction = old_red  # type: ignore[assignment]
+                else:
+                    loss_per = torch.nn.functional.binary_cross_entropy_with_logits(
+                        logits, labels_batch, reduction="none"
+                    )
+                if loss_per.ndim == 2:
+                    loss_scalar = loss_per.mean(dim=1)
+                else:
+                    loss_scalar = loss_per.flatten()
+                loss_np = loss_scalar.cpu().numpy()
             else:
-                loss_per = torch.nn.functional.cross_entropy(
-                    logits, labels_batch.long(), reduction="none"
-                )
-            probs = torch.softmax(logits, dim=1)
-            conf, preds = probs.max(dim=1)
-            preds_list.append(preds.cpu().numpy())
+                if labels_batch.ndim > 1 and labels_batch.shape[-1] == 1:
+                    labels_batch = labels_batch.squeeze(-1)
+                if hasattr(criterion, "reduction"):
+                    old_red = getattr(criterion, "reduction", "mean")
+                    try:
+                        criterion.reduction = "none"  # type: ignore[assignment]
+                        loss_per = criterion(logits, labels_batch)
+                    finally:
+                        criterion.reduction = old_red  # type: ignore[assignment]
+                else:
+                    loss_per = torch.nn.functional.cross_entropy(
+                        logits, labels_batch.long(), reduction="none"
+                    )
+                probs = torch.softmax(logits, dim=1)
+                conf, preds = probs.max(dim=1)
+                preds = preds.cpu().numpy()
+                loss_np = loss_per.cpu().numpy()
+
+            preds_list.append(preds)
             labels_list.append(labels_batch.cpu().numpy())
             indices_list.append(idx)
             confidences_list.append(conf.cpu().numpy())
-            losses_list.append(loss_per.cpu().numpy())
+            losses_list.append(loss_np)
 
     if not preds_list:
         return None

@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+import pytest
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from bnnr.adapter import SimpleTorchAdapter
 from bnnr.analyze import AnalysisReport, analyze_model
 from bnnr.core import BNNRConfig
 from bnnr.evaluation import run_evaluation
@@ -90,7 +94,7 @@ def test_analyze_model_extended_report_fields(model_adapter, tmp_path: Path) -> 
         output_dir=None,
         run_data_quality=False,
     )
-    assert report.schema_version == "0.2.0"
+    assert report.schema_version == "0.2.1"
     assert isinstance(report.executive_summary, dict)
     assert "health_status" in report.executive_summary or len(report.executive_summary) >= 0
     assert isinstance(report.findings, list)
@@ -184,6 +188,22 @@ def test_analyze_model_with_cv(model_adapter, tmp_path: Path) -> None:
             assert "mean_cohen_kappa" in gm
 
 
+def test_analyze_model_rejects_detection(model_adapter) -> None:
+    """analyze_model rejects unsupported tasks (BNNRConfig itself forbids detection)."""
+    from types import SimpleNamespace
+
+    loader = _make_indexed_loader()
+    fake_cfg = SimpleNamespace(task="detection", device="cpu", metrics=["accuracy"])
+    with pytest.raises(ValueError, match="classification.*multilabel"):
+        analyze_model(
+            model_adapter,
+            loader,
+            config=fake_cfg,
+            output_dir=None,
+            run_data_quality=False,
+        )
+
+
 def test_run_evaluation_standalone(model_adapter) -> None:
     """Run evaluation module directly (used by analyze and trainer)."""
     adapter = model_adapter
@@ -200,6 +220,101 @@ def test_run_evaluation_standalone(model_adapter) -> None:
     assert labels is not None
     assert len(preds) == 12
     assert len(labels) == 12
+
+
+class _TinyMultiLabelNet(nn.Module):
+    def __init__(self, n_labels: int = 4) -> None:
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 8, 3, padding=1)
+        self.relu = nn.ReLU()
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(8, n_labels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.relu(self.conv1(x))
+        x = self.pool(x).flatten(1)
+        return self.fc(x)
+
+
+def test_run_evaluation_multilabel_returns_2d_preds() -> None:
+    n_labels = 4
+    model = _TinyMultiLabelNet(n_labels)
+    crit = nn.BCEWithLogitsLoss()
+    opt = torch.optim.Adam(model.parameters(), lr=0.01)
+    adapter = SimpleTorchAdapter(
+        model,
+        crit,
+        opt,
+        target_layers=[model.conv1],
+        device="cpu",
+        multilabel=True,
+    )
+    x = torch.rand(16, 3, 32, 32)
+    y = torch.randint(0, 2, (16, n_labels)).float()
+    loader = DataLoader(TensorDataset(x, y), batch_size=8)
+    config = BNNRConfig(device="cpu", task="multilabel", metrics=["f1_macro", "loss"])
+    metrics, per_class, confusion, preds, labels = run_evaluation(
+        adapter, loader, config, return_preds_labels=True
+    )
+    assert confusion.get("type") == "multilabel_per_label"
+    assert confusion.get("n_samples") == 16
+    assert preds is not None and labels is not None
+    assert preds.shape == (16, n_labels)
+    assert labels.shape == (16, n_labels)
+    assert len(per_class) == n_labels
+
+
+def test_multilabel_analyze_extended_no_false_kappa() -> None:
+    n_labels = 4
+    model = _TinyMultiLabelNet(n_labels)
+    crit = nn.BCEWithLogitsLoss()
+    opt = torch.optim.Adam(model.parameters(), lr=0.01)
+    adapter = SimpleTorchAdapter(
+        model,
+        crit,
+        opt,
+        target_layers=[model.conv1],
+        device="cpu",
+        multilabel=True,
+    )
+    x = torch.rand(24, 3, 32, 32)
+    y = torch.randint(0, 2, (24, n_labels)).float()
+    loader = DataLoader(TensorDataset(x, y), batch_size=8)
+    config = BNNRConfig(
+        device="cpu",
+        task="multilabel",
+        metrics=["f1_macro", "f1_samples", "accuracy", "loss"],
+    )
+    report = analyze_model(
+        adapter,
+        loader,
+        config=config,
+        output_dir=None,
+        run_data_quality=False,
+        xai_enabled=False,
+        cv_folds=3,
+    )
+    assert report.analysis_scope.get("task") == "multilabel"
+    assert report.analysis_scope.get("extended_analysis") is True
+    assert report.confusion.get("type") == "multilabel_per_label"
+    assert "cohen_kappa" not in report.metrics
+    assert len(report.class_diagnostics) == n_labels
+    assert isinstance(report.findings, list)
+    assert isinstance(report.recommendations_structured, list)
+    assert isinstance(report.recommendations, list) and len(report.recommendations) >= 1
+    assert "ece" not in report.metrics
+    assert report.cv_results.get("n_folds", 0) >= 1
+
+
+def test_top1_ece_perfect_calibration() -> None:
+    from bnnr.analysis.calibration import compute_top1_ece
+
+    n = 200
+    conf = np.ones(n) * 0.8
+    correct = np.random.RandomState(0).rand(n) < 0.8
+    out = compute_top1_ece(conf, correct, n_bins=10)
+    assert "ece" in out
+    assert 0 <= out["ece"] <= 1
 
 
 def test_analyze_cli(tmp_path: Path) -> None:

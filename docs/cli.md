@@ -83,7 +83,7 @@ Run standalone diagnostics on a trained model (no training): metrics, XAI, data 
 
 Required: `--model` (checkpoint `.pt`), `--data` (directory or dataset name: `mnist`, `fashion_mnist`, `cifar10`, `stl10`), `--output`.
 
-Options: `--task` (classification, multilabel, detection), `--config`, `--max-worst`, `--no-xai`, `--no-data-quality`, `--device`, `--batch-size`, `--cv-folds`, `--xai-samples`, `--summary/--no-summary`.
+Options: `--task` (classification or multilabel only; detection is not supported by analyze), `--config`, `--max-worst`, `--no-xai`, `--no-data-quality`, `--device`, `--batch-size`, `--cv-folds`, `--xai-samples`, `--summary/--no-summary`.
 
 See `analyze.md` for details and examples.
 

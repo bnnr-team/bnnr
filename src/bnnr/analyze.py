@@ -16,13 +16,18 @@ import torch
 from torch import Tensor
 
 from bnnr.adapter import XAICapableModel
+from bnnr.analysis.calibration import compute_top1_ece
 from bnnr.analysis.class_diagnostics import (
     build_distribution_summary,
     compute_class_diagnostics,
     compute_global_cohen_kappa,
+    compute_multilabel_label_diagnostics,
 )
-from bnnr.analysis.cross_validation import run_cross_validation_from_predictions
-from bnnr.analysis.findings import build_findings
+from bnnr.analysis.cross_validation import (
+    run_cross_validation_from_predictions,
+    run_cross_validation_multilabel_from_predictions,
+)
+from bnnr.analysis.findings import build_findings, build_findings_multilabel
 from bnnr.analysis.recommendations import (
     build_recommendations as build_recommendations_structured,
 )
@@ -51,7 +56,7 @@ class AnalysisReport:
     failure_patterns: list[dict[str, Any]] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
     # Extended v0.2 schema
-    schema_version: str = "0.2.0"
+    schema_version: str = "0.2.1"
     executive_summary: dict[str, Any] = field(default_factory=dict)
     findings: list[dict[str, Any]] = field(default_factory=list)
     recommendations_structured: list[dict[str, Any]] = field(default_factory=list)
@@ -68,6 +73,8 @@ class AnalysisReport:
     # v0.2.1: confusion pair XAI analysis and best/worst per-class examples
     confusion_pair_xai: list[dict[str, Any]] = field(default_factory=list)
     best_worst_examples: dict[str, dict[str, list]] = field(default_factory=dict)
+    analysis_scope: dict[str, Any] = field(default_factory=dict)
+    calibration_summary: dict[str, Any] = field(default_factory=dict)
     # Cached predictions for downstream analysis (not serialized)
     _cached_preds: Any = field(default=None, repr=False)
     _cached_labels: Any = field(default=None, repr=False)
@@ -104,6 +111,8 @@ class AnalysisReport:
             "cv_results": self.cv_results,
             "confusion_pair_xai": self.confusion_pair_xai,
             "best_worst_examples": self.best_worst_examples,
+            "analysis_scope": self.analysis_scope,
+            "calibration_summary": self.calibration_summary,
         }
         json_path = out / "analysis_report.json"
         json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -140,9 +149,13 @@ def analyze_model(
 ) -> AnalysisReport:
     """Run full analysis on a model (adapter) and validation loader.
 
+    Supported tasks: ``classification`` and ``multilabel`` only. Detection is
+    not supported until the main BNNR training stack ships it.
+
     Performs: forward pass -> metrics + per-class + confusion; optional XAI,
     data quality, failure analysis, confusion-pair XAI, best/worst per-class,
-    and structured recommendations.
+    and structured recommendations (classification); or multi-label diagnostics
+    and optional multi-label XAI.
     """
     from bnnr.core import BNNRConfig
 
@@ -151,6 +164,15 @@ def analyze_model(
             task=task,
             device=device,
             metrics=["accuracy", "f1_macro", "loss"],
+        )
+
+    eff_task = getattr(config, "task", task)
+    if isinstance(eff_task, str):
+        eff_task = eff_task.strip().lower()
+    if eff_task not in ("classification", "multilabel"):
+        raise ValueError(
+            f"bnnr analyze supports only task 'classification' or 'multilabel', not {eff_task!r}. "
+            "Detection and other tasks are not supported in analyze yet."
         )
 
     metrics, per_class, confusion, _preds, _labels = run_evaluation(
@@ -165,17 +187,18 @@ def analyze_model(
         confusion=confusion,
     )
 
-    max_probe = max(5, xai_samples // 10) if xai_samples else 5
-    if xai_enabled and task == "classification" and isinstance(adapter, XAICapableModel):
-        _run_xai(adapter, val_loader, config, report, xai_method, max_probe_per_class=max_probe)
+    if eff_task == "classification":
+        report.analysis_scope = {"task": "classification", "extended_analysis": True}
+        max_probe = max(5, xai_samples // 10) if xai_samples else 5
+        if xai_enabled and isinstance(adapter, XAICapableModel):
+            _run_xai(adapter, val_loader, config, report, xai_method, max_probe_per_class=max_probe)
 
-    if task == "classification":
         _run_failure_analysis(
             adapter, val_loader, config, report, max_worst, output_dir, xai_enabled, xai_method
         )
         report.failure_patterns = _build_failure_patterns(report)
-        report.recommendations = _build_recommendations(report)
         _build_extended_analysis(report)
+        report.recommendations = _recommendations_from_structured(report.recommendations_structured)
 
         if cv_folds and cv_folds > 1:
             _run_cross_validation(
@@ -200,6 +223,45 @@ def analyze_model(
                 output_dir=Path(output_dir),
             )
             _build_best_worst_per_class(
+                adapter=adapter,
+                val_loader=val_loader,
+                report=report,
+                xai_method=xai_method,
+                output_dir=Path(output_dir),
+            )
+
+    elif eff_task == "multilabel":
+        report.analysis_scope = {
+            "task": "multilabel",
+            "extended_analysis": True,
+            "notes": (
+                "Optional XAI uses the first mismatched label index per sample as the CAM target; "
+                "use per-label precision/recall for threshold tuning."
+            ),
+        }
+        _run_failure_analysis(
+            adapter, val_loader, config, report, max_worst, output_dir, xai_enabled, xai_method
+        )
+        report.failure_patterns = _build_failure_patterns_multilabel(report)
+        _build_extended_analysis_multilabel(report)
+        report.recommendations = _recommendations_from_structured(report.recommendations_structured)
+
+        if cv_folds and cv_folds > 1 and report._cached_preds is not None and report._cached_labels is not None:
+            cv_ml = run_cross_validation_multilabel_from_predictions(
+                report._cached_preds,
+                report._cached_labels,
+                cv_folds,
+            )
+            report.cv_results = serialize_for_json(cv_ml)
+
+        if (
+            xai_enabled
+            and isinstance(adapter, XAICapableModel)
+            and output_dir is not None
+            and report._cached_preds is not None
+            and report._cached_labels is not None
+        ):
+            _run_multilabel_xai_minimal(
                 adapter=adapter,
                 val_loader=val_loader,
                 report=report,
@@ -318,6 +380,12 @@ def _run_failure_analysis(
     report._cached_confidences = confidences
     report._cached_losses = losses
 
+    task = getattr(config, "task", "classification")
+    if task == "classification" and preds.ndim == 1:
+        cal = compute_top1_ece(confidences, preds == labels)
+        report.metrics["ece"] = cal["ece"]
+        report.calibration_summary = cal
+
     if xai_enabled and isinstance(adapter, XAICapableModel) and output_dir is not None:
         _build_xai_examples_for_worst_cases(
             adapter=adapter,
@@ -351,6 +419,8 @@ def _build_xai_examples_for_worst_cases(
     This focuses on classification worst cases and writes overlays under
     ``output_dir / artifacts / xai_examples``.
     """
+    if preds.ndim != 1:
+        return
     try:
         from bnnr.xai import generate_saliency_maps, save_xai_visualization
     except Exception:
@@ -820,29 +890,25 @@ def _build_failure_patterns(report: AnalysisReport) -> list[dict[str, Any]]:
     return patterns
 
 
-def _build_recommendations(report: AnalysisReport) -> list[str]:
-    """Build improvement recommendations from metrics, XAI, and patterns."""
-    recs: list[str] = []
-    acc = report.metrics.get("accuracy", 0.0)
-    if acc < 0.7:
-        recs.append("Overall accuracy is below 70%. Consider more data, augmentation (e.g. ICD/AICD), or architecture changes.")
-    for pat in report.failure_patterns:
-        if pat.get("type") == "confused_pair" and pat.get("count", 0) >= 5:
-            recs.append(
-                f"Model often confuses class {pat.get('true_class')} with {pat.get('pred_class')} "
-                f"({pat.get('count')} times). Consider targeted augmentation or more samples for these classes."
-            )
-        if pat.get("type") == "low_xai_quality":
-            recs.append(
-                f"Class {pat.get('class')} has low XAI quality (model may focus on background). "
-                "Consider ICD or AICD to encourage object-focused features."
-            )
-    mean_q = (report.xai_quality_summary or {}).get("mean_quality_score")
-    if mean_q is not None and mean_q < 0.5:
-        recs.append("Overall XAI quality is low. Consider running BNNR train with XAI-enabled augmentation search (ICD/AICD).")
-    if not recs:
-        recs.append("No strong improvement recommendations; model metrics and XAI quality are acceptable.")
-    return recs
+def _recommendations_from_structured(structured: list[dict[str, Any]]) -> list[str]:
+    """Short human-readable lines derived from structured recs (single channel, no duplicate heuristics)."""
+    if not structured:
+        return ["See structured recommendations in analysis_report.json."]
+    lines: list[str] = []
+    for r in structured[:10]:
+        title = str(r.get("title", "")).strip()
+        action = str(r.get("action", "")).strip()
+        ev = r.get("evidence_from_run") or []
+        ev_txt = ""
+        if isinstance(ev, list) and ev:
+            ev_txt = "; ".join(str(x) for x in ev[:3])
+        if ev_txt and action:
+            lines.append(f"{title} — {ev_txt}. {action}")
+        elif action:
+            lines.append(f"{title}: {action}")
+        else:
+            lines.append(title or "Recommendation")
+    return lines
 
 
 _CONFIDENCE_PREFIXES = {"high": "", "medium": "[Likely] ", "low": "[Suspected] "}
@@ -852,16 +918,27 @@ def _build_executive_summary(
     report: AnalysisReport,
     findings: list[Any],
     recs_structured: list[Any],
+    *,
+    multilabel: bool = False,
 ) -> dict[str, Any]:
     """Build 30-second summary: health, key findings, top actions."""
     from bnnr.analysis.schema import ExecutiveSummary
 
-    acc = report.metrics.get("accuracy")
-    if acc is None:
-        acc = 0.0
+    if multilabel:
+        acc = report.metrics.get("f1_macro")
+        if acc is None:
+            acc = 0.0
+        else:
+            acc = float(acc)
+    else:
+        acc_m = report.metrics.get("accuracy")
+        acc = 0.0 if acc_m is None else float(acc_m)
+
     mean_q = (report.xai_quality_summary or {}).get("mean_quality_score")
     if mean_q is None:
         mean_q = 1.0
+    else:
+        mean_q = float(mean_q)
 
     if acc >= 0.85 and mean_q >= 0.6:
         health_status = "ok"
@@ -883,7 +960,10 @@ def _build_executive_summary(
         prefix = _CONFIDENCE_PREFIXES.get(f.confidence, "")
         key_findings.append(f"{prefix}{f.title}")
     if not key_findings:
-        key_findings = [f"Overall accuracy is {acc:.0%}"]
+        if multilabel:
+            key_findings = [f"Macro F1 is {acc:.0%}"]
+        else:
+            key_findings = [f"Overall accuracy is {acc:.0%}"]
 
     top_actions = [r.title for r in recs_structured[:3]] if recs_structured else []
     if not top_actions and report.recommendations:
@@ -910,6 +990,8 @@ def _build_executive_summary(
 def _build_extended_analysis(report: AnalysisReport) -> None:
     """Fill executive summary, findings, structured recommendations, class diagnostics."""
     report.schema_version = REPORT_SCHEMA_VERSION
+    if report.confusion.get("type") == "multilabel_per_label":
+        return
 
     global_kappa = compute_global_cohen_kappa(report.confusion)
     report.metrics["cohen_kappa"] = round(global_kappa, 4)
@@ -930,8 +1012,167 @@ def _build_extended_analysis(report: AnalysisReport) -> None:
     report.recommendations_structured = [serialize_for_json(r) for r in recs_structured]
 
     report.executive_summary = _build_executive_summary(
-        report, findings, recs_structured
+        report, findings, recs_structured, multilabel=False
     )
+
+
+def _build_failure_patterns_multilabel(report: AnalysisReport) -> list[dict[str, Any]]:
+    patterns: list[dict[str, Any]] = []
+    for lid, info in report.per_class_accuracy.items():
+        f1 = info.get("f1")
+        sup = int(info.get("support", 0))
+        if sup <= 0 or f1 is None:
+            continue
+        f1f = float(f1)
+        if f1f < 0.15:
+            patterns.append({
+                "type": "low_f1_label",
+                "label": str(lid),
+                "f1": round(f1f, 4),
+                "support": sup,
+            })
+    patterns.sort(key=lambda x: x.get("f1", 1.0))
+    return patterns[:15]
+
+
+def _build_extended_analysis_multilabel(report: AnalysisReport) -> None:
+    """Structured report for multi-label (no multi-class Cohen's kappa / confusion matrix)."""
+    report.schema_version = REPORT_SCHEMA_VERSION
+
+    class_diag, true_dist, pred_dist = compute_multilabel_label_diagnostics(report.confusion)
+    report.class_diagnostics = [serialize_for_json(d) for d in class_diag]
+    report.true_distribution = true_dist
+    report.pred_distribution = pred_dist
+    report.distribution_summary = build_distribution_summary(true_dist, pred_dist)
+
+    findings, patterns_ext = build_findings_multilabel(
+        report, class_diag, true_dist, pred_dist
+    )
+    report.findings = [serialize_for_json(f) for f in findings]
+    report.failure_patterns_extended = [serialize_for_json(p) for p in patterns_ext]
+
+    recs_structured = build_recommendations_structured(findings, report, max_items=15)
+    report.recommendations_structured = [serialize_for_json(r) for r in recs_structured]
+
+    report.executive_summary = _build_executive_summary(
+        report, findings, recs_structured, multilabel=True
+    )
+
+
+def _run_multilabel_xai_minimal(
+    *,
+    adapter: XAICapableModel,
+    val_loader: Any,
+    report: AnalysisReport,
+    xai_method: str,
+    output_dir: Path,
+    max_samples: int = 12,
+) -> None:
+    """Saliency for high-loss samples; CAM target = first label where prediction disagrees with GT."""
+    try:
+        from bnnr.xai import generate_saliency_maps, save_xai_visualization
+    except Exception:
+        return
+
+    preds = report._cached_preds
+    labels = report._cached_labels
+    losses = report._cached_losses
+    indices = report._cached_indices
+    if preds is None or labels is None or losses is None or indices is None:
+        return
+    if preds.ndim != 2 or labels.ndim != 2 or preds.shape != labels.shape:
+        return
+
+    dataset = getattr(val_loader, "dataset", None)
+    if dataset is None:
+        return
+
+    order = np.argsort(-losses)
+    images: list[Tensor] = []
+    cam_targets: list[int] = []
+    meta: list[dict[str, Any]] = []
+
+    y_int = labels.astype(int)
+    p_int = preds.astype(int)
+    for idx_in_arr in order:
+        if len(images) >= max_samples:
+            break
+        i = int(idx_in_arr)
+        row_y = y_int[i]
+        row_p = p_int[i]
+        target_j = None
+        for j in range(row_y.shape[0]):
+            if int(row_y[j]) != int(row_p[j]):
+                target_j = j
+                break
+        if target_j is None:
+            continue
+        ds_index = int(indices[i])
+        try:
+            sample = dataset[ds_index]
+        except Exception:
+            continue
+        img = sample[0] if isinstance(sample, (list, tuple)) else sample
+        if not isinstance(img, Tensor):
+            continue
+        images.append(img.unsqueeze(0))
+        cam_targets.append(int(target_j))
+        meta.append({
+            "index": ds_index,
+            "target_label": int(target_j),
+            "loss": float(losses[i]),
+        })
+
+    if not images:
+        return
+
+    images_batch = torch.cat(images, dim=0)
+    labels_batch = torch.tensor(cam_targets, dtype=torch.long)
+
+    model = adapter.get_model()
+    target_layers = adapter.get_target_layers()
+    device = next(model.parameters()).device
+    model.eval()
+    maps = generate_saliency_maps(
+        model,
+        images_batch.to(device),
+        labels_batch.to(device),
+        target_layers,
+        method=xai_method,
+    )
+
+    imgs_np: list[np.ndarray] = []
+    for img in images_batch:
+        hwc = img.detach().cpu().float().permute(1, 2, 0).numpy()
+        mn, mx = float(hwc.min()), float(hwc.max())
+        if mx > mn:
+            hwc = (hwc - mn) / (mx - mn)
+        imgs_np.append(np.clip(hwc * 255.0, 0.0, 255.0).astype(np.uint8))
+    images_np = np.stack(imgs_np, axis=0)
+
+    save_dir = output_dir / "artifacts" / "xai_multilabel"
+    paths = save_xai_visualization(images_np, maps, save_dir, prefix="ml")
+
+    examples: list[dict[str, Any]] = []
+    for info, path in zip(meta, paths):
+        try:
+            rp = str(path.relative_to(output_dir))
+        except ValueError:
+            rp = str(path)
+        examples.append({
+            **info,
+            "overlay_path": rp,
+            "note": "CAM target is first mismatched label index for this sample.",
+        })
+
+    report.xai_quality_summary = {
+        **(report.xai_quality_summary or {}),
+        "multilabel_probe_count": len(examples),
+        "multilabel_xai_note": (
+            "Grad-CAM-style maps target one label index per image (first mismatch vs ground truth)."
+        ),
+    }
+    report.xai_examples_per_class = {"multilabel_high_loss": examples}
 
 
 def _build_probe_set(
@@ -976,8 +1217,6 @@ def _run_data_quality(
 ) -> None:
     from bnnr.data_quality import run_data_quality_analysis
 
-    task = getattr(config, "task", "classification")
-    is_detection = task == "detection"
     save_dir = None
     if output_dir is not None:
         save_dir = Path(output_dir) / "artifacts" / "data_quality"
@@ -985,7 +1224,7 @@ def _run_data_quality(
     result = run_data_quality_analysis(
         loader,
         max_samples=max_samples,
-        is_detection=is_detection,
+        is_detection=False,
         save_dir=save_dir,
     )
     data_quality = result.get("data_quality", result)

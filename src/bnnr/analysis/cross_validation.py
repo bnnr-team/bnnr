@@ -170,3 +170,81 @@ def run_cross_validation_from_predictions(
         per_fold_metrics=per_fold_dicts,
     )
 
+
+def _macro_f1_multilabel(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Macro-averaged F1 over labels; shapes (N, L) with 0/1 values."""
+    if y_true.ndim != 2 or y_pred.ndim != 2 or y_true.shape != y_pred.shape:
+        return 0.0
+    _, L = y_true.shape
+    f1s: list[float] = []
+    for j in range(L):
+        yt = y_true[:, j].astype(int)
+        yp = y_pred[:, j].astype(int)
+        tp = int(np.sum((yt == 1) & (yp == 1)))
+        fp = int(np.sum((yt == 0) & (yp == 1)))
+        fn = int(np.sum((yt == 1) & (yp == 0)))
+        prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+        f1s.append(f1)
+    return float(np.mean(f1s)) if f1s else 0.0
+
+
+def _subset_accuracy_multilabel(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    if y_true.shape != y_pred.shape or y_true.size == 0:
+        return 0.0
+    return float(np.mean(np.all(y_true.astype(int) == y_pred.astype(int), axis=1)))
+
+
+def run_cross_validation_multilabel_from_predictions(
+    preds: np.ndarray,
+    labels: np.ndarray,
+    n_folds: int,
+) -> CrossValidationResults:
+    """K-fold metrics on multi-label predictions (same split for all labels)."""
+    if n_folds < 2 or preds.shape[0] != labels.shape[0]:
+        return CrossValidationResults(n_folds=0, global_metrics={}, per_fold_metrics=[])
+    n = preds.shape[0]
+    rng = np.random.default_rng(0)
+    indices = np.arange(n)
+    rng.shuffle(indices)
+    folds = np.array_split(indices, n_folds)
+
+    f1_macros: list[float] = []
+    sub_accs: list[float] = []
+    per_fold_dicts: list[dict[str, Any]] = []
+
+    for fold_id, fold_idx in enumerate(folds):
+        if fold_idx.size == 0:
+            continue
+        mask = np.ones(n, dtype=bool)
+        mask[fold_idx] = False
+        te = fold_idx
+        y_t = labels[te]
+        y_p = preds[te]
+        f1m = _macro_f1_multilabel(y_t, y_p)
+        sa = _subset_accuracy_multilabel(y_t, y_p)
+        f1_macros.append(f1m)
+        sub_accs.append(sa)
+        per_fold_dicts.append({
+            "fold": fold_id,
+            "f1_macro": round(f1m, 4),
+            "subset_accuracy": round(sa, 4),
+            "support": int(te.size),
+        })
+
+    if not f1_macros:
+        return CrossValidationResults(n_folds=0, global_metrics={}, per_fold_metrics=[])
+
+    global_metrics = {
+        "mean_f1_macro": float(np.mean(f1_macros)),
+        "std_f1_macro": float(np.std(f1_macros)),
+        "mean_subset_accuracy": float(np.mean(sub_accs)),
+        "std_subset_accuracy": float(np.std(sub_accs)),
+    }
+    return CrossValidationResults(
+        n_folds=len(per_fold_dicts),
+        global_metrics=global_metrics,
+        per_fold_metrics=per_fold_dicts,
+    )
+

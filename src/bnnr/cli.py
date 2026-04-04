@@ -379,7 +379,12 @@ def analyze_command(
     model: Path = typer.Option(..., "--model", "-m", help="Path to model checkpoint (.pt) or state dict"),
     data: Path = typer.Option(..., "--data", "-d", help="Path to data directory (ImageFolder) or dataset name (e.g. mnist, cifar10)"),
     output: Path = typer.Option(..., "--output", "-o", help="Output directory for analysis_report.json and report.html"),
-    task: str = typer.Option("classification", "--task", "-t", help="Task: classification, detection, multilabel"),
+    task: str = typer.Option(
+        "classification",
+        "--task",
+        "-t",
+        help="Task: classification or multilabel only (detection is not supported by analyze yet).",
+    ),
     config: Optional[Path] = typer.Option(None, "--config", "-c", help="Optional YAML config (overrides defaults)"),
     max_worst: int = typer.Option(20, "--max-worst", help="Number of worst predictions to include"),
     no_xai: bool = typer.Option(False, "--no-xai", help="Disable XAI analysis"),
@@ -407,6 +412,15 @@ def analyze_command(
 
     if not model.exists():
         typer.echo(f"Error: Model path does not exist: {model}", err=True)
+        raise typer.Exit(code=1)
+
+    task_norm = task.strip().lower()
+    if task_norm not in ("classification", "multilabel"):
+        typer.echo(
+            "Error: bnnr analyze supports only --task classification or multilabel. "
+            f"Got {task!r}. Detection is not supported until the main stack ships it.",
+            err=True,
+        )
         raise typer.Exit(code=1)
 
     cfg = load_config(config) if config is not None and config.exists() else None
