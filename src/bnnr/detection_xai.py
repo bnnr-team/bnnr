@@ -13,8 +13,9 @@ Provides tools for visualizing how detection models make decisions:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import cv2
 import numpy as np
@@ -169,6 +170,8 @@ def generate_detection_saliency(
     images: Tensor,
     target_layers: list[nn.Module],
     device: str | torch.device = "cpu",
+    *,
+    forward_layout: Literal["torchvision_list", "ultralytics_bchw"] = "torchvision_list",
 ) -> list[np.ndarray]:
     """Generate saliency maps for detection model images.
 
@@ -189,6 +192,9 @@ def generate_detection_saliency(
         Layers to extract activations from.
     device : str
         Device for computation.
+    forward_layout : str
+        ``torchvision_list`` — ``model([CHW, ...])`` (torchvision detection).
+        ``ultralytics_bchw`` — ``model(BCHW)`` with 0–255 float inputs (Ultralytics).
 
     Returns
     -------
@@ -211,12 +217,16 @@ def generate_detection_saliency(
 
     try:
         with torch.no_grad():
-            # For detection models, we feed list of images
-            if images.dim() == 4:
-                image_list = [img for img in images]
+            if forward_layout == "ultralytics_bchw":
+                x = (images.float() * 255.0).clamp(0.0, 255.0)
+                model(x)
             else:
-                image_list = [images]
-            model(image_list)
+                # Torchvision detection: list of CHW tensors
+                if images.dim() == 4:
+                    image_list = [img for img in images]
+                else:
+                    image_list = [images]
+                model(image_list)
     finally:
         for h in handles:
             h.remove()
@@ -301,6 +311,7 @@ def compute_detection_box_saliency_occlusion(
     query_labels: Tensor,
     *,
     baseline_pred: dict[str, Tensor] | None = None,
+    predict_chw: Callable[[Tensor], dict[str, Tensor]] | None = None,
     device: str | torch.device = "cpu",
     grid_size: int = 6,
     iou_threshold: float = 0.3,
@@ -310,6 +321,10 @@ def compute_detection_box_saliency_occlusion(
 
     For each queried box+class, we measure how the matched score drops when
     local regions are occluded. This is detection-conditioned and class-aware.
+
+    predict_chw
+        If set, predictions for a single ``[C,H,W]`` image come from this
+        callable instead of ``model([image])[0]`` (Ultralytics / non-torchvision).
     """
     if query_boxes.numel() == 0:
         return [], torch.zeros((0,), dtype=torch.float32)
@@ -323,8 +338,13 @@ def compute_detection_box_saliency_occlusion(
     qb = query_boxes.detach().to(device)
     ql = query_labels.detach().to(device)
 
+    def _predict_one(im: Tensor) -> dict[str, Tensor]:
+        if predict_chw is not None:
+            return predict_chw(im)
+        return model([im])[0]
+
     with torch.no_grad():
-        base_pred = baseline_pred if baseline_pred is not None else model([img])[0]
+        base_pred = baseline_pred if baseline_pred is not None else _predict_one(img)
         baseline_scores = _matched_scores_for_queries(base_pred, qb, ql, iou_threshold=iou_threshold).to(device)
 
     # Coarse grid for runtime balance; upsampled to full image size.
@@ -347,7 +367,7 @@ def compute_detection_box_saliency_occlusion(
             occluded = img.clone()
             occluded[:, y1:y2, x1:x2] = occlusion_value
             with torch.no_grad():
-                pred_occ = model([occluded])[0]
+                pred_occ = _predict_one(occluded)
                 occ_scores = _matched_scores_for_queries(pred_occ, qb, ql, iou_threshold=iou_threshold).to(device)
             sal_grid[:, gy, gx] = (baseline_scores - occ_scores).clamp(min=0)
 

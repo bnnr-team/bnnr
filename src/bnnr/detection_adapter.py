@@ -407,15 +407,22 @@ class UltralyticsDetectionAdapter:
 
         return {"loss": float(total_loss.item())}
 
-    def eval_step(self, batch: Any) -> dict[str, float]:
-        """Evaluation step: accumulate predictions for epoch-level mAP."""
-        images, targets = batch
-        self._model.eval()
+    def _empty_detection_pred_cpu(self) -> dict[str, Tensor]:
+        return {
+            "boxes": torch.zeros((0, 4), dtype=torch.float32),
+            "scores": torch.zeros((0,), dtype=torch.float32),
+            "labels": torch.zeros((0,), dtype=torch.long),
+        }
 
+    def _predict_results_dicts(self, images: Any) -> list[dict[str, Tensor]]:
+        """Run ``YOLO.predict`` and return one CPU pred dict per image (aligned with batch)."""
         if isinstance(images, Tensor):
             src = (images.float().to(self.device) * 255.0).clamp(0.0, 255.0)
+            batch_n = int(images.shape[0])
         else:
             src = images
+            batch_n = -1
+
         results = self._yolo.predict(
             source=src,
             device=self.device,
@@ -423,19 +430,45 @@ class UltralyticsDetectionAdapter:
             verbose=False,
         )
 
+        out: list[dict[str, Tensor]] = []
         for result in results:
-            boxes = result.boxes
+            boxes = getattr(result, "boxes", None)
             if boxes is None:
+                out.append(self._empty_detection_pred_cpu())
                 continue
-
             boxes_xyxy = _to_cpu_tensor(boxes.xyxy)
             scores = _to_cpu_tensor(boxes.conf)
             labels = _to_cpu_tensor(boxes.cls).long()
-            self._eval_preds.append({
+            out.append({
                 "boxes": boxes_xyxy,
                 "scores": scores,
                 "labels": labels,
             })
+
+        if batch_n > 0:
+            if len(out) < batch_n:
+                for _ in range(batch_n - len(out)):
+                    out.append(self._empty_detection_pred_cpu())
+            elif len(out) > batch_n:
+                out = out[:batch_n]
+
+        return out
+
+    def predict_detection_dicts(self, images: Tensor) -> list[dict[str, Tensor]]:
+        """Run inference and return torchvision-style pred dicts on CPU (no ``_eval_*`` mutation).
+
+        Used by detection XAI and probe snapshots with ``UltralyticsDetectionAdapter``.
+        """
+        self._model.eval()
+        return self._predict_results_dicts(images)
+
+    def eval_step(self, batch: Any) -> dict[str, float]:
+        """Evaluation step: accumulate predictions for epoch-level mAP."""
+        images, targets = batch
+        self._model.eval()
+
+        preds = self._predict_results_dicts(images)
+        self._eval_preds.extend(preds)
 
         for target in targets:
             self._eval_targets.append({

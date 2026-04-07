@@ -274,6 +274,12 @@ def _apply_events_to_state(
                         "accuracy": "%",
                         "loss": "unitless",
                     }
+                elif task == "detection":
+                    payload["metric_units"] = {
+                        "map_50": "%",
+                        "map_50_95": "%",
+                        "loss": "unitless",
+                    }
                 else:
                     payload["metric_units"] = {
                         "accuracy": "%",

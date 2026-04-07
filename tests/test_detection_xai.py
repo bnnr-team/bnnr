@@ -169,6 +169,30 @@ class TestGenerateSaliency:
             assert sal.shape == (32, 32)
             assert np.allclose(sal, 0.0)
 
+    def test_ultralytics_bchw_forward_layout(self) -> None:
+        """BCHW forward path used for Ultralytics task modules."""
+        import torch.nn as nn
+
+        class BchwBackbone(nn.Module):
+            def forward(self, x: Tensor) -> Tensor:
+                return x
+
+        model = BchwBackbone()
+        images = torch.rand(2, 3, 24, 24)
+        target_layers = [model]
+
+        saliencies = generate_detection_saliency(
+            model,
+            images,
+            target_layers,
+            device="cpu",
+            forward_layout="ultralytics_bchw",
+        )
+        assert len(saliencies) == 2
+        for sal in saliencies:
+            assert sal.shape == (24, 24)
+            assert sal.dtype == np.float32
+
 
 # ---------------------------------------------------------------------------
 #  save_detection_xai_panels

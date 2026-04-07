@@ -150,3 +150,10 @@ result = quick_run(
 ```
 
 Useful arguments include `augmentations`, `config`/overrides, `criterion`, `optimizer`, `target_layers`, and `eval_metrics`.
+
+## Detection and Ultralytics YOLO
+
+- Torchvision-style detectors (Faster R-CNN, etc.): use `DetectionAdapter` from `bnnr.detection_adapter`.
+- Ultralytics YOLO: use `UltralyticsDetectionAdapter`. It runs inference via `YOLO.predict` with the same 0–255 scaling as `eval_step`, and exposes `predict_detection_dicts(batch_bchw)` for detection XAI and probe snapshots inside `BNNRTrainer`.
+
+For raw `ultralytics.nn.tasks` modules without this adapter, detection XAI stays disabled; see [troubleshooting.md §17](troubleshooting.md).

@@ -197,3 +197,17 @@ Cause:
 Fix:
 
 - integrate multi-label data with `SimpleTorchAdapter(multilabel=True)` and `BCEWithLogitsLoss` ([golden_path.md](golden_path.md)), or run `examples/multilabel/multilabel_demo.py`; do not expect `--dataset cifar10` (or similar) alone to become multi-label.
+
+## 17) Detection XAI with YOLO / Ultralytics
+
+Symptom:
+
+- Log says detection XAI or probe prediction snapshots were skipped for an Ultralytics backbone.
+
+Cause:
+
+- BNNR needs the high-level `YOLO.predict` path and the same image scaling as training. A raw `ultralytics.nn.tasks.DetectionModel` passed through `DetectionAdapter` does not expose that.
+
+Fix:
+
+- Use `UltralyticsDetectionAdapter` from `bnnr.detection_adapter` for Ultralytics YOLO training. That adapter implements `predict_detection_dicts` so detection XAI (activation / occlusion) and probe snapshots work with `xai_enabled=True`.

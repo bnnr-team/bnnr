@@ -8,11 +8,13 @@ the _targets_to_device helper.
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import MagicMock
 
+import pytest
 import torch
 from torch import Tensor, nn
 
-from bnnr.detection_adapter import DetectionAdapter, _targets_to_device
+from bnnr.detection_adapter import DetectionAdapter, UltralyticsDetectionAdapter, _targets_to_device
 
 # ---------------------------------------------------------------------------
 # Helpers — tiny detection model that mimics the torchvision contract.
@@ -283,3 +285,142 @@ class TestDetectionAdapterProtocol:
         layers = adapter.get_target_layers()
         assert isinstance(layers, list)
         assert len(layers) > 0
+
+
+# ---------------------------------------------------------------------------
+# UltralyticsDetectionAdapter — mocked YOLO (no weights / GPU)
+# ---------------------------------------------------------------------------
+
+
+def _ultra_fake_inner_model() -> nn.Module:
+    m = nn.Conv2d(3, 8, 3, padding=1)
+
+    class _Args:
+        box = 7.5
+
+    m.args = _Args()
+    return m
+
+
+def _mock_yolo_results(count: int, *, with_boxes: bool) -> list[MagicMock]:
+    out: list[MagicMock] = []
+    for _ in range(count):
+        r = MagicMock()
+        if with_boxes:
+            b = MagicMock()
+            b.xyxy = torch.tensor([[1.0, 2.0, 10.0, 12.0]])
+            b.conf = torch.tensor([0.88])
+            b.cls = torch.tensor([3.0])
+            r.boxes = b
+        else:
+            r.boxes = None
+        out.append(r)
+    return out
+
+
+@pytest.fixture
+def fake_ultralytics_modules() -> Any:
+    """Stub ``ultralytics`` so tests run without the optional dependency."""
+    import sys
+    import types
+
+    saved: dict[str, Any] = {}
+    for key in ("ultralytics", "ultralytics.cfg"):
+        if key in sys.modules:
+            saved[key] = sys.modules[key]
+
+    ultra = types.ModuleType("ultralytics")
+    cfg_mod = types.ModuleType("ultralytics.cfg")
+
+    def get_cfg() -> Any:
+        ns = types.SimpleNamespace()
+        ns.box = 7.5
+        return ns
+
+    cfg_mod.get_cfg = get_cfg
+    sys.modules["ultralytics.cfg"] = cfg_mod
+    sys.modules["ultralytics"] = ultra
+
+    yield ultra
+
+    for key in ("ultralytics", "ultralytics.cfg"):
+        sys.modules.pop(key, None)
+    for key, mod in saved.items():
+        sys.modules[key] = mod
+
+
+class TestUltralyticsPredictDetectionDicts:
+    def test_predict_detection_dicts_one_per_batch_row(
+        self, fake_ultralytics_modules: Any,
+    ) -> None:
+        mock_yolo_cls = MagicMock()
+        yolo_inst = MagicMock()
+        yolo_inst.model = _ultra_fake_inner_model()
+        yolo_inst.predict.return_value = _mock_yolo_results(2, with_boxes=True)
+        mock_yolo_cls.return_value = yolo_inst
+        fake_ultralytics_modules.YOLO = mock_yolo_cls
+
+        adapter = UltralyticsDetectionAdapter(model_name="dummy.pt", device="cpu")
+        images = torch.rand(2, 3, 16, 16)
+        preds = adapter.predict_detection_dicts(images)
+
+        assert len(preds) == 2
+        assert preds[0]["boxes"].shape == (1, 4)
+        assert preds[0]["scores"].shape == (1,)
+        assert preds[0]["labels"].shape == (1,)
+        assert int(preds[0]["labels"][0].item()) == 3
+        yolo_inst.predict.assert_called_once()
+
+    def test_predict_detection_dicts_none_boxes_empty_tensors(
+        self, fake_ultralytics_modules: Any,
+    ) -> None:
+        mock_yolo_cls = MagicMock()
+        yolo_inst = MagicMock()
+        yolo_inst.model = _ultra_fake_inner_model()
+        yolo_inst.predict.return_value = _mock_yolo_results(1, with_boxes=False)
+        mock_yolo_cls.return_value = yolo_inst
+        fake_ultralytics_modules.YOLO = mock_yolo_cls
+
+        adapter = UltralyticsDetectionAdapter(model_name="dummy.pt", device="cpu")
+        preds = adapter.predict_detection_dicts(torch.rand(1, 3, 8, 8))
+
+        assert len(preds) == 1
+        assert preds[0]["boxes"].shape == (0, 4)
+        assert preds[0]["scores"].shape == (0,)
+        assert preds[0]["labels"].shape == (0,)
+
+    def test_predict_detection_dicts_pads_short_results(
+        self, fake_ultralytics_modules: Any,
+    ) -> None:
+        mock_yolo_cls = MagicMock()
+        yolo_inst = MagicMock()
+        yolo_inst.model = _ultra_fake_inner_model()
+        yolo_inst.predict.return_value = _mock_yolo_results(1, with_boxes=True)
+        mock_yolo_cls.return_value = yolo_inst
+        fake_ultralytics_modules.YOLO = mock_yolo_cls
+
+        adapter = UltralyticsDetectionAdapter(model_name="dummy.pt", device="cpu")
+        preds = adapter.predict_detection_dicts(torch.rand(3, 3, 8, 8))
+
+        assert len(preds) == 3
+        assert preds[0]["boxes"].shape[0] == 1
+        assert preds[1]["boxes"].shape == (0, 4)
+        assert preds[2]["boxes"].shape == (0, 4)
+
+    def test_eval_step_extends_preds_aligned_with_targets(
+        self, fake_ultralytics_modules: Any,
+    ) -> None:
+        mock_yolo_cls = MagicMock()
+        yolo_inst = MagicMock()
+        yolo_inst.model = _ultra_fake_inner_model()
+        yolo_inst.predict.return_value = _mock_yolo_results(2, with_boxes=True)
+        mock_yolo_cls.return_value = yolo_inst
+        fake_ultralytics_modules.YOLO = mock_yolo_cls
+
+        adapter = UltralyticsDetectionAdapter(model_name="dummy.pt", device="cpu")
+        images, targets = _make_batch(2, img_size=16)
+        adapter.eval_step((images, targets))
+
+        assert len(adapter._eval_preds) == 2
+        assert len(adapter._eval_targets) == 2
+        assert adapter._eval_preds[0]["boxes"].numel() > 0

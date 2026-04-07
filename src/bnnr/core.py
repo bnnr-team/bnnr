@@ -8,6 +8,7 @@ import random
 import re
 import time
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
@@ -1003,10 +1004,12 @@ class BNNRTrainer:
 
             model_impl = model_getter()
             device = next(model_impl.parameters()).device
-            if _is_ultralytics_tasks_backbone(model_impl):
+            predict_ultra = getattr(self.model, "predict_detection_dicts", None)
+            use_ultra_xai = callable(predict_ultra)
+            if _is_ultralytics_tasks_backbone(model_impl) and not use_ultra_xai:
                 self._log(
-                    "Detection XAI skipped: Ultralytics task models expect a BCHW tensor; "
-                    "torchvision-style list inputs are not supported here."
+                    "Detection XAI skipped: Ultralytics backbone requires "
+                    "UltralyticsDetectionAdapter.predict_detection_dicts (raw task module only)."
                 )
                 return [], {}, {}
 
@@ -1016,9 +1019,13 @@ class BNNRTrainer:
             targets = self._report_probe_targets
 
             xai_method = self.config.detection_xai_method
+            forward_layout = "ultralytics_bchw" if use_ultra_xai else "torchvision_list"
 
             with torch.no_grad():
-                preds = model_impl([img for img in images])
+                if use_ultra_xai:
+                    preds = predict_ultra(images)
+                else:
+                    preds = model_impl([img for img in images])
 
             # ── Activation-based saliency (fast: single batched forward pass) ──
             activation_saliency: list[np.ndarray] | None = None
@@ -1027,7 +1034,11 @@ class BNNRTrainer:
                 target_layers = target_layers_fn() if callable(target_layers_fn) else []
                 if target_layers:
                     activation_saliency = generate_detection_saliency(
-                        model_impl, images, target_layers, device=device,
+                        model_impl,
+                        images,
+                        target_layers,
+                        device=device,
+                        forward_layout=forward_layout,
                     )
 
             np_images = self._tensor_batch_to_preview_uint8(images.detach().cpu())
@@ -1038,6 +1049,20 @@ class BNNRTrainer:
             paths: list[Path] = []
             self._latest_detection_xai_details = []
             per_class_scores: dict[str, list[float]] = defaultdict(list)
+
+            ultra_predict_chw: Callable[[Tensor], dict[str, Tensor]] | None = None
+            if use_ultra_xai:
+                _pu = predict_ultra
+
+                def _ultra_predict_chw(im: Tensor) -> dict[str, Tensor]:
+                    d = _pu(im.unsqueeze(0))[0]
+                    return {
+                        k: v.to(device) if isinstance(v, Tensor) else v
+                        for k, v in d.items()
+                    }
+
+                ultra_predict_chw = _ultra_predict_chw
+
             for idx in range(np_images.shape[0]):
                 gt = targets[idx]
                 pred = preds[idx]
@@ -1088,12 +1113,21 @@ class BNNRTrainer:
                     if query_boxes_parts:
                         q_boxes = torch.cat(query_boxes_parts, dim=0)
                         q_labels = torch.cat(query_labels_parts, dim=0)
+                        pred_for_occ = (
+                            {
+                                k: v.to(device) if isinstance(v, Tensor) else v
+                                for k, v in pred.items()
+                            }
+                            if use_ultra_xai
+                            else pred
+                        )
                         sal_maps, _baseline_scores = compute_detection_box_saliency_occlusion(
                             model=model_impl,
                             image=images[idx],
                             query_boxes=q_boxes.to(device),
                             query_labels=q_labels.to(device),
-                            baseline_pred=pred,
+                            baseline_pred=pred_for_occ,
+                            predict_chw=ultra_predict_chw,
                             device=device,
                             grid_size=int(self.config.detection_xai_grid_size),
                             iou_threshold=0.3,
@@ -1928,13 +1962,18 @@ class BNNRTrainer:
             model = model_getter()
             device = next(model.parameters()).device
             images = self._report_probe_images.to(device)
-            if _is_ultralytics_tasks_backbone(model):
+            predict_ultra = getattr(self.model, "predict_detection_dicts", None)
+            if _is_ultralytics_tasks_backbone(model) and not callable(predict_ultra):
                 self._log(
-                    "Probe prediction snapshots skipped: Ultralytics backbone (use torchvision detection for this path)."
+                    "Probe prediction snapshots skipped: Ultralytics backbone without "
+                    "UltralyticsDetectionAdapter.predict_detection_dicts."
                 )
                 return
             with torch.no_grad():
-                preds = model([img for img in images])
+                if callable(predict_ultra):
+                    preds = predict_ultra(images)
+                else:
+                    preds = model([img for img in images])
 
             sample_ids = self._probe_sample_ids()
             reporter_run_dir = getattr(self.reporter, "run_dir", None)
