@@ -99,6 +99,7 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
         run_cfg = state.get("run", {}).get("config", {})
         task = run_cfg.get("task", "classification") if isinstance(run_cfg, dict) else "classification"
     is_multilabel = task == "multilabel"
+    is_detection = task == "detection"
 
     # Best metrics — task-aware primary/secondary metric keys
     if is_multilabel:

@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Literal, Optional, cast
 
 import cv2
 import numpy as np
@@ -1019,10 +1019,12 @@ class BNNRTrainer:
             targets = self._report_probe_targets
 
             xai_method = self.config.detection_xai_method
-            forward_layout = "ultralytics_bchw" if use_ultra_xai else "torchvision_list"
+            forward_layout: Literal["torchvision_list", "ultralytics_bchw"] = (
+                "ultralytics_bchw" if use_ultra_xai else "torchvision_list"
+            )
 
             with torch.no_grad():
-                if use_ultra_xai:
+                if use_ultra_xai and predict_ultra is not None:
                     preds = predict_ultra(images)
                 else:
                     preds = model_impl([img for img in images])
@@ -1051,7 +1053,7 @@ class BNNRTrainer:
             per_class_scores: dict[str, list[float]] = defaultdict(list)
 
             ultra_predict_chw: Callable[[Tensor], dict[str, Tensor]] | None = None
-            if use_ultra_xai:
+            if use_ultra_xai and predict_ultra is not None:
                 _pu = predict_ultra
 
                 def _ultra_predict_chw(im: Tensor) -> dict[str, Tensor]:
@@ -2905,7 +2907,6 @@ class BNNRTrainer:
             dq_save_dir = dq_run_dir / "artifacts" / "data_quality"
             quality_result = run_data_quality_analysis(
                 self.train_loader,
-                is_detection=self._is_detection,
                 save_dir=dq_save_dir,
                 run_dir=dq_run_dir,
                 duplicate_threshold=self.config.duplicate_hamming_threshold,

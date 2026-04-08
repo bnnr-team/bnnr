@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bnnr"
-version = "0.1.2"
+version = "0.2.0"
 description = "BNNR — Train → Explain → Improve → Prove"
 readme = "README.md"
 license = { text = "MIT" }
@@ -133,6 +133,10 @@ module = [
   "bnnr.augmentation_runner",
   "bnnr.craft",
   "bnnr.data_quality",
+  "bnnr.detection_xai",
+  "bnnr.detection_adapter",
+  "bnnr.detection_metrics",
+  "bnnr.detection_augmentations",
 ]
 # numpy/opencv return types are inherently Any; narrow ignore.
 disable_error_code = ["no-any-return"]
