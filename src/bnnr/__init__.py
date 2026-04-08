@@ -29,6 +29,21 @@ from bnnr.core import BNNRConfig, BNNRTrainer
 
 # Dashboard — public helper
 from bnnr.dashboard.serve import start_dashboard
+from bnnr.detection_adapter import DetectionAdapter
+from bnnr.detection_augmentations import (
+    AlbumentationsBboxAugmentation,
+    BboxAwareAugmentation,
+    DetectionHorizontalFlip,
+    DetectionMixUp,
+    DetectionRandomRotate90,
+    DetectionRandomScale,
+    DetectionVerticalFlip,
+    MosaicAugmentation,
+    get_detection_preset,
+)
+from bnnr.detection_collate import detection_collate_fn, detection_collate_fn_with_index
+from bnnr.detection_icd import DetectionAICD, DetectionICD
+from bnnr.detection_metrics import calculate_detection_metrics
 from bnnr.events import EVENT_SCHEMA_VERSION, JsonlEventSink, replay_events
 from bnnr.icd import AICD, ICD
 from bnnr.kornia_aug import KorniaAugmentation, create_kornia_pipeline, kornia_available
@@ -58,7 +73,7 @@ from bnnr.xai_analysis import (
 )
 from bnnr.xai_cache import XAICache
 
-__version__ = "0.1.2"
+__version__ = '0.1.2'
 
 __all__ = [
     "AugmentationRunner",
@@ -123,4 +138,19 @@ __all__ = [
     "get_preset",
     "list_presets",
     "start_dashboard",
+    "DetectionAdapter",
+    "BboxAwareAugmentation",
+    "AlbumentationsBboxAugmentation",
+    "DetectionHorizontalFlip",
+    "DetectionVerticalFlip",
+    "DetectionRandomRotate90",
+    "DetectionRandomScale",
+    "MosaicAugmentation",
+    "DetectionMixUp",
+    "get_detection_preset",
+    "DetectionICD",
+    "DetectionAICD",
+    "detection_collate_fn",
+    "detection_collate_fn_with_index",
+    "calculate_detection_metrics",
 ]

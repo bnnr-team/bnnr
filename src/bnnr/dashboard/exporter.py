@@ -226,7 +226,18 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
             original = artifacts.get("original")
             augmented = artifacts.get("augmented")
             xai = artifacts.get("xai")
-            if not (original or augmented or xai):
+            xai_gt = artifacts.get("xai_gt")
+            xai_saliency = artifacts.get("xai_saliency")
+            xai_pred = artifacts.get("xai_pred")
+            has_split_xai = (
+                isinstance(xai_gt, str)
+                and xai_gt
+                and isinstance(xai_saliency, str)
+                and xai_saliency
+                and isinstance(xai_pred, str)
+                and xai_pred
+            )
+            if not (original or augmented or xai or has_split_xai):
                 continue
 
             def _img(src: object, label: str) -> str:
@@ -240,6 +251,51 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
                     "</div>"
                 )
 
+            def _detection_xai_panels_split(gt: str, sal: str, pred: str) -> str:
+                return (
+                    "<div class='xai-triptych-row'>"
+                    "<div class='xai-triptych-title'>XAI Panels</div>"
+                    "<div class='xai-triptych'>"
+                    "<div class='img-block'>"
+                    f"<img src='./{html.escape(gt)}' alt='XAI GT' class='xai-panel xai-panel-split'/>"
+                    "<div class='caption'>GT</div>"
+                    "</div>"
+                    "<div class='img-block'>"
+                    f"<img src='./{html.escape(sal)}' alt='XAI Saliency' class='xai-panel xai-panel-split'/>"
+                    "<div class='caption'>Saliency</div>"
+                    "</div>"
+                    "<div class='img-block'>"
+                    f"<img src='./{html.escape(pred)}' alt='XAI Pred+Saliency' class='xai-panel xai-panel-split'/>"
+                    "<div class='caption'>Pred + Saliency</div>"
+                    "</div>"
+                    "</div>"
+                    "</div>"
+                )
+
+            def _detection_xai_panels_legacy(src: object) -> str:
+                if not isinstance(src, str) or not src:
+                    return ""
+                esc_src = html.escape(src)
+                return (
+                    "<div class='xai-triptych-row'>"
+                    "<div class='xai-triptych-title'>XAI Panels</div>"
+                    "<div class='xai-triptych'>"
+                    "<div class='img-block'>"
+                    f"<img src='./{esc_src}' alt='XAI GT' class='xai-panel xai-panel-gt'/>"
+                    "<div class='caption'>GT</div>"
+                    "</div>"
+                    "<div class='img-block'>"
+                    f"<img src='./{esc_src}' alt='XAI Saliency' class='xai-panel xai-panel-saliency'/>"
+                    "<div class='caption'>Saliency</div>"
+                    "</div>"
+                    "<div class='img-block'>"
+                    f"<img src='./{esc_src}' alt='XAI Pred+Saliency' class='xai-panel xai-panel-pred'/>"
+                    "<div class='caption'>Pred + Saliency</div>"
+                    "</div>"
+                    "</div>"
+                    "</div>"
+                )
+
             info = (
                 f"sample={html.escape(str(sample_id))} · "
                 f"branch={html.escape(str(entry.get('branch', '')))} · "
@@ -250,7 +306,18 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
             )
             conf = entry.get("confidence")
             conf_txt = f"{conf * 100:.1f}%" if isinstance(conf, (int, float)) else "—"
-            main_blocks = f"{_img(original, 'Original')}{_img(augmented, 'Augmented')}{_img(xai, 'XAI')}"
+            main_blocks = f"{_img(original, 'Original')}{_img(augmented, 'Augmented')}"
+            if not is_detection:
+                main_blocks += _img(xai, "XAI")
+            if is_detection:
+                if has_split_xai:
+                    detection_panels = _detection_xai_panels_split(
+                        str(xai_gt), str(xai_saliency), str(xai_pred),
+                    )
+                else:
+                    detection_panels = _detection_xai_panels_legacy(xai)
+            else:
+                detection_panels = ""
             sample_cards.append(
                 "<div class='sample-card'>"
                 f"<div class='sample-title'>{info}</div>"
@@ -258,6 +325,7 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
                 "<div class='img-row'>"
                 f"{main_blocks}"
                 "</div>"
+                f"{detection_panels}"
                 "</div>"
             )
             if len(sample_cards) >= 18:
@@ -329,6 +397,7 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
         .xai-triptych-title {{ font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px; }}
         .xai-triptych {{ display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 8px; }}
         .xai-panel {{ aspect-ratio: 1 / 1; object-fit: cover; }}
+        .xai-panel-split {{ object-position: center center; }}
         .xai-panel-gt {{ object-position: left center; }}
         .xai-panel-saliency {{ object-position: center center; }}
         .xai-panel-pred {{ object-position: right center; }}

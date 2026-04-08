@@ -41,6 +41,9 @@ export type SamplePoint = {
     original?: string | null;
     augmented?: string | null;
     xai?: string | null;
+    xai_gt?: string | null;
+    xai_saliency?: string | null;
+    xai_pred?: string | null;
   };
   detection_details?: {
     image_size?: [number, number];

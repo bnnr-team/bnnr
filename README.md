@@ -13,9 +13,10 @@
 
 BNNR is a PyTorch toolkit that makes vision models production-ready through a closed loop: train a model, explain its decisions with XAI, improve it with intelligent augmentation, and prove the result with structured reports and a live dashboard.
 
-Supported tasks in **v0.1.2**:
+Supported tasks on this branch (**detection** + v0.1.2 classification stack):
 - Single-label classification (`task: classification`)
 - Multi-label classification (`task: multilabel`)
+- Object detection (`task: detection`) — COCO-mini / YOLO pipelines; see `examples/detection/`
 
 ## Quickstart
 

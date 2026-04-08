@@ -37,6 +37,6 @@ Post-release: nowe artefakty na PyPI (`bnnr-0.1.0.post2-*`) — unika konfliktu 
 - CLI: train, report, dashboard, list-augmentations, list-presets, list-datasets
 - Config system (YAML/JSON) with presets: auto, standard, aggressive, light, gpu
 - Data quality helpers (near-duplicate hashing, basic image sanity checks)
-- **Tasks:** single-label classification and multi-label classification only
+- **Tasks:** single-label classification, multi-label classification, and **object detection** (this branch)
 - Checkpointing and training resume
 - Event system (JSONL) for training replay
