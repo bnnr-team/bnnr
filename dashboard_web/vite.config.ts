@@ -8,5 +8,6 @@ export default defineConfig({
     // Wheel serves UI from bnnr.dashboard (see serve._frontend_dist_candidates).
     outDir: "../src/bnnr/dashboard/frontend/dist",
     emptyOutDir: true,
+    target: "es2022",
   },
 });
