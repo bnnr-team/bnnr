@@ -796,9 +796,9 @@ def main() -> None:
     print(f"  Max main-path epochs   : ~{total_epochs}")
     print(f"  Decision rounds        : {args.decisions}")
     print(f"  Epochs per branch      : {args.m_epochs}")
-    n_candidates = 6 if args.quick else 14
+    n_candidates = 6 if args.quick else "13-14"
     print(f"  Augmentation candidates: {n_candidates} "
-          f"({'geometric + ICD/AICD' if args.quick else 'all detection types + variants'})")
+          f"({'geometric + ICD/AICD' if args.quick else 'all detection types + variants (14 with albumentations)'})")
     print(f"  Image size             : {args.target_size}×{args.target_size}")
     print(f"  XAI method             : activation (detection)")
     print(f"  Preview/XAI size       : 512×512")
