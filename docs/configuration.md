@@ -171,3 +171,25 @@ metrics: [fbeta_0.5, f1_samples, accuracy, loss]
 ```
 
 **CLI note:** `python -m bnnr train` with built-in datasets does not construct multi-label loaders or `BCEWithLogitsLoss`; use the Python API or `examples/multilabel/` for end-to-end multi-label runs.
+
+### `task: detection`
+
+- `detection_bbox_format` (default: `xyxy`) — bounding box format, one of `xyxy`, `xywh`, `cxcywh`
+- `detection_score_threshold` (default: `0.5`, validated to `[0, 1]`) — minimum confidence for evaluation predictions
+- `detection_targets_mode` (default: `auto`) — augmentation target handling: `auto` (let BNNR decide), `image_only`, or `bbox_aware`
+- `detection_class_names` (default: `null`) — optional list of class name strings for per-class reports
+
+Auto-default behavior in code for detection:
+- If still at classification defaults, `selection_metric` becomes `map_50`
+- If still at classification defaults, `metrics` becomes `[map_50, map_50_95, loss]`
+
+Additional detection fields for advanced use:
+- `detection_nms_threshold` — NMS IoU threshold
+- `detection_min_box_area` — minimum box area to keep
+- `detection_max_truncation` — maximum box truncation ratio
+- `detection_xai_method` — XAI method for detection (`saliency`, `occlusion`)
+- `detection_xai_grid_size` — grid resolution for occlusion XAI
+- `detection_xai_max_gt_boxes` — max ground-truth boxes rendered in XAI panels
+- `detection_xai_max_pred_boxes` — max prediction boxes rendered in XAI panels
+
+Use `DetectionAdapter` or `UltralyticsDetectionAdapter` as the model adapter. See [detection.md](detection.md) for the full detection guide.

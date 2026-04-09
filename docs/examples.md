@@ -90,7 +90,49 @@ pip install pytorch-lightning accelerate
 
 See the module docstring and inline comments for wiring; also [api_reference.md](api_reference.md).
 
-## 5) Dashboard workflow for examples
+## 5) Detection showcases
+
+### YOLO + COCO128
+
+Script:
+- `examples/detection/showcase_yolo_coco128.py`
+
+What it demonstrates:
+- YOLOv8 via `UltralyticsDetectionAdapter`,
+- COCO128 auto-download,
+- detection-specific bbox augmentations + DetectionICD/AICD,
+- mAP tracking and dashboard.
+
+```bash
+PYTHONPATH=src python3 examples/detection/showcase_yolo_coco128.py --with-dashboard
+```
+
+Fast smoke:
+
+```bash
+PYTHONPATH=src python3 examples/detection/showcase_yolo_coco128.py --quick --without-dashboard
+```
+
+### Pascal VOC 2007
+
+Script:
+- `examples/detection/showcase_voc.py`
+
+What it demonstrates:
+- torchvision-style detector with `DetectionAdapter`,
+- full augmentation suite (all 9 augmentation families),
+- XAI saliency generation,
+- long training runs with dashboard.
+
+```bash
+PYTHONPATH=src python3 examples/detection/showcase_voc.py --with-dashboard
+```
+
+### Detection notebook
+
+- `examples/detection/bnnr_detection_demo.ipynb` — interactive Jupyter notebook covering adapter setup, augmentations, training, and XAI visualization.
+
+## 6) Dashboard workflow for examples
 
 For any example with `--with-dashboard`:
 1. Start script.
@@ -105,7 +147,7 @@ For offline sharing:
 python3 -m bnnr dashboard export --run-dir <run_dir> --out exported_dashboard
 ```
 
-## 6) Example artifacts you should always verify
+## 7) Example artifacts you should always verify
 
 After each example run, verify:
 - `report.json` exists,
@@ -113,9 +155,10 @@ After each example run, verify:
 - metrics are present for task type,
 - dashboard replay works (`bnnr dashboard serve --run-dir ...`).
 
-## 7) Related docs
+## 8) Related docs
 
 - `dashboard.md`
 - `artifacts.md`
 - `troubleshooting.md`
 - `notebooks.md`
+- `detection.md`
