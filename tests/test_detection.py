@@ -390,6 +390,24 @@ class TestTrainerDetection:
         assert "total_val_boxes" in profile
         assert profile["total_train_boxes"] > 0
 
+    def test_detection_dataset_profile_data_quality_succeeds(
+        self, det_config, det_adapter, det_loaders
+    ) -> None:
+        """run_data_quality_analysis must succeed (not silently fail) for detection."""
+        train_loader, val_loader = det_loaders
+        trainer = BNNRTrainer(
+            model=det_adapter,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            augmentations=[],
+            config=det_config,
+        )
+        profile = trainer._compute_dataset_profile()
+        assert "data_quality" in profile, (
+            "_compute_dataset_profile silently swallowed data quality analysis "
+            "error for detection task"
+        )
+
     def test_detection_eval_class_details(self, det_config, det_adapter, det_loaders) -> None:
         """For detection, _compute_eval_class_details should return per-class AP."""
         train_loader, val_loader = det_loaders
