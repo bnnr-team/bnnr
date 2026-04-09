@@ -10,13 +10,14 @@ train, tvmonitor.
 5,011 trainval images + 4,952 test images.  Auto-downloads on first run
 (~460 MB, cached afterwards).
 
-9 augmentation candidates are registered (all BNNR detection types):
+9 augmentation types available (all BNNR detection types):
   • 4 geometric bbox-aware     (HFlip, VFlip, Rotate90, RandomScale)
   • 2 XAI-driven               (DetectionICD, DetectionAICD)
   • 2 composite                (Mosaic, MixUp)
   • 1 colour jitter via Albu   (optional, if albumentations installed)
 
-Plus parameter variants → up to 14 candidates total.
+Full mode registers 13 candidates (14 with albumentations) including
+parameter variants.  Quick mode registers 6 (geometric + ICD/AICD).
 
 Run with dashboard (recommended):
     PYTHONPATH=src python examples/detection/showcase_voc.py --with-dashboard

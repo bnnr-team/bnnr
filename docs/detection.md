@@ -182,7 +182,7 @@ BNNR generates detection-specific XAI visualizations:
 - **Occlusion sensitivity** — per-box saliency via systematic occlusion grids
 - **Triptych panels** — ground-truth boxes, saliency overlay, and prediction boxes side by side
 
-XAI is generated automatically when `xai_enabled=True` (default). For Ultralytics models, use `UltralyticsDetectionAdapter` to enable full XAI support; raw `ultralytics.nn.tasks` modules have limited XAI (see [troubleshooting.md §17-18](troubleshooting.md)).
+XAI is generated automatically when `xai_enabled=True` (default). For Ultralytics models, use `UltralyticsDetectionAdapter` to enable full XAI support; raw `ultralytics.nn.tasks` modules have limited XAI (see [troubleshooting.md §17](troubleshooting.md)).
 
 ## Full example
 
@@ -232,4 +232,4 @@ print(f"Best mAP@50: {result.best_metrics}")
 - [configuration.md](configuration.md) — all config fields including detection
 - [api_reference.md](api_reference.md) — full detection API listing
 - [augmentations.md](augmentations.md) — augmentation presets and registration
-- [troubleshooting.md](troubleshooting.md) — Ultralytics edge cases (§17-19)
+- [troubleshooting.md](troubleshooting.md) — Ultralytics edge cases (§17)

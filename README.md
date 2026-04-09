@@ -134,6 +134,7 @@ See `docs/api_reference.md` and `docs/golden_path.md`.
 - `docs/cli.md`
 - `docs/api_reference.md`
 - `docs/golden_path.md`
+- `docs/detection.md`
 - `docs/augmentations.md`
 - `docs/examples.md`
 - `docs/notebooks.md`
