@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bnnr"
-version = "0.2.0"
+version = "0.2.1"
 description = "BNNR — Train → Explain → Improve → Prove"
 readme = "README.md"
 license = { text = "MIT" }
@@ -103,9 +103,10 @@ constraint-dependencies = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bnnr"]
-# Wheel is often built from sdist; map packaged tree → site-packages layout.
-[tool.hatch.build.targets.wheel.force-include]
-"src/bnnr/dashboard/frontend/dist" = "bnnr/dashboard/frontend/dist"
+# frontend/dist lands in the wheel automatically: python -m build creates the
+# wheel from the sdist (which force-includes frontend/dist), so packages =
+# ["src/bnnr"] picks the files up without a separate force-include.  A second
+# force-include would create duplicate ZIP entries rejected by PyPI.
 
 [tool.ruff]
 line-length = 100

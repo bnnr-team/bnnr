@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1] — 2026-04-09
+
+### Fixed
+
+- **PyPI publish**: remove redundant `wheel.force-include` for dashboard frontend dist that caused duplicate ZIP entries rejected by PyPI.
+- **Security**: bump vite 5.4 to 6.4.2 (CVE path-traversal in optimized deps .map handling).
+- **Testing**: add regression test for detection data quality analysis silent failure.
+
 ## [0.2.0] — 2026-04-08
 
 ### Added — Object Detection
