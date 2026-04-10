@@ -4,13 +4,8 @@
 
 ### Fixed
 
-- **Ultralytics YOLO / `UltralyticsDetectionAdapter`**: stable `train_step` — images stay in `[0, 1]` for tensor `predict`, fp32 loss without `GradScaler` on that path, `clip_grad_norm_`, class ids clamped to `[0, nc - 1]`, degenerate bbox filtering, `IndexError` from assigner caught; AMP disabled for the custom loss batch.
-- **Detection augment pipeline**: uint8 round-trips always map back to float `[0, 1]` (`_det_uint8_batch_to_float01`) so YOLO never sees a stuck `0–255` float batch from `ref_batch` heuristics.
-- **Imports (Colab)**: lazy `sklearn.metrics` in `calculate_metrics` and lazy `sklearn.decomposition.NMF` in CRAFT so `import bnnr` does not pull a fragile numpy/scipy/sklearn stack until those features run.
-
-### Changed
-
-- **Dev dependencies**: `ultralytics` added to `[project.optional-dependencies] dev` for CI integration tests.
+- **Ultralytics YOLO** (`UltralyticsDetectionAdapter`): detection images stay in **`[0, 1]`** end-to-end (uint8 round-trip in `BNNRTrainer` always `/255`); `predict` passes **float tensors in `[0, 1]`** (Ultralytics does not divide torch tensors by 255). `train_step` uses **fp32 loss**, **plain backward** (no `GradScaler` on this path), **grad clipping**, **cls clamped to `[0, nc-1]`**, degenerate bbox filtering, **`IndexError`** from assigner caught.
+- **Imports**: lazy `sklearn` in `calculate_metrics` and lazy NMF in CRAFT so **`import bnnr`** works when Colab’s numpy/scipy/sklearn stack is temporarily broken until `pip install -U` aligns versions.
 
 ## [0.2.2] — 2026-04-10
 
