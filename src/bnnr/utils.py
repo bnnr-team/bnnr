@@ -9,19 +9,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from sklearn.metrics import (
-    accuracy_score,
-    balanced_accuracy_score,
-    cohen_kappa_score,
-    f1_score,
-    fbeta_score,
-    hamming_loss,
-    jaccard_score,
-    matthews_corrcoef,
-    precision_score,
-    recall_score,
-    zero_one_loss,
-)
 from torch import Tensor
 
 
@@ -166,6 +153,26 @@ def _parse_fbeta(metric_name: str) -> float | None:
 
 
 def calculate_metrics(predictions: np.ndarray, labels: np.ndarray, metrics: list[str] | None = None) -> dict[str, float]:
+    """Compute sklearn metrics (lazy-imports ``sklearn`` on first use).
+
+    Colab and other environments sometimes ship a broken ``numpy``/``scipy``/``sklearn``
+    combo; deferring the import keeps ``import bnnr`` working for detection-only
+    notebooks until classification metrics are actually needed.
+    """
+    from sklearn.metrics import (
+        accuracy_score,
+        balanced_accuracy_score,
+        cohen_kappa_score,
+        f1_score,
+        fbeta_score,
+        hamming_loss,
+        jaccard_score,
+        matthews_corrcoef,
+        precision_score,
+        recall_score,
+        zero_one_loss,
+    )
+
     if metrics is None:
         metrics = ["accuracy", "f1_macro"]
 

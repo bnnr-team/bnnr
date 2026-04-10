@@ -19,8 +19,14 @@ from typing import Any, cast
 
 import numpy as np
 import torch
-from sklearn.decomposition import NMF
 from torch import Tensor, nn
+
+
+def _nmf_estimator():
+    """Lazy-import ``sklearn`` so ``import bnnr`` works without a working scipy stack."""
+    from sklearn.decomposition import NMF
+
+    return NMF
 
 
 class NMFConceptExplainer:
@@ -65,7 +71,7 @@ class NMFConceptExplainer:
         flat = acts.permute(0, 2, 3, 1).reshape(-1, c).cpu().numpy()
         flat = np.maximum(flat, 0)
 
-        nmf = NMF(n_components=min(self.n_concepts, c), init="nndsvda", max_iter=200)
+        nmf = _nmf_estimator()(n_components=min(self.n_concepts, c), init="nndsvda", max_iter=200)
         w_mat = nmf.fit_transform(flat)  # [B*H*W, K]
         h_mat = nmf.components_  # [K, C]
 
@@ -181,7 +187,7 @@ class RealCRAFTExplainer:
         flat = np.maximum(flat, 0)
 
         n_components = min(self.n_concepts, c)
-        nmf = NMF(n_components=n_components, init="nndsvda", max_iter=300, random_state=42)
+        nmf = _nmf_estimator()(n_components=n_components, init="nndsvda", max_iter=300, random_state=42)
         w_mat = nmf.fit_transform(flat)  # [B*H*W, K]
         h_mat = nmf.components_  # [K, C]
         return w_mat, h_mat
