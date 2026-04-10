@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.6] — 2026-04-10
+
+### Fixed
+
+- **Detection XAI (Ultralytics)**: `generate_detection_saliency` now scores every eligible `Conv2d` map by **isotropy** of the channel-mean saliency (downsampled), then re-runs a forward pass to capture the best layer. Taking only the chronologically last `H,W>1` conv could still yield strong vertical/horizontal “barcode” structure after upsampling; the score `min(column-wise std, row-wise std)` prefers maps that actually vary in **both** axes.
+
 ## [0.2.5] — 2026-04-10
 
 ### Fixed

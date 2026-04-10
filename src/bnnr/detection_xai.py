@@ -187,11 +187,13 @@ def generate_detection_saliency(
     For detection, we compute saliency based on the total activation
     magnitude in the target layers (class-agnostic saliency).
 
-    For ``ultralytics_bchw``, hooks are placed on every ``Conv2d`` and the
-    **last** feature map with both spatial sizes ``> 1`` is used.  The final
-    convolutions in YOLO heads often produce maps with height or width ``1``;
-    upsampling those to the image size yields vertical/horizontal "barcode"
-    stripes, so they are skipped when a deeper 2D map exists.
+    For ``ultralytics_bchw``, every ``Conv2d`` output with both spatial sizes
+    ``> 1`` is scored by **isotropy** of the channel-mean map (downsampled):
+    ``min(std along rows, std along cols)``.  Maps that are nearly constant
+    along either axis (vertical/horizontal "barcode" stripes after upsampling)
+    get a low score.  The best-scoring layer is chosen and a **second** forward
+    pass records its full-resolution activations.  Very thin maps ``1×W`` are
+    excluded up front.
 
     Parameters
     ----------
@@ -226,46 +228,46 @@ def generate_detection_saliency(
         if isinstance(output, Tensor):
             activations.append(output.detach())
 
-    last_spatial_conv_feat: list[Tensor | None] = [None]
+    feat: Tensor | None = None
 
-    def _hook_ultra_conv(module: nn.Module, input: Any, output: Any) -> None:
-        if _activation_tensor_spatial_ok(output):
-            last_spatial_conv_feat[0] = output.detach()
+    if forward_layout == "ultralytics_bchw":
+        from bnnr.detection_adapter import _det_images_to_float01
 
-    handles: list[Any] = []
-    try:
-        with torch.no_grad():
-            if forward_layout == "ultralytics_bchw":
-                from bnnr.detection_adapter import _det_images_to_float01
+        x = _det_images_to_float01(images)
+        candidate_rows: list[tuple[float, int, nn.Module]] = []
 
-                x = _det_images_to_float01(images)
+        def _hook_score_conv(mod: nn.Module, _inp: Any, out: Any) -> None:
+            if not isinstance(out, Tensor) or out.dim() != 4:
+                return
+            fh, fw = int(out.shape[2]), int(out.shape[3])
+            if fh <= 1 or fw <= 1:
+                return
+            sal = out.detach().float().mean(dim=1, keepdim=True)
+            rh, rw = min(64, fh), min(64, fw)
+            sal_s = torch.nn.functional.adaptive_avg_pool2d(sal, (rh, rw))
+            s = sal_s[0, 0].cpu().numpy()
+            cstd = float(np.std(s, axis=0).mean())
+            rstd = float(np.std(s, axis=1).mean())
+            isotropy = min(cstd, rstd)
+            area = fh * fw
+            candidate_rows.append((isotropy, area, mod))
+
+        handles_s: list[Any] = []
+        try:
+            with torch.no_grad():
                 for m in model.modules():
                     if isinstance(m, nn.Conv2d):
-                        handles.append(m.register_forward_hook(_hook_ultra_conv))
+                        handles_s.append(m.register_forward_hook(_hook_score_conv))
                 model(x)
-            else:
-                for layer in target_layers:
-                    handles.append(layer.register_forward_hook(_hook_target))
-                # Torchvision detection: list of CHW tensors
-                if images.dim() == 4:
-                    image_list = [img for img in images]
-                else:
-                    image_list = [images]
-                model(image_list)
-    finally:
-        for h in handles:
-            h.remove()
+        finally:
+            for h in handles_s:
+                h.remove()
 
-    feat: Tensor | None = None
-    if forward_layout == "ultralytics_bchw":
-        feat = last_spatial_conv_feat[0]
-        if feat is None:
+        if not candidate_rows:
             # e.g. stub model with no Conv2d — fall back to ``target_layers`` hooks
-            activations.clear()
             handles2: list[Any] = []
             try:
                 with torch.no_grad():
-                    x = _det_images_to_float01(images)
                     for layer in target_layers:
                         handles2.append(layer.register_forward_hook(_hook_target))
                     model(x)
@@ -280,7 +282,42 @@ def generate_detection_saliency(
                     break
             if feat is None:
                 feat = activations[-1]
+        else:
+            best_mod = max(candidate_rows, key=lambda t: (t[0], t[1]))[2]
+            captured: list[Tensor] = []
+
+            def _hook_capture(_mod: nn.Module, _inp: Any, out: Any) -> None:
+                if isinstance(out, Tensor):
+                    captured.append(out.detach())
+
+            h_cap = best_mod.register_forward_hook(_hook_capture)
+            try:
+                with torch.no_grad():
+                    model(x)
+            finally:
+                h_cap.remove()
+            feat = captured[-1] if captured else None
+            if isinstance(feat, Tensor) and int(feat.shape[0]) != b:
+                logger.warning(
+                    "detection XAI: saliency layer batch %d != image batch %d; using zeros",
+                    int(feat.shape[0]),
+                    b,
+                )
+                feat = None
     else:
+        handles: list[Any] = []
+        try:
+            with torch.no_grad():
+                for layer in target_layers:
+                    handles.append(layer.register_forward_hook(_hook_target))
+                if images.dim() == 4:
+                    image_list = [img for img in images]
+                else:
+                    image_list = [images]
+                model(image_list)
+        finally:
+            for h in handles:
+                h.remove()
         if not activations:
             return _zeros_batch()
         for t in reversed(activations):

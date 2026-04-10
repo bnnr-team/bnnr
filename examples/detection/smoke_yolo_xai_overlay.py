@@ -7,8 +7,9 @@ Run from the **repository root** with a normal dev env (``uv sync`` / ``pip inst
 
 Writes ``examples/detection/xai_yolov8n_activation_overlay.png`` next to this file.
 Activation-based saliency is **class-agnostic** (mean conv features), so the map is
-often **grainy** — unlike gradient-based CAM — but it must not collapse to pure
-vertical 1×W “barcode” stripes (check printed ``col_std`` / ``row_std``).
+often **grainy** — unlike gradient-based CAM.  Ultralytics builds pick a conv layer
+by **isotropy** (see ``generate_detection_saliency``); check printed ``col_std`` /
+``row_std`` on the full-res map (both should be well above ~0 for a non-barcode).
 """
 
 from __future__ import annotations

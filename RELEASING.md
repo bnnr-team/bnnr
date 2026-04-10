@@ -32,4 +32,4 @@ Fix any failures **before** tagging. Pushing `v*` triggers the **publish-pypi** 
 
 4. **Verify** — in a clean venv: `pip install "bnnr>=<version>"`; run `pytest` or the detection notebook on Colab.
 
-5. **Tag** — after `main` contains the release commit, create and push the annotated tag (e.g. `v0.2.5`) so CI publishes the wheel.
+5. **Tag** — after `main` contains the release commit, create and push the annotated tag (e.g. `v0.2.6`) so CI publishes the wheel.
