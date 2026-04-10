@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import type { PerClassRow, XAIInsightEntry, XAIDiagnosis } from "../types";
+import type { RunTask } from "../taskMetrics";
 
 interface Props {
   perClassTimeline: Record<string, PerClassRow[]>;
   xaiInsightsTimeline?: XAIInsightEntry[];
   classNames?: string[];
-  task?: "classification" | "multilabel";
+  task?: RunTask;
 }
 
 /* ── Quality breakdown bar component ── */

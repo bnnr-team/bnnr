@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import type { DecisionRecord } from "../types";
 import { useChartColors } from "../ThemeContext";
+import type { RunTask } from "../taskMetrics";
 
 const COLORS = [
   "#2563eb", "#16a34a", "#dc2626", "#7c3aed", "#0891b2",
@@ -19,7 +20,7 @@ const COLORS = [
 
 interface Props {
   decisions: DecisionRecord[];
-  task?: "classification" | "multilabel";
+  task?: RunTask;
 }
 
 export function CandidateRadar({ decisions, task = "classification" }: Props) {
@@ -38,13 +39,26 @@ export function CandidateRadar({ decisions, task = "classification" }: Props) {
   const radarData = useMemo(() => {
     if (!decision) return [];
 
-    const metricAxes: { key: string; label: string }[] = [
-      { key: "accuracy", label: "Accuracy" },
-      { key: "f1_macro", label: "F1 Macro" },
-    ];
+    const metricAxes: { key: string; label: string }[] =
+      task === "detection"
+        ? [
+            { key: "map_50", label: "mAP@50" },
+            { key: "map_50_95", label: "mAP@50:95" },
+          ]
+        : task === "multilabel"
+          ? [
+              { key: "f1_samples", label: "F1 (samples)" },
+              { key: "f1_macro", label: "F1 Macro" },
+            ]
+          : [
+              { key: "accuracy", label: "Accuracy" },
+              { key: "f1_macro", label: "F1 Macro" },
+            ];
 
     // Compute inverted loss as a normalized axis
-    const allLoss = Object.values(decision.results).map((r) => r.loss ?? 0);
+    const allLoss = Object.values(decision.results)
+      .map((r) => r.loss ?? 0)
+      .filter((x) => Number.isFinite(x));
     const maxLoss = Math.max(...allLoss, 0.001);
 
     return metricAxes
@@ -66,7 +80,7 @@ export function CandidateRadar({ decisions, task = "classification" }: Props) {
           return row;
         })(),
       ]);
-  }, [decision, candidates]);
+  }, [decision, candidates, task]);
 
   if (decisions.length === 0) {
     return <p className="muted">No branch decisions recorded yet.</p>;

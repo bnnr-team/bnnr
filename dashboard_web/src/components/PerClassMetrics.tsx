@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import type { PerClassRow } from "../types";
 import { useChartColors } from "../ThemeContext";
+import type { RunTask } from "../taskMetrics";
 
 const COLORS = [
   "#2563eb", "#16a34a", "#dc2626", "#7c3aed", "#0891b2",
@@ -19,7 +20,7 @@ const COLORS = [
 
 interface Props {
   perClassTimeline: Record<string, PerClassRow[]>;
-  task?: "classification" | "multilabel";
+  task?: RunTask;
   classNames?: string[];
 }
 

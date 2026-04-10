@@ -17,6 +17,7 @@ import { AccuracyGainRate } from "./components/AccuracyGainRate";
 import { DatasetInsight } from "./components/DatasetInsight";
 import { XAIInsights } from "./components/XAIInsights";
 import { XAIQualityTrend } from "./components/XAIQualityTrend";
+import { normalizeRunTask, primaryMetricValue, secondaryMetricValue } from "./taskMetrics";
 
 /* ---- Inline SVG icons (matching lucide style from website) ---- */
 const svgProps = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -48,8 +49,9 @@ export function App() {
     () => (state?.run?.class_names as string[] | undefined) ?? [],
     [state?.run],
   );
-  const runTask = (state?.task ?? "classification") as "classification" | "multilabel";
+  const runTask = normalizeRunTask(state?.task as string | undefined);
   const isMultilabel = runTask === "multilabel";
+  const isDetection = runTask === "detection";
 
   /* KPI summary — best from ALL observations, current from last entry */
   const kpi = useMemo(() => {
@@ -62,10 +64,8 @@ export function App() {
 
     const ml = runTask === "multilabel";
 
-    // Helper to extract primary metric per task
-    const primaryMetric = (r: typeof last) =>
-      ml ? (r.f1_samples ?? r.f1_macro ?? 0) : (r.accuracy ?? 0);
-    const secondaryMetric = (r: typeof last) => r.f1_macro ?? 0;
+    const primaryMetric = (r: typeof last) => primaryMetricValue(r, runTask);
+    const secondaryMetric = (r: typeof last) => secondaryMetricValue(r, runTask);
 
     // Best = max across ALL metrics (any branch, any epoch)
     const bestAccuracy = Math.max(...tl.map(primaryMetric));
@@ -413,7 +413,7 @@ export function App() {
                       {(kpi.bestAccuracy * 100).toFixed(1) + "%"}
                     </div>
                     <div className="kpi-label">
-                      {isMultilabel ? "Best F1 (samples) ★" : "Best Accuracy ★"}
+                      {isDetection ? "Best mAP@50 ★" : isMultilabel ? "Best F1 (samples) ★" : "Best Accuracy ★"}
                     </div>
                   </div>
                   <div className="kpi-card">
@@ -421,22 +421,26 @@ export function App() {
                       {(kpi.currentAccuracy * 100).toFixed(1) + "%"}
                     </div>
                     <div className="kpi-label">
-                      {isMultilabel ? "Current F1 (samples)" : "Current Accuracy"}
+                      {isDetection ? "Current mAP@50" : isMultilabel ? "Current F1 (samples)" : "Current Accuracy"}
                     </div>
                   </div>
                   <div className="kpi-card best">
                     <div className="kpi-value">
                       {(kpi.bestF1 * 100).toFixed(1) + "%"}
                     </div>
-                    <div className="kpi-label">Best F1 (macro) ★</div>
+                    <div className="kpi-label">
+                      {isDetection ? "Best mAP@50:95 ★" : "Best F1 (macro) ★"}
+                    </div>
                   </div>
                   <div className="kpi-card">
                     <div className="kpi-value"
                       style={{ color: kpi.gain > 0 ? "var(--green)" : kpi.gain < 0 ? "var(--red)" : undefined }}
                     >
-                      {kpi.gain > 0 ? "+" : ""}{(kpi.gain * 100).toFixed(1)}pp
+                      {kpi.gain > 0 ? "+" : ""}{(kpi.gain * 100).toFixed(1)}{isDetection ? "" : "pp"}
                     </div>
-                    <div className="kpi-label">BNNR Gain vs Baseline</div>
+                    <div className="kpi-label">
+                      {isDetection ? "Δ primary metric (×100)" : "BNNR Gain vs Baseline"}
+                    </div>
                   </div>
                   <div className="kpi-card">
                     <div className="kpi-value">{kpi.decisionCount}</div>

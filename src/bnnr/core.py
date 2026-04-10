@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import random
 import re
 import time
@@ -489,10 +490,29 @@ class BNNRTrainer:
         self._log("Training resumed")
 
     def _average_metrics(self, all_metrics: list[dict[str, float]]) -> dict[str, float]:
+        """Average metric dicts across batches/epochs.
+
+        Batches may omit keys (e.g. detection skips a bad batch and returns only
+        ``loss`` + ``loss_non_finite``). Averaging must use the union of keys and
+        only include finite values present for each key.
+        """
         if not all_metrics:
             return {}
-        keys = all_metrics[0].keys()
-        return {k: float(sum(m[k] for m in all_metrics) / len(all_metrics)) for k in keys}
+        keys: set[str] = set()
+        for m in all_metrics:
+            keys.update(m.keys())
+        out: dict[str, float] = {}
+        for k in keys:
+            vals: list[float] = []
+            for m in all_metrics:
+                if k not in m:
+                    continue
+                v = float(m[k])
+                if math.isfinite(v):
+                    vals.append(v)
+            if vals:
+                out[k] = float(sum(vals) / len(vals))
+        return out
 
     # Delegate to module-level helpers for backward compat
     _clone_state_dict = staticmethod(clone_state_dict)

@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type { MetricPoint } from "../types";
 import { useChartColors } from "../ThemeContext";
+import { primaryMetricValue, secondaryMetricValue, type RunTask } from "../taskMetrics";
 
 function pct(v: number) {
   return Math.max(0, Math.min(100, v * 100));
@@ -27,12 +28,13 @@ const BRANCH_COLORS = [
 interface Props {
   timeline: MetricPoint[];
   selectedPath?: string[];
-  task?: "classification" | "multilabel";
+  task?: RunTask;
 }
 
 export function MetricsCharts({ timeline, selectedPath, task = "classification" }: Props) {
   const cc = useChartColors();
   const isMultilabel = task === "multilabel";
+  const isDetection = task === "detection";
 
   /* ---- Determine trunk branch names (raw augmentation names) ---- */
   const trunkBranchNames = useMemo(() => {
@@ -52,11 +54,11 @@ export function MetricsCharts({ timeline, selectedPath, task = "classification" 
       .map((p, i) => ({
         ...p,
         idx: i,
-        accuracy_pct: pct(isMultilabel ? (p.f1_samples ?? p.f1_macro) : p.accuracy),
-        f1_pct: pct(p.f1_macro),
+        accuracy_pct: pct(primaryMetricValue(p, task)),
+        f1_pct: pct(secondaryMetricValue(p, task)),
         label: `it${p.iteration}/e${p.epoch}`,
       }));
-  }, [timeline, trunkBranchNames, isMultilabel]);
+  }, [timeline, trunkBranchNames, task]);
 
   /* ---- Decision markers for trunk chart ---- */
   const decisionMarkers = useMemo(() => {
@@ -139,7 +141,7 @@ export function MetricsCharts({ timeline, selectedPath, task = "classification" 
     let bestLabel = "";
     let bestVal = -1;
     timeline.forEach((p) => {
-      const val = isMultilabel ? (p.f1_samples ?? p.f1_macro) : p.accuracy;
+      const val = primaryMetricValue(p, task);
       if (val > bestVal) {
         bestVal = val;
         bestBranchKey = makeBranchKey(p);
@@ -148,7 +150,7 @@ export function MetricsCharts({ timeline, selectedPath, task = "classification" 
       }
     });
     return { branchKey: bestBranchKey, label: bestLabel };
-  }, [timeline, isMultilabel]);
+  }, [timeline, task]);
 
   /**
    * Build unified rows for "Accuracy by Branch" chart.
@@ -201,7 +203,7 @@ export function MetricsCharts({ timeline, selectedPath, task = "classification" 
         }
         // Fill in values for branches with data at this epoch
         for (const p of epochPoints) {
-          const metricVal = isMultilabel ? (p.f1_samples ?? p.f1_macro) : p.accuracy;
+          const metricVal = primaryMetricValue(p, task);
           row[makeBranchKey(p)] = pct(metricVal);
         }
         allRows.push(row);
@@ -213,16 +215,16 @@ export function MetricsCharts({ timeline, selectedPath, task = "classification" 
       // Prefer the trunk branch's value
       const trunkPoint = lastEpochPoints.find((p) => trunkKeys.has(makeBranchKey(p)) || trunkBranchNames.has(p.branch));
       if (trunkPoint) {
-        const metricVal = isMultilabel ? (trunkPoint.f1_samples ?? trunkPoint.f1_macro) : trunkPoint.accuracy;
+        const metricVal = primaryMetricValue(trunkPoint, task);
         trunkEndAcc = pct(metricVal);
       } else if (lastEpochPoints.length > 0) {
         trunkEndAcc = Math.max(...lastEpochPoints.map((p) =>
-          pct(isMultilabel ? (p.f1_samples ?? p.f1_macro) : p.accuracy)));
+          pct(primaryMetricValue(p, task))));
       }
     }
 
     return { unifiedRows: allRows, phaseBoundaries: boundaries };
-  }, [timeline, branchKeys, trunkKeys, trunkBranchNames, isMultilabel]);
+  }, [timeline, branchKeys, trunkKeys, trunkBranchNames, task]);
 
   if (trunkRows.length === 0) {
     return <p className="muted">No metrics recorded yet.</p>;
@@ -255,8 +257,8 @@ export function MetricsCharts({ timeline, selectedPath, task = "classification" 
                 label={{ value: m.branch, position: "top", fontSize: 9, fill: cc.refLabelFill }}
               />
             ))}
-            <Line yAxisId="pct" dataKey="accuracy_pct" stroke="#16a34a" dot={false} name={isMultilabel ? "F1 samples (%)" : "accuracy (%)"} strokeWidth={2} />
-            <Line yAxisId="pct" dataKey="f1_pct" stroke="#2563eb" dot={false} name="f1 (%)" strokeWidth={2} />
+            <Line yAxisId="pct" dataKey="accuracy_pct" stroke="#16a34a" dot={false} name={isDetection ? "mAP@50 (%)" : isMultilabel ? "F1 samples (%)" : "accuracy (%)"} strokeWidth={2} />
+            <Line yAxisId="pct" dataKey="f1_pct" stroke="#2563eb" dot={false} name={isDetection ? "mAP@50:95 (%)" : "f1 (%)"} strokeWidth={2} />
             <Line yAxisId="loss" dataKey="loss" stroke="#dc2626" dot={false} name="loss" strokeWidth={1.5} />
           </LineChart>
         </ResponsiveContainer>
@@ -265,7 +267,7 @@ export function MetricsCharts({ timeline, selectedPath, task = "classification" 
       {/* Per-branch accuracy comparison */}
       {branchKeys.length > 1 && unifiedRows.length > 0 && (
         <>
-          <h4 style={{ marginTop: 16 }}>{isMultilabel ? "F1 (samples) by Branch" : "Accuracy by Branch"}</h4>
+          <h4 style={{ marginTop: 16 }}>{isDetection ? "mAP@50 by Branch" : isMultilabel ? "F1 (samples) by Branch" : "Accuracy by Branch"}</h4>
           <p className="muted" style={{ fontSize: 11, marginTop: -4, marginBottom: 8 }}>
             Each iteration&apos;s candidates are separate lines. All candidates in an iteration start from the previous winner.
           </p>

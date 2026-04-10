@@ -25,6 +25,9 @@ export type MetricPoint = {
   f1_macro: number;
   // Multilabel metrics (present when task=multilabel)
   f1_samples?: number;
+  // Detection metrics (present when task=detection)
+  map_50?: number;
+  map_50_95?: number;
   is_best_epoch?: boolean;
 };
 
@@ -160,7 +163,7 @@ export type DatasetProfile = {
 
 export type StatePayload = {
   run: Record<string, unknown>;
-  task?: "classification" | "multilabel";
+  task?: "classification" | "multilabel" | "detection";
   selected_path: string[];
   selected_path_edges?: BranchEdge[];
   branches: Record<string, { metrics?: Record<string, number>; best_epoch?: number; total_epochs?: number }>;

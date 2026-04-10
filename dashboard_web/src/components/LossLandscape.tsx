@@ -12,11 +12,12 @@ import {
 } from "recharts";
 import type { DecisionRecord, MetricPoint } from "../types";
 import { useChartColors } from "../ThemeContext";
+import { primaryMetricValue, type RunTask } from "../taskMetrics";
 
 interface Props {
   timeline: MetricPoint[];
   decisions: DecisionRecord[];
-  task?: "classification" | "multilabel";
+  task?: RunTask;
 }
 
 /**
@@ -24,8 +25,10 @@ interface Props {
  * training run with vertical markers at each decision point.
  * Focuses on the trunk (baseline + selected branches).
  */
-export function LossLandscape({ timeline, decisions }: Props) {
+export function LossLandscape({ timeline, decisions, task = "classification" }: Props) {
   const cc = useChartColors();
+  const isDetection = task === "detection";
+  const isMultilabel = task === "multilabel";
 
   const { trunkRows, markers } = useMemo(() => {
     if (timeline.length === 0) return { trunkRows: [], markers: [] as Array<{ x: string; label: string }> };
@@ -43,11 +46,11 @@ export function LossLandscape({ timeline, decisions }: Props) {
     let idx = 0;
     for (const p of timeline) {
       if (selectedBranches.has(p.branch)) {
-        const primaryMetric = p.accuracy;
+        const pm = primaryMetricValue(p, task);
         rows.push({
           label: `it${p.iteration}/e${p.epoch}`,
-          loss: p.loss,
-          accuracy_pct: Math.max(0, Math.min(100, primaryMetric * 100)),
+          loss: Number.isFinite(p.loss) ? p.loss : 0,
+          accuracy_pct: Math.max(0, Math.min(100, pm * 100)),
           idx,
         });
         idx++;
@@ -82,7 +85,7 @@ export function LossLandscape({ timeline, decisions }: Props) {
     }
 
     return { trunkRows: rows, markers: decisionLabels };
-  }, [timeline, decisions]);
+  }, [timeline, decisions, task]);
 
   if (trunkRows.length === 0) {
     return <p className="muted">No data yet.</p>;
@@ -95,7 +98,7 @@ export function LossLandscape({ timeline, decisions }: Props) {
           <CartesianGrid strokeDasharray="3 3" stroke={cc.grid} />
           <XAxis dataKey="label" tick={{ fontSize: 10, fill: cc.text }} interval="preserveStartEnd" />
           <YAxis yAxisId="loss" orientation="left" tick={{ fontSize: 11, fill: cc.text }} label={{ value: "Loss", angle: -90, position: "insideLeft", fontSize: 11, fill: cc.text }} />
-          <YAxis yAxisId="acc" orientation="right" unit="%" domain={[0, 100]} tick={{ fontSize: 11, fill: cc.text }} label={{ value: "Acc %", angle: 90, position: "insideRight", fontSize: 11, fill: cc.text }} />
+          <YAxis yAxisId="acc" orientation="right" unit="%" domain={[0, 100]} tick={{ fontSize: 11, fill: cc.text }} label={{ value: isDetection ? "mAP@50 %" : isMultilabel ? "F1 %" : "Acc %", angle: 90, position: "insideRight", fontSize: 11, fill: cc.text }} />
           <Tooltip contentStyle={{ background: cc.tooltipBg, border: `1px solid ${cc.tooltipBorder}`, borderRadius: 8 }} />
           <Legend />
           {markers.map((m, i) => (
@@ -110,7 +113,7 @@ export function LossLandscape({ timeline, decisions }: Props) {
             />
           ))}
           <Line yAxisId="loss" dataKey="loss" stroke="#dc2626" dot={false} name="Loss" strokeWidth={2} />
-          <Line yAxisId="acc" dataKey="accuracy_pct" stroke="#16a34a" dot={false} name="Accuracy (%)" strokeWidth={2} />
+          <Line yAxisId="acc" dataKey="accuracy_pct" stroke="#16a34a" dot={false} name={isDetection ? "mAP@50 (%)" : isMultilabel ? "F1 samples (%)" : "Accuracy (%)"} strokeWidth={2} />
         </LineChart>
       </ResponsiveContainer>
     </div>

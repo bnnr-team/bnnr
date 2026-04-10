@@ -73,7 +73,7 @@ from bnnr.xai_analysis import (
 )
 from bnnr.xai_cache import XAICache
 
-__version__ = '0.2.1'
+__version__ = '0.2.2'
 
 __all__ = [
     "AugmentationRunner",

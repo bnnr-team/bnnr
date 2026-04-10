@@ -13,11 +13,12 @@ import {
 } from "recharts";
 import type { MetricPoint } from "../types";
 import { useChartColors } from "../ThemeContext";
+import { primaryMetricValue, type RunTask } from "../taskMetrics";
 
 interface Props {
   timeline: MetricPoint[];
   selectedPath?: string[];
-  task?: "classification" | "detection" | "multilabel";
+  task?: RunTask;
 }
 
 const COLORS = {
@@ -31,9 +32,9 @@ const COLORS = {
  * phase of training: baseline and each augmentation iteration.
  * Positive bars = improvement, negative = regression.
  */
-export function AccuracyGainRate({ timeline, selectedPath }: Props) {
+export function AccuracyGainRate({ timeline, selectedPath, task = "classification" }: Props) {
   const cc = useChartColors();
-  const metricLabel = "Accuracy";
+  const metricLabel = task === "detection" ? "mAP@50" : task === "multilabel" ? "F1 (samples)" : "Accuracy";
 
   const bars = useMemo(() => {
     if (timeline.length === 0) return [];
@@ -71,7 +72,7 @@ export function AccuracyGainRate({ timeline, selectedPath }: Props) {
       if (points.length === 0) continue;
 
       const startAcc = iter === 0 ? 0 : prevEndAcc;
-      const endAcc = Math.max(...points.map((p) => p.accuracy));
+      const endAcc = Math.max(...points.map((p) => primaryMetricValue(p, task)));
       const delta = endAcc - startAcc;
       const epochCount = points.length;
       const branch = points[0].branch;
@@ -90,7 +91,7 @@ export function AccuracyGainRate({ timeline, selectedPath }: Props) {
     }
 
     return result;
-  }, [timeline, selectedPath]);
+  }, [timeline, selectedPath, task]);
 
   if (bars.length === 0) {
     return <p className="muted">No training data yet.</p>;

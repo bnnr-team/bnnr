@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2] — 2026-04-10
+
+### Fixed
+
+- **Detection training**: `_average_metrics` no longer assumes every batch returns the same metric keys. Skipped batches (non-finite loss in `DetectionAdapter`) returned only `loss` + `loss_non_finite`, which caused `KeyError: 'loss_loss_classifier'` when averaging epoch metrics (e.g. Colab detection notebook).
+- **Ultralytics YOLO**: training images are scaled to Ultralytics’ 0–255 float range only when the batch is already in ~0–1 space. Feeding 0–255 tensors no longer multiplies by 255 again (avoids overflow, NaN loss, and the “divide by 255” warning storm). Non-finite loss batches are skipped like torchvision detection.
+- **Dashboard (React)**: `task: "detection"` from the run state is honored — KPIs and charts use `map_50` / `map_50_95` instead of treating detection as classification (which led to empty charts, NaNs, or a blank UI when combined with bad loss data).
+
 ## [0.2.1] — 2026-04-09
 
 ### Fixed

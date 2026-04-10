@@ -351,6 +351,15 @@ class UltralyticsDetectionAdapter:
         if isinstance(images, Tensor):
             images = images.to(self.device, dtype=torch.float32)
 
+        # Ultralytics loss expects float images roughly on a 0–255 scale. Many BNNR
+        # pipelines already pass 0–255 floats; doubling by *255 again causes
+        # overflow and NaN losses. Only scale when the batch is clearly 0–1.
+        if images.numel() > 0:
+            im_max = float(images.detach().max())
+            if im_max <= 1.05:
+                images = images * 255.0
+        images = images.clamp(0.0, 255.0)
+
         _b, _c, img_h, img_w = images.shape
 
         cls_parts: list[Tensor] = []
@@ -384,9 +393,8 @@ class UltralyticsDetectionAdapter:
             bboxes_t = torch.zeros(0, 4, device=self.device, dtype=torch.float32)
             batch_idx_t = torch.zeros(0, device=self.device, dtype=torch.float32)
 
-        # Match Ultralytics dataloader image scale (uint8-style 0–255).
         ultra_batch = {
-            "img": (images * 255.0).clamp(0.0, 255.0).contiguous(),
+            "img": images.contiguous(),
             "cls": cls_t,
             "bboxes": bboxes_t,
             "batch_idx": batch_idx_t,
@@ -400,6 +408,11 @@ class UltralyticsDetectionAdapter:
             total_loss = loss_out.sum() if isinstance(loss_out, Tensor) else torch.as_tensor(
                 loss_out, device=self.device, dtype=torch.float32,
             )
+
+        if not torch.isfinite(total_loss):
+            logger.warning("UltralyticsDetectionAdapter: non-finite loss encountered; skipping batch")
+            self.optimizer.zero_grad(set_to_none=True)
+            return {"loss": 0.0, "loss_non_finite": 1.0}
 
         self.scaler.scale(total_loss).backward()
         self.scaler.step(self.optimizer)
