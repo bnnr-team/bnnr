@@ -78,6 +78,7 @@ dev = [
   "types-PyYAML>=6.0.12",
   "pre-commit>=3.0.0",
   "playwright>=1.40.0",
+  "ultralytics>=8.0.0,<9.0",
 ]
 
 [project.scripts]
@@ -150,6 +151,3 @@ follow_imports = "skip"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --cov=bnnr --cov-report=term-missing"
-markers = [
-    "ultralytics: optional tests that need ultralytics and may download weights (set BNNR_ULTRA_YOLO_SMOKE=1)",
-]

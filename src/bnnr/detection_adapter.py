@@ -38,19 +38,19 @@ def _det_images_to_float01(images: Tensor) -> Tensor:
     BNNR pipelines may pass either ``[0, 1]`` floats (default collate) or
     ``[0, 255]`` floats (e.g. after uint8 round-trips in augmentations).
 
-    Ultralytics **torch.Tensor** inputs must already be in ``[0, 1]``: their
-    predictor divides by 255 only for **numpy** sources, not for tensors. Values
-    slightly above 1 (e.g. MixUp) are **clamped**, not divided by 255 — only
-    batches that look like a 0–255 encoding (max ≫ 1, typically ≥ 10) are
-    scaled with ``/ 255``.
+    Ultralytics training ``forward(img)`` expects tensors in **approximately**
+    ``[0, 1]``. Mild overshoots from blends (e.g. 1.02–1.5) are **clamped**;
+    batches that look like 0–255 encoding (``max >= 2`` or slightly-above-1
+    HDR with negative outliers) are divided by 255 first.
     """
     x = images.float()
     if x.numel() == 0:
         return x
     xmax = float(x.detach().max())
-    # Avoid treating mild >1 floats (colour / blend aug) as 0–255 pixels.
-    if xmax > 1.05 and xmax >= 10.0:
-        x = x / 255.0
+    xmin = float(x.detach().min())
+    if xmax > 1.0 + 1e-2:
+        if xmax >= 2.0 or xmin < -1e-2:
+            x = x / 255.0
     return x.clamp(0.0, 1.0)
 
 
@@ -363,8 +363,11 @@ class UltralyticsDetectionAdapter:
         Ultralytics 8.x expects ``model.loss(batch_dict)`` where ``batch_dict`` has
         ``img`` (BCHW float in ``[0, 1]`` after our normalisation), ``cls`` (N,1)
         ``torch.long``, ``bboxes`` (N,4) normalised xywh, and ``batch_idx`` (N,)
-        ``torch.long`` per-target image index. AMP is disabled here for numerical
-        stability with a custom batch dict.
+        ``torch.long`` per-target image index. Class ids are clamped to
+        ``[0, model.nc - 1]`` so corrupt labels cannot crash the assigner. AMP is
+        disabled here; backward uses plain ``fp32`` plus grad clipping (no
+        ``GradScaler`` on this path — mixing scaler with fp32 YOLO loss on CUDA
+        has produced non-finite updates).
         """
         images, targets = batch
         self._model.train()
@@ -378,6 +381,9 @@ class UltralyticsDetectionAdapter:
         images = _det_images_to_float01(images)
 
         _b, _c, img_h, img_w = images.shape
+        yolo_model = cast(Any, self._model)
+        nc = int(getattr(yolo_model, "nc", 80))
+        cls_max = max(nc - 1, 0)
 
         cls_parts: list[Tensor] = []
         bbox_parts: list[Tensor] = []
@@ -389,7 +395,7 @@ class UltralyticsDetectionAdapter:
             if len(boxes) == 0:
                 continue
             boxes = boxes.to(self.device, dtype=torch.float32)
-            labels = labels.to(self.device)
+            labels = labels.to(self.device).long().clamp(0, cls_max)
             x1, y1, x2, y2 = boxes.unbind(1)
             dx = x2 - x1
             dy = y2 - y1
@@ -436,24 +442,32 @@ class UltralyticsDetectionAdapter:
 
         self.optimizer.zero_grad()
 
-        yolo_model = cast(Any, self._model)
-        # AMP with a custom batch dict is a common source of NaN/Inf in YOLO loss;
-        # keep this step in full precision for numerical stability.
+        # Full precision only — never mix GradScaler with this path: on CUDA,
+        # ``GradScaler`` + fp32 loss + no autocast has produced non-finite
+        # grads/steps in practice; plain backward is stable for YOLO here.
         _dev_type = self.device.split(":")[0]
-        with torch.amp.autocast(device_type=_dev_type, enabled=False):
-            loss_out, _loss_items = yolo_model.loss(ultra_batch)
-            total_loss = loss_out.sum() if isinstance(loss_out, Tensor) else torch.as_tensor(
-                loss_out, device=self.device, dtype=torch.float32,
+        try:
+            with torch.amp.autocast(device_type=_dev_type, enabled=False):
+                loss_out, _loss_items = yolo_model.loss(ultra_batch)
+                total_loss = loss_out.sum() if isinstance(loss_out, Tensor) else torch.as_tensor(
+                    loss_out, device=self.device, dtype=torch.float32,
+                )
+        except IndexError as exc:
+            logger.warning(
+                "UltralyticsDetectionAdapter: label/box tensor layout rejected by YOLO loss (%s); skipping batch",
+                exc,
             )
+            self.optimizer.zero_grad(set_to_none=True)
+            return {"loss": 0.0, "loss_yolo_index_error": 1.0}
 
         if not torch.isfinite(total_loss):
             logger.warning("UltralyticsDetectionAdapter: non-finite loss encountered; skipping batch")
             self.optimizer.zero_grad(set_to_none=True)
             return {"loss": 0.0, "loss_non_finite": 1.0}
 
-        self.scaler.scale(total_loss).backward()
-        self.scaler.step(self.optimizer)
-        self.scaler.update()
+        total_loss.backward()
+        torch.nn.utils.clip_grad_norm_(yolo_model.parameters(), max_norm=10.0)
+        self.optimizer.step()
 
         return {"loss": float(total_loss.item())}
 

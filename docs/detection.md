@@ -65,7 +65,7 @@ adapter = UltralyticsDetectionAdapter(
 | `num_classes` | `None` | Number of classes (auto-detected if `None`) |
 | `lr` | `1e-3` | Learning rate (used when `optimizer` is `None`) |
 | `optimizer` | `None` | Custom optimizer (built automatically if `None`) |
-| `use_amp` | `False` | Mixed precision elsewhere; YOLO `train_step` always runs the Ultralytics loss in full precision for stability |
+| `use_amp` | `False` | YOLO `train_step` always uses fp32 loss + plain backward (no `GradScaler` on that path) + grad clipping for stability |
 
 **Image scale and YOLO loss.** Keep detector images in **[0, 1]** float (BNNR does this end-to-end, including after bbox-aware augmentations that round-trip through uint8). Ultralytics **torch.Tensor** inputs to `predict` must stay in **[0, 1]**—their preprocessor only divides numpy arrays by 255, not tensors. Passing 0–255 floats as tensors triggers warnings and can destabilize training/eval. You do **not** need torchvision `Normalize(mean, std)` for YOLO. If Colab still warns or hits **non-finite** loss, upgrade: `pip install -U bnnr`, or `pip install git+https://github.com/bnnr-team/bnnr.git` until a **PyPI patch** ships.
 

@@ -317,6 +317,7 @@ class TestDetectionAdapterProtocol:
 
 def _ultra_fake_inner_model() -> nn.Module:
     m = nn.Conv2d(3, 8, 3, padding=1)
+    m.nc = 80  # UltralyticsDetectionAdapter clamps cls using ``model.nc``
 
     class _Args:
         box = 7.5
