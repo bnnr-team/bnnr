@@ -221,8 +221,10 @@ class TestGenerateSaliency:
             forward_layout="ultralytics_bchw",
         )[0]
         assert sal.shape == (32, 32)
-        row_std = float(np.std(sal, axis=1).mean())
+        # Vertical "barcode" maps are constant along rows → near-zero std down columns.
         col_std = float(np.std(sal, axis=0).mean())
+        assert col_std > 1e-4, "map should vary horizontally (2D saliency, not 1×W stripes)"
+        row_std = float(np.std(sal, axis=1).mean())
         assert row_std > 1e-4, "map should vary vertically, not only per-column"
 
 

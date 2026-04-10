@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.5] — 2026-04-10
+
+### Fixed
+
+- **CI**: detection XAI regression test no longer triggers Ruff `F841` (use column-wise std assert for 2D saliency vs vertical-stripe artifacts).
+
 ## [0.2.4] — 2026-04-10
 
 ### Fixed
