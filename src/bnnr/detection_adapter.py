@@ -32,6 +32,22 @@ from bnnr.utils import get_device
 logger = logging.getLogger(__name__)
 
 
+def _det_images_to_float01(images: Tensor) -> Tensor:
+    """Normalise detector batch images to float32 in ``[0, 1]``.
+
+    BNNR pipelines may pass either ``[0, 1]`` floats (default collate) or
+    ``[0, 255]`` floats (e.g. after uint8 round-trips in augmentations).
+    Ultralytics loss / predict expect a consistent scale; we always use
+    ``[0, 1]`` internally then scale to ``0–255`` only where the API needs it.
+    """
+    x = images.float()
+    if x.numel() == 0:
+        return x
+    if float(x.detach().max()) > 1.05:
+        x = x / 255.0
+    return x.clamp(0.0, 1.0)
+
+
 def _targets_to_device(targets: list[dict[str, Tensor]], device: torch.device | str) -> list[dict[str, Tensor]]:
     """Move all tensors in a list of target dicts to the given device."""
     return [
@@ -339,8 +355,8 @@ class UltralyticsDetectionAdapter:
         """Training step using Ultralytics' internal loss (v8 API).
 
         Ultralytics 8.x expects ``model.loss(batch_dict)`` where ``batch_dict`` has
-        ``img`` (BCHW, typically 0–255 float), ``cls`` (N,1), ``bboxes`` (N,4) normalized
-        xywh, and ``batch_idx`` (N,) per-target image index — not a flat (N,6) tensor.
+        ``img`` (BCHW float in ``[0, 1]`` after our normalisation), ``cls`` (N,1),
+        ``bboxes`` (N,4) normalised xywh, and ``batch_idx`` (N,) per-target image index.
         """
         images, targets = batch
         self._model.train()
@@ -351,14 +367,7 @@ class UltralyticsDetectionAdapter:
         if isinstance(images, Tensor):
             images = images.to(self.device, dtype=torch.float32)
 
-        # Ultralytics loss expects float images roughly on a 0–255 scale. Many BNNR
-        # pipelines already pass 0–255 floats; doubling by *255 again causes
-        # overflow and NaN losses. Only scale when the batch is clearly 0–1.
-        if images.numel() > 0:
-            im_max = float(images.detach().max())
-            if im_max <= 1.05:
-                images = images * 255.0
-        images = images.clamp(0.0, 255.0)
+        images = _det_images_to_float01(images)
 
         _b, _c, img_h, img_w = images.shape
 
@@ -378,20 +387,19 @@ class UltralyticsDetectionAdapter:
             cx = (x1 + x2) * 0.5 / float(img_w)
             cy = (y1 + y2) * 0.5 / float(img_h)
             xywh = torch.stack((cx, cy, w_n, h_n), dim=1)
-            cls_parts.append(labels.float().view(-1, 1))
+            cls_parts.append(labels.long().view(-1, 1).float())
             bbox_parts.append(xywh)
             bi_parts.append(
                 torch.full((len(boxes),), float(i), device=self.device, dtype=torch.float32),
             )
 
-        if cls_parts:
-            cls_t = torch.cat(cls_parts, dim=0)
-            bboxes_t = torch.cat(bbox_parts, dim=0)
-            batch_idx_t = torch.cat(bi_parts, dim=0)
-        else:
-            cls_t = torch.zeros(0, 1, device=self.device, dtype=torch.float32)
-            bboxes_t = torch.zeros(0, 4, device=self.device, dtype=torch.float32)
-            batch_idx_t = torch.zeros(0, device=self.device, dtype=torch.float32)
+        if not cls_parts:
+            self.optimizer.zero_grad(set_to_none=True)
+            return {"loss": 0.0, "empty_targets": 1.0}
+
+        cls_t = torch.cat(cls_parts, dim=0)
+        bboxes_t = torch.cat(bbox_parts, dim=0)
+        batch_idx_t = torch.cat(bi_parts, dim=0)
 
         ultra_batch = {
             "img": images.contiguous(),
@@ -430,7 +438,8 @@ class UltralyticsDetectionAdapter:
     def _predict_results_dicts(self, images: Any) -> list[dict[str, Tensor]]:
         """Run ``YOLO.predict`` and return one CPU pred dict per image (aligned with batch)."""
         if isinstance(images, Tensor):
-            src = (images.float().to(self.device) * 255.0).clamp(0.0, 255.0)
+            im01 = _det_images_to_float01(images.to(self.device, dtype=torch.float32))
+            src = (im01 * 255.0).clamp(0.0, 255.0)
             batch_n = int(images.shape[0])
         else:
             src = images

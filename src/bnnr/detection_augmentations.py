@@ -223,9 +223,11 @@ class DetectionRandomRotate90(BboxAwareAugmentation):
         if self._rnd.random() > self.probability:
             return image, target
 
-        k = self._rnd.choice([0, 1, 2, 3])  # number of 90° rotations
-        if k == 0:
-            return image, target
+        # Always apply a non-identity rotation when this augmentation runs.
+        # (Choosing k=0 here used to make ~25% of applications a no-op even with
+        # probability=1.0, which is confusing in demos and redundant with the
+        # outer probability gate.)
+        k = self._rnd.choice([1, 2, 3])  # number of 90° CCW rotations (np.rot90)
 
         h, w = image.shape[:2]
         was_tensor = isinstance(target.get("boxes"), Tensor)

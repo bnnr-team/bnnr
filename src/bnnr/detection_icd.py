@@ -25,10 +25,13 @@ from typing import Any
 
 import cv2
 import numpy as np
+from torch import Tensor
 
 from bnnr.detection_augmentations import (
     BboxAwareAugmentation,
     _ensure_numpy_boxes,
+    _ensure_numpy_labels,
+    _restore_target_types,
 )
 
 logger = logging.getLogger(__name__)
@@ -211,8 +214,12 @@ class _DetectionBaseICD(BboxAwareAugmentation):
         mask = self._compute_tile_mask(saliency, h, w)
         out = self._apply_fill(image, mask)
 
-        # Targets are unchanged (we only augment the image)
-        return out, target
+        # Return a shallow copy so callers never share mutable dict / array refs
+        # with other augmentations in the same visualisation loop.
+        was_tensor = isinstance(target.get("boxes"), Tensor)
+        boxes_c = _ensure_numpy_boxes(target["boxes"]).copy()
+        labels_c = _ensure_numpy_labels(target["labels"]).copy()
+        return out, _restore_target_types(target, boxes_c, labels_c, was_tensor)
 
 
 class DetectionICD(_DetectionBaseICD):
