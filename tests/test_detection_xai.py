@@ -193,6 +193,38 @@ class TestGenerateSaliency:
             assert sal.shape == (24, 24)
             assert sal.dtype == np.float32
 
+    def test_ultralytics_skips_degenerate_last_conv(self) -> None:
+        """Last Conv2d with H==1 would barcode-resize to vertical stripes; use earlier conv."""
+        import torch.nn as nn
+
+        class YoloLike(nn.Module):
+            def forward(self, x: Tensor) -> Tensor:
+                z = torch.relu(self.good(x))
+                z = self.pool(z)
+                return torch.relu(self.bad(z))
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.good = nn.Conv2d(3, 4, 3, padding=1)
+                self.pool = nn.AdaptiveAvgPool2d((1, 16))
+                self.bad = nn.Conv2d(4, 2, 1)
+
+        model = YoloLike()
+        images = torch.rand(1, 3, 32, 32)
+        target_layers = [model.bad]
+
+        sal = generate_detection_saliency(
+            model,
+            images,
+            target_layers,
+            device="cpu",
+            forward_layout="ultralytics_bchw",
+        )[0]
+        assert sal.shape == (32, 32)
+        row_std = float(np.std(sal, axis=1).mean())
+        col_std = float(np.std(sal, axis=0).mean())
+        assert row_std > 1e-4, "map should vary vertically, not only per-column"
+
 
 # ---------------------------------------------------------------------------
 #  save_detection_xai_panels

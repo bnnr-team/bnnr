@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.4] — 2026-04-10
+
+### Fixed
+
+- **Detection XAI (Ultralytics)**: `generate_detection_saliency` no longer uses the final `Conv2d` when its feature map has **height or width 1** (common in YOLO heads). Resizing such maps to the image size produced vertical/horizontal “barcode” heatmaps; the code now keeps the **last 4D conv feature map with both spatial sizes > 1**, with a safe fallback to `target_layers` hooks.
+
 ## [0.2.3] — 2026-04-10
 
 ### Fixed

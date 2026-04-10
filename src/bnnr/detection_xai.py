@@ -165,6 +165,11 @@ def overlay_saliency_heatmap(
 # ---------------------------------------------------------------------------
 
 
+def _activation_tensor_spatial_ok(t: Tensor) -> bool:
+    """True if ``t`` is a 4D feature map with both spatial extents > 1."""
+    return t.dim() == 4 and int(t.shape[2]) > 1 and int(t.shape[3]) > 1
+
+
 def generate_detection_saliency(
     model: nn.Module,
     images: Tensor,
@@ -181,6 +186,12 @@ def generate_detection_saliency(
 
     For detection, we compute saliency based on the total activation
     magnitude in the target layers (class-agnostic saliency).
+
+    For ``ultralytics_bchw``, hooks are placed on every ``Conv2d`` and the
+    **last** feature map with both spatial sizes ``> 1`` is used.  The final
+    convolutions in YOLO heads often produce maps with height or width ``1``;
+    upsampling those to the image size yields vertical/horizontal "barcode"
+    stripes, so they are skipped when a deeper 2D map exists.
 
     Parameters
     ----------
@@ -203,26 +214,38 @@ def generate_detection_saliency(
     model.eval()
     images = images.to(device)
 
+    b = int(images.shape[0])
+    img_h, img_w = int(images.shape[2]), int(images.shape[3])
+
+    def _zeros_batch() -> list[np.ndarray]:
+        return [np.zeros((img_h, img_w), dtype=np.float32) for _ in range(b)]
+
     activations: list[Tensor] = []
 
-    def _hook(module: nn.Module, input: Any, output: Any) -> None:
+    def _hook_target(module: nn.Module, input: Any, output: Any) -> None:
         if isinstance(output, Tensor):
             activations.append(output.detach())
 
-    # Register hooks
-    handles = []
-    for layer in target_layers:
-        h = layer.register_forward_hook(_hook)
-        handles.append(h)
+    last_spatial_conv_feat: list[Tensor | None] = [None]
 
+    def _hook_ultra_conv(module: nn.Module, input: Any, output: Any) -> None:
+        if _activation_tensor_spatial_ok(output):
+            last_spatial_conv_feat[0] = output.detach()
+
+    handles: list[Any] = []
     try:
         with torch.no_grad():
             if forward_layout == "ultralytics_bchw":
                 from bnnr.detection_adapter import _det_images_to_float01
 
                 x = _det_images_to_float01(images)
+                for m in model.modules():
+                    if isinstance(m, nn.Conv2d):
+                        handles.append(m.register_forward_hook(_hook_ultra_conv))
                 model(x)
             else:
+                for layer in target_layers:
+                    handles.append(layer.register_forward_hook(_hook_target))
                 # Torchvision detection: list of CHW tensors
                 if images.dim() == 4:
                     image_list = [img for img in images]
@@ -233,22 +256,49 @@ def generate_detection_saliency(
         for h in handles:
             h.remove()
 
-    if not activations:
-        # No activations captured — return zeros
-        b = images.shape[0]
-        h, w = images.shape[2], images.shape[3]
-        return [np.zeros((h, w), dtype=np.float32) for _ in range(b)]
+    feat: Tensor | None = None
+    if forward_layout == "ultralytics_bchw":
+        feat = last_spatial_conv_feat[0]
+        if feat is None:
+            # e.g. stub model with no Conv2d — fall back to ``target_layers`` hooks
+            activations.clear()
+            handles2: list[Any] = []
+            try:
+                with torch.no_grad():
+                    x = _det_images_to_float01(images)
+                    for layer in target_layers:
+                        handles2.append(layer.register_forward_hook(_hook_target))
+                    model(x)
+            finally:
+                for h in handles2:
+                    h.remove()
+            if not activations:
+                return _zeros_batch()
+            for t in reversed(activations):
+                if _activation_tensor_spatial_ok(t):
+                    feat = t
+                    break
+            if feat is None:
+                feat = activations[-1]
+    else:
+        if not activations:
+            return _zeros_batch()
+        for t in reversed(activations):
+            if _activation_tensor_spatial_ok(t):
+                feat = t
+                break
+        if feat is None:
+            feat = activations[-1]
 
-    # Use the last captured activation
-    feat = activations[-1]  # [B, C, fH, fW]
-    # Channel-wise mean → spatial saliency
-    saliency = feat.mean(dim=1).cpu().numpy()  # [B, fH, fW]
+    if feat is None or not isinstance(feat, Tensor):
+        return _zeros_batch()
+
+    # Channel-wise mean → spatial saliency [B, fH, fW]
+    saliency = feat.mean(dim=1).cpu().numpy()
 
     result = []
     for i in range(saliency.shape[0]):
         sal = saliency[i]
-        # Resize to input image size
-        img_h, img_w = images.shape[2], images.shape[3]
         sal_resized = cv2.resize(sal, (img_w, img_h), interpolation=cv2.INTER_LINEAR)
         result.append(sal_resized)
 
