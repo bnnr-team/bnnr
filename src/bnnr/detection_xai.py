@@ -194,7 +194,7 @@ def generate_detection_saliency(
         Device for computation.
     forward_layout : str
         ``torchvision_list`` — ``model([CHW, ...])`` (torchvision detection).
-        ``ultralytics_bchw`` — ``model(BCHW)`` with 0–255 float inputs (Ultralytics).
+        ``ultralytics_bchw`` — ``model(BCHW)`` with float inputs in ``[0, 1]`` (Ultralytics).
 
     Returns
     -------
@@ -218,7 +218,9 @@ def generate_detection_saliency(
     try:
         with torch.no_grad():
             if forward_layout == "ultralytics_bchw":
-                x = (images.float() * 255.0).clamp(0.0, 255.0)
+                from bnnr.detection_adapter import _det_images_to_float01
+
+                x = _det_images_to_float01(images)
                 model(x)
             else:
                 # Torchvision detection: list of CHW tensors

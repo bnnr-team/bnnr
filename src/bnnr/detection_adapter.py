@@ -37,13 +37,19 @@ def _det_images_to_float01(images: Tensor) -> Tensor:
 
     BNNR pipelines may pass either ``[0, 1]`` floats (default collate) or
     ``[0, 255]`` floats (e.g. after uint8 round-trips in augmentations).
-    Ultralytics loss / predict expect a consistent scale; we always use
-    ``[0, 1]`` internally then scale to ``0–255`` only where the API needs it.
+
+    Ultralytics **torch.Tensor** inputs must already be in ``[0, 1]``: their
+    predictor divides by 255 only for **numpy** sources, not for tensors. Values
+    slightly above 1 (e.g. MixUp) are **clamped**, not divided by 255 — only
+    batches that look like a 0–255 encoding (max ≫ 1, typically ≥ 10) are
+    scaled with ``/ 255``.
     """
     x = images.float()
     if x.numel() == 0:
         return x
-    if float(x.detach().max()) > 1.05:
+    xmax = float(x.detach().max())
+    # Avoid treating mild >1 floats (colour / blend aug) as 0–255 pixels.
+    if xmax > 1.05 and xmax >= 10.0:
         x = x / 255.0
     return x.clamp(0.0, 1.0)
 
@@ -355,8 +361,10 @@ class UltralyticsDetectionAdapter:
         """Training step using Ultralytics' internal loss (v8 API).
 
         Ultralytics 8.x expects ``model.loss(batch_dict)`` where ``batch_dict`` has
-        ``img`` (BCHW float in ``[0, 1]`` after our normalisation), ``cls`` (N,1),
-        ``bboxes`` (N,4) normalised xywh, and ``batch_idx`` (N,) per-target image index.
+        ``img`` (BCHW float in ``[0, 1]`` after our normalisation), ``cls`` (N,1)
+        ``torch.long``, ``bboxes`` (N,4) normalised xywh, and ``batch_idx`` (N,)
+        ``torch.long`` per-target image index. AMP is disabled here for numerical
+        stability with a custom batch dict.
         """
         images, targets = batch
         self._model.train()
@@ -374,6 +382,7 @@ class UltralyticsDetectionAdapter:
         cls_parts: list[Tensor] = []
         bbox_parts: list[Tensor] = []
         bi_parts: list[Tensor] = []
+        min_wh_n = 1.0 / max(float(img_h), float(img_w))
         for i, t in enumerate(targets):
             boxes = t["boxes"]  # xyxy in pixel coords on resized image
             labels = t["labels"]
@@ -382,15 +391,32 @@ class UltralyticsDetectionAdapter:
             boxes = boxes.to(self.device, dtype=torch.float32)
             labels = labels.to(self.device)
             x1, y1, x2, y2 = boxes.unbind(1)
+            dx = x2 - x1
+            dy = y2 - y1
+            finite = torch.isfinite(x1) & torch.isfinite(y1) & torch.isfinite(x2) & torch.isfinite(y2)
+            valid = finite & (dx > 0) & (dy > 0) & (dx * dy >= 1.0)
+            if not valid.any():
+                continue
+            boxes = boxes[valid]
+            labels = labels[valid]
+            x1, y1, x2, y2 = boxes.unbind(1)
+            w_n = (x2 - x1) / float(img_w)
+            h_n = (y2 - y1) / float(img_h)
+            wh_ok = (w_n >= min_wh_n) & (h_n >= min_wh_n)
+            if not wh_ok.any():
+                continue
+            boxes = boxes[wh_ok]
+            labels = labels[wh_ok]
+            x1, y1, x2, y2 = boxes.unbind(1)
             w_n = (x2 - x1) / float(img_w)
             h_n = (y2 - y1) / float(img_h)
             cx = (x1 + x2) * 0.5 / float(img_w)
             cy = (y1 + y2) * 0.5 / float(img_h)
             xywh = torch.stack((cx, cy, w_n, h_n), dim=1)
-            cls_parts.append(labels.long().view(-1, 1).float())
+            cls_parts.append(labels.long().view(-1, 1))
             bbox_parts.append(xywh)
             bi_parts.append(
-                torch.full((len(boxes),), float(i), device=self.device, dtype=torch.float32),
+                torch.full((len(boxes),), i, device=self.device, dtype=torch.long),
             )
 
         if not cls_parts:
@@ -411,7 +437,10 @@ class UltralyticsDetectionAdapter:
         self.optimizer.zero_grad()
 
         yolo_model = cast(Any, self._model)
-        with torch.amp.autocast(device_type=self.device.split(":")[0], enabled=self.use_amp):
+        # AMP with a custom batch dict is a common source of NaN/Inf in YOLO loss;
+        # keep this step in full precision for numerical stability.
+        _dev_type = self.device.split(":")[0]
+        with torch.amp.autocast(device_type=_dev_type, enabled=False):
             loss_out, _loss_items = yolo_model.loss(ultra_batch)
             total_loss = loss_out.sum() if isinstance(loss_out, Tensor) else torch.as_tensor(
                 loss_out, device=self.device, dtype=torch.float32,
@@ -438,8 +467,9 @@ class UltralyticsDetectionAdapter:
     def _predict_results_dicts(self, images: Any) -> list[dict[str, Tensor]]:
         """Run ``YOLO.predict`` and return one CPU pred dict per image (aligned with batch)."""
         if isinstance(images, Tensor):
-            im01 = _det_images_to_float01(images.to(self.device, dtype=torch.float32))
-            src = (im01 * 255.0).clamp(0.0, 255.0)
+            # Tensor ``source`` must stay in [0, 1] — Ultralytics does not /255
+            # for torch tensors (see BasePredictor.preprocess).
+            src = _det_images_to_float01(images.to(self.device, dtype=torch.float32)).contiguous()
             batch_n = int(images.shape[0])
         else:
             src = images

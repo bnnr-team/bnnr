@@ -561,6 +561,18 @@ class BNNRTrainer:
             t = t / 255.0
         return t
 
+    @staticmethod
+    def _det_uint8_batch_to_float01(np_images: np.ndarray, *, ref_batch: Tensor) -> Tensor:
+        """Uint8 HWC batch → BCHW float32 in ``[0, 1]`` (detection / YOLO contract).
+
+        Always divides by 255 — unlike :meth:`_uint8_to_tensor`, this does **not**
+        depend on ``ref_batch.max()`` so chained bbox-aware augmentations never
+        leave a float ``0–255`` batch that breaks Ultralytics.
+        """
+        t = torch.as_tensor(np_images, dtype=torch.uint8, device=ref_batch.device)
+        t = t.permute(0, 3, 1, 2).to(dtype=torch.float32)
+        return (t / 255.0).clamp(0.0, 1.0)
+
     def _apply_augmentation_to_batch(
         self,
         batch: Any,
@@ -620,7 +632,7 @@ class BNNRTrainer:
                     aug_images_list.append(aug_img)
                     aug_targets_list.append(aug_tgt)
                 aug_images_np = np.stack(aug_images_list, axis=0)
-                return self._uint8_to_tensor(aug_images_np, ref_batch=images), aug_targets_list
+                return self._det_uint8_batch_to_float01(aug_images_np, ref_batch=images), aug_targets_list
 
             # Pixel-only augmentations: apply to images, pass targets through
             try:
@@ -629,7 +641,7 @@ class BNNRTrainer:
             except (NotImplementedError, RuntimeError, TypeError):
                 np_images = self._tensor_to_uint8(images)
                 aug_images = augmentation.apply_batch(np_images)
-                return self._uint8_to_tensor(aug_images, ref_batch=images), targets
+                return self._det_uint8_batch_to_float01(aug_images, ref_batch=images), targets
 
         # ── Classification path (unchanged) ─────────────────────────────
         images, labels = batch

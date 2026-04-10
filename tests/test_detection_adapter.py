@@ -14,7 +14,12 @@ import pytest
 import torch
 from torch import Tensor, nn
 
-from bnnr.detection_adapter import DetectionAdapter, UltralyticsDetectionAdapter, _targets_to_device
+from bnnr.detection_adapter import (
+    DetectionAdapter,
+    UltralyticsDetectionAdapter,
+    _det_images_to_float01,
+    _targets_to_device,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers — tiny detection model that mimics the torchvision contract.
@@ -60,6 +65,24 @@ def _make_batch(n: int = 2, img_size: int = 32) -> tuple[Tensor, list[dict[str, 
             "labels": torch.tensor([1], dtype=torch.int64),
         })
     return images, targets
+
+
+# ---------------------------------------------------------------------------
+# _det_images_to_float01
+# ---------------------------------------------------------------------------
+
+
+class TestDetImagesToFloat01:
+    def test_scales_clear_0_255_float_batch(self) -> None:
+        x = torch.ones(1, 3, 2, 2) * 200.0
+        out = _det_images_to_float01(x)
+        assert float(out.max()) <= 1.0 + 1e-5
+        assert torch.allclose(out, torch.ones_like(out) * (200.0 / 255.0))
+
+    def test_clamps_mild_over_one_without_dividing_by_255(self) -> None:
+        x = torch.ones(1, 3, 2, 2) * 1.2
+        out = _det_images_to_float01(x)
+        assert torch.allclose(out, torch.ones_like(out))
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +394,29 @@ class TestUltralyticsPredictDetectionDicts:
         assert int(preds[0]["labels"][0].item()) == 3
         yolo_inst.predict.assert_called_once()
 
+    def test_predict_passes_bchw_float01_to_yolo(
+        self, fake_ultralytics_modules: Any,
+    ) -> None:
+        mock_yolo_cls = MagicMock()
+        yolo_inst = MagicMock()
+        yolo_inst.model = _ultra_fake_inner_model()
+        captured: dict[str, Any] = {}
+
+        def _capture_predict(*_a: Any, **kw: Any) -> Any:
+            captured["source"] = kw.get("source")
+            return _mock_yolo_results(1, with_boxes=True)
+
+        yolo_inst.predict.side_effect = _capture_predict
+        mock_yolo_cls.return_value = yolo_inst
+        fake_ultralytics_modules.YOLO = mock_yolo_cls
+
+        adapter = UltralyticsDetectionAdapter(model_name="dummy.pt", device="cpu")
+        adapter.predict_detection_dicts(torch.rand(1, 3, 16, 16) * 255.0)
+        src = captured["source"]
+        assert isinstance(src, Tensor)
+        assert float(src.max()) <= 1.0 + 1e-4
+        assert float(src.min()) >= 0.0
+
     def test_predict_detection_dicts_none_boxes_empty_tensors(
         self, fake_ultralytics_modules: Any,
     ) -> None:
@@ -424,3 +470,71 @@ class TestUltralyticsPredictDetectionDicts:
         assert len(adapter._eval_preds) == 2
         assert len(adapter._eval_targets) == 2
         assert adapter._eval_preds[0]["boxes"].numel() > 0
+
+
+class TestUltralyticsTrainStepBatch:
+    def test_loss_receives_float01_and_long_fields(
+        self, fake_ultralytics_modules: Any,
+    ) -> None:
+        mock_yolo_cls = MagicMock()
+        yolo_inst = MagicMock()
+        inner = _ultra_fake_inner_model()
+        captured: dict[str, Any] = {}
+
+        def _loss(batch: dict[str, Any]) -> tuple[Tensor, Tensor]:
+            captured["batch"] = batch
+            dev = batch["img"].device
+            t = torch.tensor(1.0, requires_grad=True, device=dev, dtype=torch.float32)
+            return t, torch.zeros(3, device=dev, dtype=torch.float32)
+
+        inner.loss = _loss  # type: ignore[method-assign]
+        yolo_inst.model = inner
+        mock_yolo_cls.return_value = yolo_inst
+        fake_ultralytics_modules.YOLO = mock_yolo_cls
+
+        adapter = UltralyticsDetectionAdapter(model_name="dummy.pt", device="cpu", use_amp=True)
+        images = torch.rand(2, 3, 32, 32) * 255.0
+        targets = [
+            {
+                "boxes": torch.tensor([[2.0, 2.0, 20.0, 20.0]], dtype=torch.float32),
+                "labels": torch.tensor([3]),
+            },
+            {
+                "boxes": torch.tensor([[1.0, 1.0, 8.0, 9.0]], dtype=torch.float32),
+                "labels": torch.tensor([1]),
+            },
+        ]
+        metrics = adapter.train_step((images, targets))
+        assert metrics["loss"] == pytest.approx(1.0)
+        b = captured["batch"]
+        assert float(b["img"].max()) <= 1.0 + 1e-5
+        assert b["cls"].dtype == torch.int64
+        assert b["batch_idx"].dtype == torch.int64
+
+    def test_skips_degenerate_boxes_empty_batch(
+        self, fake_ultralytics_modules: Any,
+    ) -> None:
+        mock_yolo_cls = MagicMock()
+        yolo_inst = MagicMock()
+        inner = _ultra_fake_inner_model()
+        called: list[object] = []
+
+        def _loss(batch: dict[str, Any]) -> tuple[Tensor, Tensor]:
+            called.append(batch)
+            t = torch.tensor(1.0, requires_grad=True)
+            return t, torch.zeros(3)
+
+        inner.loss = _loss  # type: ignore[method-assign]
+        yolo_inst.model = inner
+        mock_yolo_cls.return_value = yolo_inst
+        fake_ultralytics_modules.YOLO = mock_yolo_cls
+
+        adapter = UltralyticsDetectionAdapter(model_name="dummy.pt", device="cpu")
+        images = torch.rand(2, 3, 16, 16)
+        targets = [
+            {"boxes": torch.zeros(1, 4), "labels": torch.tensor([0])},
+            {"boxes": torch.tensor([[0.0, 0.0, 0.5, 0.5]]), "labels": torch.tensor([0])},
+        ]
+        metrics = adapter.train_step((images, targets))
+        assert metrics.get("empty_targets") == 1.0
+        assert called == []

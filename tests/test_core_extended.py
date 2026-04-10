@@ -267,3 +267,24 @@ class TestReEvalBaseline:
         trainer = _make_trainer(reeval_baseline_per_iteration=True)
         result = trainer.run()
         assert result.best_metrics is not None
+
+
+class TestDetUint8BatchToFloat01:
+    """Detection uint8 round-trip must land in ``[0, 1]`` even when ``ref_batch`` is 0–255 float."""
+
+    def test_always_divides_by_255_despite_ref_max(self) -> None:
+        ref = torch.full((1, 3, 4, 4), 200.0, dtype=torch.float32)
+        u8 = np.zeros((1, 4, 4, 3), dtype=np.uint8)
+        u8[0, 0, 0, :] = 255
+        out = BNNRTrainer._det_uint8_batch_to_float01(u8, ref_batch=ref)
+        assert out.dtype == torch.float32
+        assert float(out.max()) <= 1.0 + 1e-5
+        assert float(out.min()) >= 0.0
+        assert torch.allclose(out[0, :, 0, 0], torch.ones(3, dtype=torch.float32))
+
+    def test_old_uint8_to_tensor_skips_scale_when_ref_high(self) -> None:
+        ref = torch.full((1, 3, 4, 4), 200.0, dtype=torch.float32)
+        u8 = np.zeros((1, 4, 4, 3), dtype=np.uint8)
+        u8[0, 0, 0, :] = 255
+        legacy = BNNRTrainer._uint8_to_tensor(u8, ref_batch=ref)
+        assert float(legacy.max()) > 1.5  # documents why detection uses _det_uint8_batch_to_float01
