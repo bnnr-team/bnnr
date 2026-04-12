@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.2.8] — 2026-04-10
+
+### Changed
+
+- **Tests vs examples**: Removed YOLO ``smoke_*.py`` scripts from ``examples/detection/`` (they duplicated CI tests). Training compatibility is covered only by ``tests/test_ultralytics_detection_train_integration.py``. The optional XAI overlay helper lives under ``tests/integration/smoke_yolo_xai_overlay.py``.
+- **CI / YOLO26**: On ``GITHUB_ACTIONS``, the ``yolo26_cpu_adapter`` fixture **fails** the job if ``ultralytics`` is older than 8.3 or ``yolo26n.pt`` cannot be loaded, so YOLO26 + BNNR is always exercised on CI (locally, missing weights still **skip**). Tests ``test_yolo26_*`` are marked ``@pytest.mark.yolo26``.
+
+### Added
+
+- ``test_yolo26_multiple_train_steps_finite`` — eight consecutive ``train_step`` calls on ``yolo26n.pt``.
+
+## [0.2.7] — 2026-04-10
+
+### Fixed
+
+- **Ultralytics YOLO26 / ``E2ELoss``** (`UltralyticsDetectionAdapter`): before ``loss()``, the task model and last (detection) module are forced into **train mode** so the head returns a ``one2many`` dict with ``boxes`` (inference mode previously led to ``KeyError`` / wrong layout). **Fused** heads (``cv2`` / ``cv3`` cleared after ``fuse()``) are detected early with ``loss_yolo_fused_head``; ``KeyError`` / ``TypeError`` from the criterion are caught as ``loss_yolo_pred_format_error`` with logs including the installed ``ultralytics`` version and head state.
+- **Detection XAI / probes**: ``predict_detection_dicts`` restores the prior ``training`` flag after ``eval`` + ``predict``, so interleaved inference cannot leave the YOLO task stuck in ``eval()`` for the next training step.
+
+### Added
+
+- **Tests**: optional ``yolo26n.pt`` integration step (skipped when Ultralytics is older than 8.3 or weights are unavailable; **tightened in 0.2.8** to fail on CI).
+
+### Changed
+
+- **Dev dependency**: ``ultralytics>=8.3.0,<9`` (YOLO26 / current loss paths).
+
 ## [0.2.6] — 2026-04-10
 
 ### Fixed

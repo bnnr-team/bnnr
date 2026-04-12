@@ -41,6 +41,8 @@ jobs:
       - name: Type check with mypy
         run: mypy src/bnnr/
 
+      # Includes ``tests/test_ultralytics_detection_train_integration.py`` (YOLOv8 + YOLO26).
+      # YOLO26 tests are marked ``yolo26``; on GITHUB_ACTIONS the fixture fails instead of skipping.
       - name: Test with coverage
         run: pytest --cov=bnnr --cov-report=xml
 
@@ -81,6 +83,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,dashboard]"
 
+      # Full suite including YOLO26 + BNNR (see test_ultralytics_detection_train_integration.py).
       - name: Run pytest
         run: pytest -q
 
@@ -109,6 +112,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,dashboard]"
 
+      # Full suite including YOLO26 + BNNR on Windows/macOS.
       - name: Run pytest
         run: pytest -q
 

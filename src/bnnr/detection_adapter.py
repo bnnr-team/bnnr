@@ -32,6 +32,50 @@ from bnnr.utils import get_device
 logger = logging.getLogger(__name__)
 
 
+def _ultralytics_version() -> str:
+    """Best-effort package version string for diagnostics."""
+    try:
+        from importlib.metadata import version as pkg_version
+
+        return str(pkg_version("ultralytics"))
+    except Exception:
+        try:
+            import ultralytics
+
+            return str(getattr(ultralytics, "__version__", "unknown"))
+        except Exception:
+            return "unknown"
+
+
+def _ensure_yolo_training_for_loss(yolo_model: Any) -> None:
+    """Ensure the Ultralytics task model and its detection head are in train mode.
+
+    YOLO ``Detect`` / ``end2end`` heads only return the ``one2many`` dict with
+    ``boxes`` / ``scores`` / ``feats`` while the head is training; inference mode
+    returns a different layout and breaks ``E2ELoss`` / ``v8DetectionLoss``.
+    """
+    if hasattr(yolo_model, "train"):
+        yolo_model.train(True)
+    inner = getattr(yolo_model, "model", None)
+    if isinstance(inner, nn.Module) and len(inner) > 0:
+        tail = inner[-1]
+        if isinstance(tail, nn.Module):
+            tail.train(True)
+
+
+def _yolo_head_fused_cv_none(yolo_model: Any) -> bool:
+    """True when Ultralytics ``Detect.fuse()`` cleared the one-to-many conv heads."""
+    inner = getattr(yolo_model, "model", None)
+    if not isinstance(inner, nn.Module) or len(inner) == 0:
+        return False
+    head = inner[-1]
+    if not isinstance(head, nn.Module):
+        return False
+    if not hasattr(head, "cv2") or not hasattr(head, "cv3"):
+        return False
+    return head.cv2 is None and head.cv3 is None
+
+
 def _det_images_to_float01(images: Tensor) -> Tensor:
     """Normalise detector batch images to float32 in ``[0, 1]``.
 
@@ -368,6 +412,13 @@ class UltralyticsDetectionAdapter:
         disabled here; backward uses plain ``fp32`` plus grad clipping (no
         ``GradScaler`` on this path — mixing scaler with fp32 YOLO loss on CUDA
         has produced non-finite updates).
+
+        For YOLO26 / ``end2end`` models, the task model and detection head are forced
+        into train mode immediately before ``loss`` so ``E2ELoss`` receives a
+        ``one2many`` dict containing ``boxes``. Fused inference heads (``cv2`` /
+        ``cv3`` cleared) cannot train and return ``loss_yolo_fused_head``; bad
+        prediction layouts return ``loss_yolo_pred_format_error`` (see logs for
+        ``ultralytics`` version and head state).
         """
         images, targets = batch
         self._model.train()
@@ -442,6 +493,17 @@ class UltralyticsDetectionAdapter:
 
         self.optimizer.zero_grad()
 
+        _ensure_yolo_training_for_loss(yolo_model)
+        if _yolo_head_fused_cv_none(yolo_model):
+            logger.error(
+                "UltralyticsDetectionAdapter: detection head is fused (cv2/cv3 cleared). "
+                "Use non-fused weights and do not call ``model.fuse()`` before ``train_step``; "
+                "ultralytics=%s.",
+                _ultralytics_version(),
+            )
+            self.optimizer.zero_grad(set_to_none=True)
+            return {"loss": 0.0, "loss_yolo_fused_head": 1.0}
+
         # Full precision only — never mix GradScaler with this path: on CUDA,
         # ``GradScaler`` + fp32 loss + no autocast has produced non-finite
         # grads/steps in practice; plain backward is stable for YOLO here.
@@ -459,6 +521,23 @@ class UltralyticsDetectionAdapter:
             )
             self.optimizer.zero_grad(set_to_none=True)
             return {"loss": 0.0, "loss_yolo_index_error": 1.0}
+        except (KeyError, TypeError) as exc:
+            inner = getattr(yolo_model, "model", None)
+            head = inner[-1] if inner is not None and len(inner) else None
+            logger.warning(
+                "UltralyticsDetectionAdapter: YOLO loss prediction layout error (%s: %s); skipping batch. "
+                "ultralytics=%s task.training=%s end2end=%s head=%s head.training=%s fused_cv=%s",
+                type(exc).__name__,
+                exc,
+                _ultralytics_version(),
+                bool(getattr(yolo_model, "training", False)),
+                getattr(yolo_model, "end2end", None),
+                type(head).__name__ if head is not None else None,
+                bool(getattr(head, "training", False)) if head is not None else None,
+                _yolo_head_fused_cv_none(yolo_model),
+            )
+            self.optimizer.zero_grad(set_to_none=True)
+            return {"loss": 0.0, "loss_yolo_pred_format_error": 1.0}
 
         if not torch.isfinite(total_loss):
             logger.warning("UltralyticsDetectionAdapter: non-finite loss encountered; skipping batch")
@@ -524,9 +603,16 @@ class UltralyticsDetectionAdapter:
         """Run inference and return torchvision-style pred dicts on CPU (no ``_eval_*`` mutation).
 
         Used by detection XAI and probe snapshots with ``UltralyticsDetectionAdapter``.
+        Restores the previous ``training`` flag so a mid-epoch XAI call cannot leave
+        the task model in ``eval()`` for the next ``train_step`` (YOLO26 / ``E2ELoss``
+        needs the head in train mode during loss).
         """
+        was_training = self._model.training
         self._model.eval()
-        return self._predict_results_dicts(images)
+        try:
+            return self._predict_results_dicts(images)
+        finally:
+            self._model.train(was_training)
 
     def eval_step(self, batch: Any) -> dict[str, float]:
         """Evaluation step: accumulate predictions for epoch-level mAP."""

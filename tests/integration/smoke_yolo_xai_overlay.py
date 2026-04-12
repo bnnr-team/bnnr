@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Smoke test: YOLOv8 + BNNR ``generate_detection_saliency`` + JET overlay.
+"""Manual script: YOLOv8 + BNNR ``generate_detection_saliency`` + JET overlay.
 
 Run from the **repository root** with a normal dev env (``uv sync`` / ``pip install -e .[dev]``):
 
-  python examples/detection/smoke_yolo_xai_overlay.py
+    python tests/integration/smoke_yolo_xai_overlay.py
 
-Writes ``examples/detection/xai_yolov8n_activation_overlay.png`` next to this file.
+Writes ``tests/integration/xai_yolov8n_activation_overlay.png`` next to this file.
 Activation-based saliency is **class-agnostic** (mean conv features), so the map is
 often **grainy** — unlike gradient-based CAM.  Ultralytics builds pick a conv layer
 by **isotropy** (see ``generate_detection_saliency``); check printed ``col_std`` /

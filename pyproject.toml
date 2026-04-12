@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bnnr"
-version = "0.2.6"
+version = "0.2.8"
 description = "BNNR — Train → Explain → Improve → Prove"
 readme = "README.md"
 license = { text = "MIT" }
@@ -78,7 +78,7 @@ dev = [
   "types-PyYAML>=6.0.12",
   "pre-commit>=3.0.0",
   "playwright>=1.40.0",
-  "ultralytics>=8.0.0,<9.0",
+  "ultralytics>=8.3.0,<9.0",
 ]
 
 [project.scripts]
@@ -151,3 +151,6 @@ follow_imports = "skip"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --cov=bnnr --cov-report=term-missing"
+markers = [
+    "yolo26: BNNR + yolo26n.pt (must pass on GitHub Actions; may skip locally).",
+]

@@ -104,6 +104,6 @@ out_analyze_*/
 tmp/
 .tmp_xai_cpu/
 
-# YOLO XAI smoke outputs (regenerate with smoke_yolo_xai_overlay.py)
-examples/detection/xai_yolov8n_activation_overlay.png
-examples/detection/_smoke_input_cat.jpg
+# YOLO XAI manual script outputs (regenerate with tests/integration/smoke_yolo_xai_overlay.py)
+tests/integration/xai_yolov8n_activation_overlay.png
+tests/integration/_smoke_input_cat.jpg
