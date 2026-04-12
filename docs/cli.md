@@ -20,27 +20,34 @@ python3 -m bnnr train --config CONFIG [OPTIONS]
 
 ### Supported datasets
 
+**Classification (built-in single-label demos):**
+
 - `mnist`
 - `fashion_mnist`
 - `cifar10`
 - `imagefolder`
 
+**Object detection (requires `task: detection` in your YAML and a matching config; see [detection.md](detection.md)):**
+
+- `coco_mini` — COCO-style layout under `--data-path` (`train2017`/`val2017` or `train`/`val`, plus `annotations/`).
+- `yolo` — Ultralytics-style `--data-path` pointing at `data.yaml` or its parent directory.
+
 ### Multi-label classification
 
-`bnnr train` with any of the datasets above always builds **single-label** pipelines (`CrossEntropyLoss`, one class index per sample). Setting `task: multilabel` in your config YAML **does not** change that behavior. For multi-label, use the Python API ([golden_path.md](golden_path.md)) or the scripts under `examples/multilabel/` ([examples.md](examples.md)).
+`bnnr train` with **mnist**, **fashion_mnist**, **cifar10**, or **imagefolder** always builds **single-label** pipelines (`CrossEntropyLoss`, one class index per sample). Setting `task: multilabel` in your config YAML **does not** change that behavior. For multi-label, use the Python API ([golden_path.md](golden_path.md)) or the scripts under `examples/multilabel/` ([examples.md](examples.md)).
 
 ### Main options
 
 - `--config, -c` (required)
 - `--dataset`
 - `--data-dir`
-- `--data-path` (required for `imagefolder`)
+- `--data-path` (required for `imagefolder`, `coco_mini`, and `yolo`)
 - `--output, -o`
 - `--device, -d` (`cuda`, `cpu`, `auto`)
 - `--epochs, -e`
 - `--seed, -s`
 - `--no-xai`
-- `--augmentation-preset, --preset` (`auto`, `light`, `standard`, `aggressive`, `gpu`)
+- `--augmentation-preset, --preset` (`auto`, `light`, `standard`, `aggressive`, `gpu`, `none`; unknown names fall back to `auto` with a warning)
 - `--with-dashboard / --without-dashboard`
 - `--dashboard-port`
 - `--no-auto-open`

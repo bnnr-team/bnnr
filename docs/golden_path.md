@@ -166,7 +166,7 @@ See [detection.md](detection.md) for the full guide (adapters, dataset format, a
 
 ## 4) Dashboard operational notes
 
-- `start_dashboard(...)` prints Local URL, Network URL, and terminal QR code.
+- `start_dashboard(...)` prints Local URL, Network URL, and terminal QR code when optional `bnnr[dashboard]` deps are installed; otherwise it prints install hints and returns `None` (events are still written for export/replay).
 - For mobile, phone must be on same network.
 - For secured controls, use token via CLI (`--dashboard-token`) or environment (`BNNR_DASHBOARD_TOKEN`) in serve mode.
 - Export for offline sharing:

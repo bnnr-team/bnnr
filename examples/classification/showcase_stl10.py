@@ -422,7 +422,7 @@ def main() -> None:
     print()
 
     # ── Dashboard ────────────────────────────────────────────────────────
-    dashboard_url = ""
+    dashboard_url: str | None = None
     if args.with_dashboard:
         dashboard_url = start_dashboard(
             config.report_dir,
@@ -535,11 +535,17 @@ def main() -> None:
     print(f"  Report JSON    : {result.report_json_path}")
     print(f"  Events (JSONL) : {events_path}")
     if args.with_dashboard:
-        print(f"  Dashboard      : {dashboard_url}")
+        if dashboard_url:
+            print(f"  Dashboard      : {dashboard_url}")
+        else:
+            print(
+                "  Dashboard      : not started (install optional deps: pip install \"bnnr[dashboard]\"). "
+                "Events were still logged."
+            )
     print("=" * 64)
     print()
 
-    if args.with_dashboard:
+    if args.with_dashboard and dashboard_url:
         print("Dashboard is still running — press Ctrl+C to stop.")
         try:
             import time

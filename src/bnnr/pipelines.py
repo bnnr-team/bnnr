@@ -9,6 +9,7 @@ Supported datasets: mnist, fashion_mnist, cifar10, imagefolder, coco_mini, yolo.
 from __future__ import annotations
 
 import logging
+import warnings
 from collections.abc import Sized
 from pathlib import Path
 from typing import Any, cast
@@ -149,6 +150,14 @@ def _resolve_augmentations(preset: str, seed: int) -> list[BaseAugmentation]:
             augs = get_preset(preset_name, random_state=seed)
         except ValueError:
             logger.warning("Unknown preset '%s', falling back to 'auto'", preset_name)
+            warnings.warn(
+                (
+                    f"Unknown augmentation preset {preset_name!r}; falling back to 'auto'. "
+                    "Use `python -m bnnr list-presets` or choose auto|light|standard|aggressive|gpu|none."
+                ),
+                UserWarning,
+                stacklevel=2,
+            )
             augs = auto_select_augmentations(random_state=seed)
 
     return augs

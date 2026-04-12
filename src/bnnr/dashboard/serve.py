@@ -189,7 +189,7 @@ def start_dashboard(
     auto_open: bool = True,
     build_frontend: bool = True,
     auth_token: str | None = None,
-) -> str:
+) -> str | None:
     """Start the BNNR dashboard server in a background daemon thread.
 
     The server always binds to ``0.0.0.0`` so it is reachable from any
@@ -209,8 +209,10 @@ def start_dashboard(
 
     Returns
     -------
-    str
-        The LAN URL (e.g. ``http://192.168.1.42:8080/``).
+    str | None
+        The LAN URL (e.g. ``http://192.168.1.42:8080/``) when the server was
+        started, or ``None`` if optional dashboard dependencies are missing
+        (no server is listening; callers must not treat a localhost URL as live).
     """
     try:
         import uvicorn  # noqa: I001
@@ -220,7 +222,7 @@ def start_dashboard(
             "Install with:  pip install -e '.[dashboard]'"
         )
         print("[dashboard] Training will continue without live dashboard.")
-        return f"http://127.0.0.1:{port}/"
+        return None
 
     try:
         from bnnr.dashboard.backend import create_dashboard_app  # noqa: I001
@@ -229,7 +231,7 @@ def start_dashboard(
             "[dashboard] Dashboard backend not available. "
             "Install with:  pip install -e '.[dashboard]'"
         )
-        return f"http://127.0.0.1:{port}/"
+        return None
 
     run_root = Path(run_root)
     run_root.mkdir(parents=True, exist_ok=True)

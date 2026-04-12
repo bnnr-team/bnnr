@@ -59,6 +59,28 @@ def test_reporter_keeps_iteration_summaries(temp_dir) -> None:
     assert "iteration_summaries" in data
 
 
+def test_load_report_rejects_invalid_json(temp_dir) -> None:
+    bad = temp_dir / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    try:
+        load_report(bad)
+    except ValueError as exc:
+        assert "not valid JSON" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_load_report_rejects_missing_keys(temp_dir) -> None:
+    path = temp_dir / "incomplete.json"
+    path.write_text('{"config": {}, "best_path": "x"}', encoding="utf-8")
+    try:
+        load_report(path)
+    except ValueError as exc:
+        assert "missing required top-level keys" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
 def test_load_report_and_compare(temp_dir) -> None:
     reporter = Reporter(report_dir=temp_dir)
     cfg = BNNRConfig(checkpoint_dir=temp_dir / "c", report_dir=temp_dir)

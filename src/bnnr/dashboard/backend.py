@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass, field
@@ -18,6 +19,8 @@ from pydantic import BaseModel as _PydanticBaseModel
 
 from bnnr.dashboard.exporter import export_dashboard_snapshot
 from bnnr.events import IncrementalReplayState, load_events, load_events_from_offset
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -145,7 +148,7 @@ def create_dashboard_app(
         replay of completed/interrupted runs.
     """
     run_root = _normalize_run_root(run_root)
-    app = FastAPI(title="BNNR Dashboard API", version="0.2.8")
+    app = FastAPI(title="BNNR Dashboard API", version="0.2.9")
     state_cache: dict[str, _CacheEntry] = {}
     static_dir = static_dir.resolve() if static_dir is not None else None
 
@@ -313,8 +316,14 @@ def create_dashboard_app(
                 if total >= offset and len(events) < limit:
                     try:
                         events.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        pass
+                    except json.JSONDecodeError as exc:
+                        logger.warning(
+                            "Skipping invalid JSONL line in %s (api offset=%s line=%s): %s",
+                            events_file,
+                            offset,
+                            total,
+                            exc,
+                        )
                 total += 1
         return {"events": events, "offset": offset, "limit": limit, "total": total}
 

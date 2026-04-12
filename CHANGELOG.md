@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.9] — 2026-04-12
+
+### Added
+
+- **CI**: `notebooks-smoke` job and [scripts/validate_user_notebooks.py](scripts/validate_user_notebooks.py) — validates catalog notebooks (nbformat, kernelspec, syntax of code cells after stripping magics) without executing training.
+
+### Changed
+
+- **Reporting**: atomic write for `report.json`; `load_report` validates JSON shape and required keys, with clearer `ValueError` messages and `ValidationError` wrapping for config.
+- **Dashboard**: `start_dashboard` returns `None` when optional dashboard dependencies are missing instead of a misleading localhost URL; CLI and examples handle the degraded case.
+- **Pipelines**: unknown augmentation preset logs a `UserWarning` in addition to the existing logger warning when falling back to `auto`.
+- **Training**: custom metric failures are always logged with `logger.warning(..., exc_info=True)` instead of only when `verbose` is enabled.
+- **Dashboard API**: invalid JSONL lines in the paginated events endpoint are logged with `logger.warning`.
+- **Docs / CLI**: `docs/cli.md` aligned with supported datasets and presets; related doc updates for `start_dashboard` return value.
+- **CI / dev**: comment on lint vs pytest matrix; pre-commit pins updated (ruff, mypy) closer to dev tooling; `build-package` waits on `notebooks-smoke`.
+
 ## [0.2.8] — 2026-04-10
 
 ### Changed

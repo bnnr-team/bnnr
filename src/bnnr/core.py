@@ -808,7 +808,12 @@ class BNNRTrainer:
                 try:
                     result[name] = float(fn(self._last_eval_preds, self._last_eval_labels))
                 except Exception as exc:  # noqa: BLE001
-                    self._log(f"Custom metric '{name}' failed: {exc}")
+                    self.logger.warning(
+                        "Custom metric %r failed and was omitted from results: %s",
+                        name,
+                        exc,
+                        exc_info=True,
+                    )
 
         return result
 

@@ -121,7 +121,8 @@ class TestResolveAugmentations:
         assert isinstance(augs, list)
 
     def test_unknown_falls_back_to_auto(self):
-        augs = _resolve_augmentations("nonexistent_preset_xyz", seed=42)
+        with pytest.warns(UserWarning, match="Unknown augmentation preset"):
+            augs = _resolve_augmentations("nonexistent_preset_xyz", seed=42)
         assert isinstance(augs, list)
         assert len(augs) > 0
 

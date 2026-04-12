@@ -108,7 +108,7 @@ ICD variants:
 
 ## Dashboard helper
 
-- `start_dashboard`
+- `start_dashboard` — returns the LAN URL when the background server starts, or `None` if optional dashboard dependencies are missing (no misleading localhost URL).
 
 ## Minimal classification integration
 

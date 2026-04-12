@@ -77,6 +77,16 @@ python3 -m bnnr dashboard serve --run-dir <run_dir_parent> --port 8080
 python3 -m bnnr dashboard export --run-dir <run_dir> --out /tmp/exported_dashboard
 ```
 
+## CI (GitHub Actions)
+
+The workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) job **notebooks-smoke** runs on every push and pull request. It does **not** execute training; it runs [scripts/validate_user_notebooks.py](../scripts/validate_user_notebooks.py), which checks that each catalog notebook exists, is valid nbformat v4 JSON, uses the `python3` kernelspec, and that every code cell **compiles** as Python after stripping line magics (`%pip`, `!`, etc.). That catches broken syntax and drift in the notebook list before users open Colab or Jupyter.
+
+Locally:
+
+```bash
+python3 scripts/validate_user_notebooks.py
+```
+
 ## Quality notes from notebook audit
 During B11 notebook hardening, the following were normalized:
 - valid Colab links to `mateuszwalo/BNNR`,

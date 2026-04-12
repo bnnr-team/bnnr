@@ -121,7 +121,9 @@ When using the Python API (not CLI), call `start_dashboard()` **before** `traine
 ```python
 from bnnr import start_dashboard
 
-start_dashboard(config.report_dir)
+url = start_dashboard(config.report_dir)
+# ``url`` is the LAN URL when the server started, or ``None`` if optional
+# ``bnnr[dashboard]`` dependencies are missing (events are still logged).
 result = trainer.run()
 ```
 

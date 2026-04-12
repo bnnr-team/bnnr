@@ -171,7 +171,7 @@ def train_command(
         "auto",
         "--augmentation-preset",
         "--preset",
-        help="Augmentation preset: auto, light, standard, aggressive, gpu",
+        help="Augmentation preset: auto, light, standard, aggressive, gpu, none",
     ),
     with_dashboard: bool = typer.Option(
         True,
@@ -259,7 +259,7 @@ def train_command(
     )
 
     # ── Start dashboard server in background (before training) ─────────
-    dashboard_url = f"http://127.0.0.1:{dashboard_port}/"
+    dashboard_url: str | None = None
     if with_dashboard:
         dashboard_url = start_dashboard(
             run_root=cfg.report_dir,
@@ -281,12 +281,17 @@ def train_command(
     events_path = result.report_json_path.parent / "events.jsonl"
     if events_path.exists():
         typer.echo(f"  Events (JSONL) : {events_path}")
-    if with_dashboard:
+    if with_dashboard and dashboard_url:
         typer.echo(f"  Dashboard      : {dashboard_url}")
+    elif with_dashboard:
+        typer.echo(
+            "  Dashboard      : not started (install optional deps: pip install \"bnnr[dashboard]\"). "
+            "Events were still written for export/replay."
+        )
     typer.echo("=" * 64)
     typer.echo("")
 
-    if with_dashboard:
+    if with_dashboard and dashboard_url:
         typer.echo("Dashboard is still running — press Ctrl+C to stop.")
         try:
             while True:

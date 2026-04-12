@@ -10,11 +10,40 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from bnnr.core import BNNRConfig
 from bnnr.events import JsonlEventSink
 from bnnr.utils import ensure_dir, get_timestamp, portable_path
 
 logger = logging.getLogger(__name__)
+
+_REQUIRED_REPORT_TOP_KEYS = frozenset(
+    {
+        "config",
+        "best_path",
+        "best_metrics",
+        "selected_augmentations",
+        "total_time",
+        "checkpoints",
+    }
+)
+
+
+def _atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
+    """Write *text* to *path* via a same-directory temp file and atomic replace."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    try:
+        tmp_path.write_text(text, encoding=encoding)
+        tmp_path.replace(path)
+    except BaseException:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
 
 
 @dataclass
@@ -512,7 +541,7 @@ class Reporter:
             "iteration_summaries": self._iteration_summaries,
             "analysis": result.analysis,
         }
-        json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        _atomic_write_text(json_path, json.dumps(payload, indent=2), encoding="utf-8")
         return json_path
 
     def finalize(
@@ -549,9 +578,27 @@ class Reporter:
 def load_report(report_path: Path) -> BNNRRunResult:
     if not report_path.exists():
         raise FileNotFoundError(report_path)
-    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Report file is not valid JSON ({report_path}): {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(
+            f"Report root must be a JSON object, got {type(payload).__name__} in {report_path}"
+        )
+    missing = _REQUIRED_REPORT_TOP_KEYS - payload.keys()
+    if missing:
+        raise ValueError(
+            f"Report at {report_path} is missing required top-level keys: {sorted(missing)}. "
+            "The file may be truncated or not a BNNR report.json."
+        )
+    if not isinstance(payload["checkpoints"], list):
+        raise ValueError(f"Report 'checkpoints' must be a list in {report_path}")
 
-    cfg = BNNRConfig(**payload["config"])
+    try:
+        cfg = BNNRConfig(**payload["config"])
+    except ValidationError as exc:
+        raise ValueError(f"Invalid 'config' section in report {report_path}: {exc}") from exc
     checkpoints: list[CheckpointInfo] = []
     for cp in payload["checkpoints"]:
         checkpoints.append(
