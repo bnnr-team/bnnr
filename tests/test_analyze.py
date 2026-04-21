@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +16,30 @@ from bnnr.adapter import SimpleTorchAdapter
 from bnnr.analyze import AnalysisReport, analyze_model
 from bnnr.core import BNNRConfig
 from bnnr.evaluation import run_evaluation
+
+
+def _seed_mnist_data_dir(data_parent: Path) -> Path:
+    """Populate *data_parent*/MNIST from a local cache to avoid flaky MNIST downloads.
+
+    Uses ``BNNR_TEST_MNIST_CACHE`` (directory containing ``MNIST/``) if set, else
+    ``~/.cache/bnnr_test_mnist/MNIST`` when present (see repo smoke / CI setup).
+    """
+    data_parent = Path(data_parent)
+    data_parent.mkdir(parents=True, exist_ok=True)
+    dest = data_parent / "MNIST"
+    if dest.is_dir():
+        return data_parent
+    src: Path | None = None
+    env = os.environ.get("BNNR_TEST_MNIST_CACHE")
+    if env and (Path(env) / "MNIST").is_dir():
+        src = Path(env) / "MNIST"
+    else:
+        bundled = Path.home() / ".cache" / "bnnr_test_mnist" / "MNIST"
+        if bundled.is_dir():
+            src = bundled
+    if src is not None:
+        shutil.copytree(src, dest)
+    return data_parent
 
 
 def _make_indexed_loader(n: int = 12, batch_size: int = 4) -> DataLoader:
@@ -326,10 +352,16 @@ def test_analyze_cli(tmp_path: Path) -> None:
     from bnnr.pipelines import build_pipeline
 
     cfg = BNNRConfig(device="cpu", task="classification")
+    data_dir = _seed_mnist_data_dir(tmp_path / "data")
+    if not (data_dir / "MNIST").is_dir():
+        pytest.skip(
+            "MNIST not cached offline; set BNNR_TEST_MNIST_CACHE or copy MNIST to "
+            "~/.cache/bnnr_test_mnist/MNIST (see tests/test_analyze.py::_seed_mnist_data_dir)."
+        )
     adapter, _, _, _ = build_pipeline(
         dataset_name="mnist",
         config=cfg,
-        data_dir=tmp_path / "data",
+        data_dir=data_dir,
         batch_size=8,
         max_train_samples=16,
         max_val_samples=24,
@@ -373,10 +405,16 @@ def test_analyze_cli_with_xai(tmp_path: Path) -> None:
     from bnnr.pipelines import build_pipeline
 
     cfg = BNNRConfig(device="cpu", task="classification")
+    data_dir = _seed_mnist_data_dir(tmp_path / "data")
+    if not (data_dir / "MNIST").is_dir():
+        pytest.skip(
+            "MNIST not cached offline; set BNNR_TEST_MNIST_CACHE or copy MNIST to "
+            "~/.cache/bnnr_test_mnist/MNIST (see tests/test_analyze.py::_seed_mnist_data_dir)."
+        )
     adapter, _, _, _ = build_pipeline(
         dataset_name="mnist",
         config=cfg,
-        data_dir=tmp_path / "data",
+        data_dir=data_dir,
         batch_size=8,
         max_train_samples=16,
         max_val_samples=24,
@@ -439,10 +477,16 @@ def test_api_cli_parity(tmp_path: Path) -> None:
     from bnnr.pipelines import build_pipeline
 
     cfg = BNNRConfig(device="cpu", task="classification")
+    data_dir = _seed_mnist_data_dir(tmp_path / "data")
+    if not (data_dir / "MNIST").is_dir():
+        pytest.skip(
+            "MNIST not cached offline; set BNNR_TEST_MNIST_CACHE or copy MNIST to "
+            "~/.cache/bnnr_test_mnist/MNIST (see tests/test_analyze.py::_seed_mnist_data_dir)."
+        )
     adapter, _, val_loader, _ = build_pipeline(
         dataset_name="mnist",
         config=cfg,
-        data_dir=tmp_path / "data",
+        data_dir=data_dir,
         batch_size=8,
         max_train_samples=24,
         max_val_samples=48,
