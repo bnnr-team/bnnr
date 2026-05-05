@@ -95,7 +95,7 @@ Changelog = "https://github.com/bnnr-team/bnnr/blob/main/CHANGELOG.md"
 constraint-dependencies = [
   "filelock>=3.20.3",
   "pygments>=2.20.0",
-  "pillow>=12.1.1",
+  "pillow>=12.2.0",
 ]
 
 # Default sdist respects .gitignore; UI build output must still land in the tarball.
