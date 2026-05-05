@@ -68,6 +68,23 @@ python3 -m bnnr analyze --model PATH --data PATH_OR_DATASET --output DIR [OPTION
 - The CLI builds a pipeline (dataset + adapter) from `--data` and loads the checkpoint into the adapter. For ImageFolder, use `--data /path/to/val_root`; the pipeline expects `--config` or compatible defaults (e.g. `num_classes` for imagefolder).
 - XAI requires an adapter that implements `XAICapableModel` (e.g. `SimpleTorchAdapter` with `target_layers`). If the checkpoint was saved by BNNR train, the same config/dataset usually provides the right adapter.
 - Output layout: `output_dir/analysis_report.json`, `output_dir/report.html`, and optionally `output_dir/worst_overlays/`, `output_dir/data_quality/` (see `artifacts.md`).
+- `--cv-folds` is a lightweight estimate of metric variability on validation predictions: analyze runs one inference pass, then computes k-fold metrics on cached predictions (it does not train k separate models).
+
+### Metric definitions (practical)
+
+- `accuracy`, `precision`, `recall`, `f1`, `cohen_kappa`, and confusion-based diagnostics are computed in the evaluation/analysis pipeline (`run_evaluation` and downstream analysis modules).
+- `ECE (top-1)` means expected calibration error computed on top-1 confidence bins.
+- `Cohen's kappa` is agreement beyond chance (chance-corrected agreement), reported as a scalar in `[-1, 1]`.
+
+### Windows UTF-8 note
+
+If report generation logs look garbled on Windows terminals, run with UTF-8 enabled:
+
+```bash
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
+python -m bnnr analyze --model ... --data ... --output ...
+```
 
 ### Examples
 
@@ -144,7 +161,7 @@ report.to_html("./analysis_out/report.html")
   - `xai_quality_per_class`, `xai_examples_per_class` — per-class XAI quality and sample overlays.
   - `data_quality_summary` — dataset health summary (scanned samples, duplicates, flagged images, warnings).
   - `cv_results` — lightweight k-fold CV results (if enabled).
-  - `cluster_views` — 2D cluster visualisations of confusing examples (e.g. worst predictions).
+  - `cluster_views` — reserved key in docs history; not emitted by current `analyze` implementation.
 - **Methods**:
   - `save(output_dir)` — writes `analysis_report.json` and optional artifact dirs.
   - `to_html(path)` — writes a single HTML report file.
@@ -157,6 +174,8 @@ For full API details, see `api_reference.md`.
 - **Detection**: Not supported by `bnnr analyze` or `analyze_model`; use classification or multi-label only.
 - **Compare**: No built-in comparison of two models (e.g. pre vs post fine-tuning); planned for a later release.
 - **Events**: Analyze does not emit events to `events.jsonl`; it produces standalone artifacts only.
+- **ROC/PR curves**: Analyze currently focuses on point metrics and diagnostics; ROC-AUC / PR curves are not rendered in `report.html` yet.
+- **Advanced concept XAI (e.g. CRAFT/NMF)**: Current analyze uses saliency/CAM-style methods; concept-level methods are roadmap candidates, not part of v0.2.x.
 
 ## See also
 

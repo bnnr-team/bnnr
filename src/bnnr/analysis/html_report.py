@@ -574,6 +574,9 @@ def _executive_block(summary: dict[str, Any]) -> str:
                    else "badge-warning" if severity == "medium" else "badge-ok")
         h += f' <span class="badge {sev_cls}">Severity: {_esc(severity)}</span>'
     h += '</div></div>'
+    h += ('<div class="card"><p class="muted" style="font-size:12px;margin:0;">'
+          'Health score is a composite indicator (task metrics + XAI quality), not raw accuracy.'
+          '</p></div>')
 
     key_findings = summary.get("key_findings", [])
     if key_findings:
@@ -996,15 +999,17 @@ def _xai_examples_block(examples_per_class: dict[str, Any]) -> str:
         return ""
     h = ""
     shown = 0
+    max_visible = 12
     for cls_id, examples in examples_per_class.items():
         if not examples or shown >= 12:
             break
+        visible_count = min(len(examples), max_visible)
         h += (f'<div style="margin:18px 0 10px;display:flex;align-items:center;gap:8px;">'
               f'<span style="font-size:14px;font-weight:700;">Class {_esc(str(cls_id))}</span>'
-              f'<span class="evidence-tag">{len(examples)} examples</span>'
+              f'<span class="evidence-tag">{visible_count} of {len(examples)} examples shown</span>'
               f'</div>')
         h += '<div class="xai-example-grid">'
-        for ex in examples[:6]:
+        for ex in examples[:max_visible]:
             overlay = _esc(str(ex.get("overlay_path", ex.get("image_path", ""))))
             is_wrong = ex.get("true_label") != ex.get("pred_label")
             card_cls = "wrong" if is_wrong else ""

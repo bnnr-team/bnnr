@@ -57,7 +57,12 @@ Structure of `analysis_report.json` (top-level keys, v0.2):
 - `xai_quality_per_class`, `xai_examples_per_class` — per-class XAI scores and overlay examples.
 - `data_quality_summary` — flattened dataset health summary for direct consumption by tools.
 - `cv_results` — optional cross-validation metrics (classification, when `cv_folds > 1`).
-- `cluster_views` — optional cluster views (e.g. 2D projection of confusing examples).
+
+Schema orientation (classification vs multilabel):
+
+- Classification runs with rich XAI typically populate `xai_insights`, `xai_diagnoses`, and `xai_quality_per_class`.
+- Multilabel runs use a lightweight high-loss saliency path and primarily expose `xai_examples_per_class` (for example `multilabel_high_loss`) plus `xai_quality_summary.multilabel_probe_count` and `xai_quality_summary.multilabel_xai_note`.
+- Do not assume every XAI key is non-empty for every task; interpret XAI fields together with `analysis_scope.task`.
 
 Analyze does not write to `events.jsonl`; it is standalone.
 

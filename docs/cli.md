@@ -85,6 +85,8 @@ Required: `--model` (checkpoint `.pt`), `--data` (directory or dataset name: `mn
 
 Options: `--task` (classification or multilabel only; detection is not supported by analyze), `--config`, `--max-worst`, `--no-xai`, `--no-data-quality`, `--device`, `--batch-size`, `--cv-folds`, `--xai-samples`, `--summary/--no-summary`.
 
+On Windows terminals with encoding issues, set `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8` before running `bnnr analyze`.
+
 See `analyze.md` for details and examples.
 
 ## `report`

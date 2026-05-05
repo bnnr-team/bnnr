@@ -1224,7 +1224,6 @@ def _run_data_quality(
     result = run_data_quality_analysis(
         loader,
         max_samples=max_samples,
-        is_detection=False,
         save_dir=save_dir,
     )
     data_quality = result.get("data_quality", result)
