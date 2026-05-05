@@ -49,6 +49,7 @@ PYTHONPATH=src python3 examples/multilabel/multilabel_demo.py \
 - `bnnr_augmentations_guide.ipynb`
 - `bnnr_custom_data.ipynb`
 - `classification/bnnr_classification_demo.ipynb`
+- `classification/bnnr_cooking_round1_butterfly.ipynb`
 - `multilabel/bnnr_multilabel_demo.ipynb`
 
 See `docs/notebooks.md` for local and CI-style execution (`jupyter nbconvert --execute`).
