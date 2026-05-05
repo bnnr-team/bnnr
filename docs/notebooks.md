@@ -9,6 +9,7 @@ This guide covers all user notebooks in `examples/` and how to run them in a way
 |---|---|---|---|
 | `examples/bnnr_augmentations_guide.ipynb` | Visualize all built-in augmentations and ICD/AICD behavior | Optional (focus is augmentation visuals) | Short |
 | `examples/classification/bnnr_classification_demo.ipynb` | End-to-end STL-10 classification with XAI and branch selection | Required (live tracking) | Medium |
+| `examples/classification/bnnr_cooking_round1_butterfly.ipynb` | Student-oriented butterfly mini-project: training + augmentation search + XAI + report + dashboard | Required (live tracking) | Medium |
 | `examples/multilabel/bnnr_multilabel_demo.ipynb` | Multi-label training flow (`task="multilabel"`) | Required (live tracking) | Medium |
 | `examples/bnnr_custom_data.ipynb` | Bring-your-own classification data patterns | Recommended | Medium |
 | `examples/detection/bnnr_detection_demo.ipynb` | Object detection training with bbox augmentations, mAP metrics, and XAI | Required (live tracking) | Medium |
@@ -16,9 +17,10 @@ This guide covers all user notebooks in `examples/` and how to run them in a way
 ## Recommended order
 1. `bnnr_augmentations_guide.ipynb`
 2. `classification/bnnr_classification_demo.ipynb`
-3. `multilabel/bnnr_multilabel_demo.ipynb`
-4. `detection/bnnr_detection_demo.ipynb`
-5. `bnnr_custom_data.ipynb`
+3. `classification/bnnr_cooking_round1_butterfly.ipynb`
+4. `multilabel/bnnr_multilabel_demo.ipynb`
+5. `detection/bnnr_detection_demo.ipynb`
+6. `bnnr_custom_data.ipynb`
 
 This order gives fastest understanding: augmentations -> core training loop -> task variants (classification, multilabel, detection) -> custom integration.
 
