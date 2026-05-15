@@ -175,9 +175,9 @@ def _macro_f1_multilabel(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """Macro-averaged F1 over labels; shapes (N, L) with 0/1 values."""
     if y_true.ndim != 2 or y_pred.ndim != 2 or y_true.shape != y_pred.shape:
         return 0.0
-    _, L = y_true.shape
+    _, n_labels = y_true.shape
     f1s: list[float] = []
-    for j in range(L):
+    for j in range(n_labels):
         yt = y_true[:, j].astype(int)
         yp = y_pred[:, j].astype(int)
         tp = int(np.sum((yt == 1) & (yp == 1)))
