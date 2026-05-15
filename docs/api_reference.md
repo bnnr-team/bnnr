@@ -26,8 +26,8 @@ This page documents only symbols exported publicly from `src/bnnr/__init__.py`.
 
 ## Analysis API (standalone model diagnostics)
 
-- `analyze_model` — run full analysis (metrics, XAI, data quality, failure analysis, patterns, recommendations) on an adapter and validation loader; returns `AnalysisReport`.
-- `AnalysisReport` — dataclass with attributes: `metrics`, `per_class_accuracy`, `confusion`, `xai_insights`, `xai_diagnoses`, `xai_quality_summary`, `data_quality_result`, `failure_patterns`, `recommendations`, `executive_summary`, `findings`, `recommendations_structured`, `class_diagnostics`; methods: `save(output_dir)`, `to_html(path)`, `failure_patterns_list()`.
+- `analyze_model(adapter, val_loader, *, task, output_dir, run_data_quality, max_worst, xai_enabled, xai_method, xai_samples, cv_folds, data_quality_max_samples)` — run full analysis (metrics, XAI, data quality, failure analysis, patterns, recommendations) on an adapter and validation loader; returns `AnalysisReport`.
+- `AnalysisReport` — dataclass; core attributes: `metrics`, `per_class_accuracy`, `confusion`, `xai_insights`, `xai_diagnoses`, `xai_quality_summary`, `data_quality_result`, `failure_patterns`, `recommendations`; extended attributes (v0.2+): `schema_version`, `executive_summary`, `findings`, `recommendations_structured`, `class_diagnostics`, `true_distribution`, `pred_distribution`, `distribution_summary`, `failure_patterns_extended`, `xai_quality_per_class`, `xai_examples_per_class`, `data_quality_summary`, `cv_results`, `calibration_summary`, `confusion_pair_xai`, `best_worst_examples`, `analysis_scope`; methods: `save(output_dir)`, `to_html(path)`, `failure_patterns_list()`.
 
 See `analyze.md` for usage and CLI.
 

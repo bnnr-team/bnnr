@@ -62,6 +62,7 @@ python3 -m bnnr analyze --model PATH --data PATH_OR_DATASET --output DIR [OPTION
 - `--batch-size` — Batch size for evaluation (default from config or pipeline).
 - `--cv-folds` — Optional number of folds for lightweight cross-validation on the validation set (`classification`: stratified single-label; `multilabel`: macro F1 / subset accuracy per fold; 0 disables).
 - `--xai-samples` — Number of samples for XAI probe set (default: 500; more = more accurate, slower).
+- `--summary/--no-summary` — Print (or suppress) executive summary, key findings, and top actions to stdout (default: enabled).
 
 ### Behavior notes
 
