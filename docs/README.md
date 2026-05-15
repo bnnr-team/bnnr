@@ -11,6 +11,7 @@ Use this as the starting point when you need the shortest path to the page relev
 - `cli.md` — CLI commands and option reference from `src/bnnr/cli.py`
 - `dashboard.md` — live/replay/mobile/QR dashboard workflow
 - `api_reference.md` — public Python API usage (classification helpers and a short Detection / Ultralytics subsection)
+- `analyze.md` — standalone model analysis (`bnnr analyze`): metrics, XAI, data quality, failure analysis
 - `golden_path.md` — integrating BNNR with your own model and dataloaders
 - `augmentations.md` — presets and augmentation classes available in code
 - `detection.md` — object detection guide (adapters, augmentations, config, metrics, XAI)

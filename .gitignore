@@ -89,12 +89,9 @@ Thumbs.db
 
 # Data (downloaded datasets)
 data/
+datasets/
+demo_*/
 
-# Local QA / experiments (not part of the library)
-my_tests/
-
-.aider*
-out_analyze/
 out_analyze_*/
 
 # Local scratch / dumps

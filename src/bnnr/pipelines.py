@@ -3,7 +3,7 @@
 Provides ready-to-use combinations so users can run BNNR directly from
 the command line without writing Python code.
 
-Supported datasets: mnist, fashion_mnist, cifar10, imagefolder, coco_mini, yolo.
+Supported datasets: mnist, fashion_mnist, cifar10, stl10, imagefolder, coco_mini, yolo.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from bnnr.presets import auto_select_augmentations, get_preset
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_DATASETS = ("mnist", "fashion_mnist", "cifar10", "imagefolder", "coco_mini", "yolo")
+_SUPPORTED_DATASETS = ("mnist", "fashion_mnist", "cifar10", "stl10", "imagefolder", "coco_mini", "yolo")
 
 
 def list_datasets() -> list[str]:
@@ -103,6 +103,117 @@ class _CifarCNN(nn.Module):
         x = x.reshape(-1, 128 * 4 * 4)
         x = self.dropout(self.relu(self.fc1(x)))
         return cast(Tensor, self.fc2(x))
+
+
+class _STL10Net(nn.Module):
+    """VGG-style CNN for STL-10 full runs (3-channel 96x96, ~2.5M params).
+
+    Architecture must exactly match ``examples/classification/showcase_stl10.py::STL10Net``
+    so that checkpoints trained with the example are loadable from the CLI.
+    """
+
+    def __init__(self, num_classes: int = 10) -> None:
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, 3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            nn.Dropout2d(0.10),
+            nn.Conv2d(64, 128, 3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, 3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            nn.Dropout2d(0.15),
+            nn.Conv2d(128, 256, 3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, 3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            nn.Dropout2d(0.20),
+            nn.Conv2d(256, 512, 3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d((1, 1)),
+        )
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(512, 256),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.40),
+            nn.Linear(256, num_classes),
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return cast(Tensor, self.classifier(self.features(x)))
+
+    @property
+    def target_layer(self) -> nn.Module:
+        return self.features[24]
+
+
+class _STL10NetQuick(nn.Module):
+    """Lightweight CNN for STL-10 quick demos (48x48 resized, ~150K params).
+
+    Architecture must exactly match ``examples/classification/showcase_stl10.py::STL10NetQuick``
+    so that checkpoints trained with the example are loadable from the CLI.
+    """
+
+    def __init__(self, num_classes: int = 10) -> None:
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 32, 3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(32, 64, 3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(64, 128, 3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d((1, 1)),
+        )
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Dropout(0.30),
+            nn.Linear(128, num_classes),
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return cast(Tensor, self.classifier(self.features(x)))
+
+    @property
+    def target_layer(self) -> nn.Module:
+        return self.features[8]
+
+
+def _try_stl10_models(
+    state_dict: dict[str, Any],
+    num_classes: int = 10,
+) -> tuple[nn.Module, list[nn.Module]] | None:
+    """Try known STL-10 architectures against *state_dict*.
+
+    Returns ``(model, target_layers)`` on the first architecture that loads
+    with ``strict=True``, or ``None`` if nothing matches.
+    """
+    for model_cls in (_STL10NetQuick, _STL10Net):
+        model = model_cls(num_classes=num_classes)
+        try:
+            model.load_state_dict(state_dict, strict=True)
+            return model, [model.target_layer]
+        except RuntimeError:
+            continue
+    return None
 
 
 class _ImageFolderCNN(nn.Module):
@@ -302,6 +413,47 @@ def build_cifar10_pipeline(
         criterion=criterion,
         optimizer=optimizer,
         target_layers=[model.conv3],
+        device=config.device,
+        scheduler=scheduler,
+    )
+    augmentations = _resolve_augmentations(augmentation_preset, config.seed)
+    return adapter, train_loader, val_loader, augmentations
+
+
+def build_stl10_pipeline(
+    config: BNNRConfig,
+    data_dir: Path,
+    batch_size: int,
+    max_train_samples: int | None,
+    max_val_samples: int | None,
+    augmentation_preset: str = "auto",
+) -> tuple[SimpleTorchAdapter, DataLoader, DataLoader, list[BaseAugmentation]]:
+    """Build a ready-to-train pipeline for STL-10.
+
+    STL-10 is downloaded via ``torchvision.datasets.STL10`` (binary format).
+    Images are 96x96 RGB.  No ``Normalize()`` — BatchNorm handles it.
+    """
+    transform = transforms.Compose([transforms.ToTensor()])
+    train_ds = datasets.STL10(str(data_dir), split="train", download=True, transform=transform)
+    val_ds = datasets.STL10(str(data_dir), split="test", download=True, transform=transform)
+
+    train_ds = _maybe_subset(train_ds, max_train_samples)
+    val_ds = _maybe_subset(val_ds, max_val_samples)
+
+    train_loader = DataLoader(_IndexedDataset(train_ds), batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(_IndexedDataset(val_ds), batch_size=batch_size, shuffle=False)
+
+    model = _STL10NetQuick(num_classes=10)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=config.m_epochs * config.max_iterations,
+    )
+    adapter = SimpleTorchAdapter(
+        model=model,
+        criterion=criterion,
+        optimizer=optimizer,
+        target_layers=[model.target_layer],
         device=config.device,
         scheduler=scheduler,
     )
@@ -850,7 +1002,7 @@ def build_pipeline(
     Parameters
     ----------
     dataset_name:
-        One of: mnist, fashion_mnist, cifar10, imagefolder, coco_mini, yolo.
+        One of: mnist, fashion_mnist, cifar10, stl10, imagefolder, coco_mini, yolo.
     config:
         BNNR configuration.
     data_dir:
@@ -877,6 +1029,8 @@ def build_pipeline(
         return build_fashion_mnist_pipeline(config, data_dir, batch_size, max_train_samples, max_val_samples, augmentation_preset)
     elif ds == "cifar10":
         return build_cifar10_pipeline(config, data_dir, batch_size, max_train_samples, max_val_samples, augmentation_preset)
+    elif ds == "stl10":
+        return build_stl10_pipeline(config, data_dir, batch_size, max_train_samples, max_val_samples, augmentation_preset)
     elif ds == "imagefolder":
         if custom_data_path is None:
             raise ValueError("--data-path is required for imagefolder dataset. Provide path to directory with train/val subdirs.")

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0] — 2026-05-15
+
+### Added
+
+- **Analyze**: standalone model analysis feature (`bnnr analyze`) — metrics, XAI diagnostics, data quality checks, failure pattern detection, structured recommendations, and HTML report generation.
+- **Analysis module** (`src/bnnr/analysis/`): schema, findings engine, recommendations engine, class diagnostics, calibration (ECE), cross-validation, and HTML report renderer.
+- **STL-10 pipeline**: built-in STL-10 dataset support with VGG-style and quick CNN architectures.
+- **CLI**: `bnnr analyze` command with `--model`, `--data`, `--output`, `--task`, `--cv-folds`, `--xai-samples` options.
+- **Evaluation module** (`src/bnnr/evaluation.py`): prediction collection and evaluation utilities for analyze.
+
+### Changed
+
+- **Pipelines**: supported datasets expanded to include `stl10` alongside existing `mnist`, `fashion_mnist`, `cifar10`, `imagefolder`, `coco_mini`, `yolo`.
+- **Exports**: `analyze_model` and `AnalysisReport` added to public API (`bnnr.__init__`).
+
 ## [0.2.9] — 2026-04-12
 
 ### Added

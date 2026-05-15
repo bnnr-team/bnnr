@@ -2,6 +2,7 @@
 
 from bnnr.adapter import ModelAdapter, SimpleTorchAdapter, XAICapableModel
 from bnnr.albumentations_aug import AlbumentationsAugmentation, albumentations_available
+from bnnr.analyze import AnalysisReport, analyze_model
 from bnnr.augmentation_runner import AugmentationRunner
 from bnnr.augmentations import (
     AugmentationRegistry,
@@ -73,7 +74,7 @@ from bnnr.xai_analysis import (
 )
 from bnnr.xai_cache import XAICache
 
-__version__ = '0.2.9'
+__version__ = '0.3.0'
 
 __all__ = [
     "AugmentationRunner",
@@ -153,4 +154,6 @@ __all__ = [
     "detection_collate_fn",
     "detection_collate_fn_with_index",
     "calculate_detection_metrics",
+    "analyze_model",
+    "AnalysisReport",
 ]
