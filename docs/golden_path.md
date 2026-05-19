@@ -1,5 +1,7 @@
 # Golden Path: Integrate BNNR Into Your Project
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/bnnr?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/bnnr)
+
 ## What you will find here
 Production-style, code-first templates for the three supported tasks:
 - classification,

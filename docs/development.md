@@ -1,5 +1,7 @@
 # Development
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/bnnr?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/bnnr)
+
 ## What you will find here
 The repository's local developer workflow: setup, tests, linting, type checks, and dashboard frontend build.
 

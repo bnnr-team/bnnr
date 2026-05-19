@@ -1,5 +1,7 @@
 # Augmentations and Presets
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/bnnr?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/bnnr)
+
 ## What you will find here
 Implemented presets and augmentation classes currently available in code, with constraints by task/backend.
 

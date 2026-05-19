@@ -1,5 +1,7 @@
 # Model analysis (`bnnr analyze`)
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/bnnr?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/bnnr)
+
 ## What you will find here
 
 How to run **zero-friction diagnostics** on a trained model without running full BNNR training: metrics, XAI, data quality, failure analysis, patterns, and recommendations.

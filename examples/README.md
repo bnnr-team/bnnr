@@ -2,6 +2,10 @@
   <img src="../docs/assets/logo.png" alt="BNNR Logo" width="160">
 </p>
 
+<p align="center">
+  <a href="https://pepy.tech/projects/bnnr"><img src="https://static.pepy.tech/personalized-badge/bnnr?period=total&amp;units=INTERNATIONAL_SYSTEM&amp;left_color=BLACK&amp;right_color=GREEN&amp;left_text=downloads" alt="PyPI downloads" /></a>
+</p>
+
 # BNNR Examples
 
 Practical entrypoint for runnable examples and notebooks.

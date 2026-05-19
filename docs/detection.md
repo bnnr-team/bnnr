@@ -1,5 +1,7 @@
 # Object Detection
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/bnnr?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/bnnr)
+
 BNNR supports object detection as a first-class task since v0.2.0.
 The same Train → Explain → Improve → Prove loop applies: train a detector, generate XAI saliency for bounding boxes, improve with detection-aware augmentations and ICD/AICD, and prove with mAP metrics and structured reports.
 

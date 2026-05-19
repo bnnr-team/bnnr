@@ -1,5 +1,7 @@
 # Getting Started
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/bnnr?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/bnnr)
+
 ## What you will find here
 A step-by-step path for first-time users:
 - installation,

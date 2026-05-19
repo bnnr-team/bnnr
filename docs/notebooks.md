@@ -1,5 +1,7 @@
 # Notebooks Guide (Production + Colab)
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/bnnr?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/bnnr)
+
 ## Scope
 This guide covers all user notebooks in `examples/` and how to run them in a way that is reproducible, useful, and dashboard-first.
 

@@ -1,5 +1,7 @@
 # Dashboard Guide (Live + Replay + Mobile)
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/bnnr?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/bnnr)
+
 ## What you will find here
 How to use dashboard as a daily workflow tool:
 - live monitoring during training,

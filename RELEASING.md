@@ -1,5 +1,7 @@
 # Releasing BNNR on PyPI
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/bnnr?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/bnnr)
+
 ## Before you push a release tag
 
 Run the same checks as GitHub Actions (from the repo root, with dev deps installed):
