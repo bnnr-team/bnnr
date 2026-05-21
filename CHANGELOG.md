@@ -2,10 +2,16 @@
 
 ## [0.3.1] — 2026-05-21
 
+### Added
+
+- **CLI `bnnr quickstart`**: interactive wizard for a zero-config demo run (built-in defaults, sample limits 128/64, optional live dashboard).
+- **Zero-config `bnnr train`**: `--config` is optional; built-in quickstart defaults when omitted (`default_train_config()`).
+- **Community infra**: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue/PR templates, label sync config.
+
 ### Changed
 
-- **PyPI readme**: dedicated `README.pypi.md` with absolute asset URLs (logo, dashboard screenshots, demo poster) so images render on [pypi.org](https://pypi.org/project/bnnr/); synced with week-1 audit (zero-config quickstart, `bnnr analyze`, `bnnr quickstart`).
-- **GitHub README**: logo and demo video use `raw.githubusercontent.com` URLs for reliable rendering.
+- **PyPI readme**: dedicated `README.pypi.md` with absolute asset URLs (logo, dashboard screenshots, demo poster) so images render on [pypi.org](https://pypi.org/project/bnnr/); synced with week-1 audit README.
+- **GitHub README**: problem-first structure, dashboard screenshots, ICD/AICD panels, inline demo video with audio (1280p).
 - **Classifiers**: Development Status `4 - Beta` (was Alpha on PyPI 0.3.0 metadata).
 
 ## [0.3.0] — 2026-05-15
