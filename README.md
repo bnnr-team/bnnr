@@ -12,11 +12,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/bnnr-team/bnnr/raw/main/docs/assets/hero-promo.mp4">
-    <img src="docs/assets/hero-promo-poster.jpg" alt="Watch BNNR demo — click to play video" width="720">
-  </a>
+  <video width="720" controls playsinline poster="docs/assets/hero-promo-poster.jpg">
+    <source src="docs/assets/hero-promo.mp4" type="video/mp4">
+    <a href="https://www.bnnr.dev">Watch the demo on bnnr.dev</a>
+  </video>
 </p>
-<p align="center"><em>Click the poster to play the demo (compressed, no audio). Full version with sound: <a href="https://www.bnnr.dev">bnnr.dev</a></em></p>
+<p align="center"><em>Demo with audio (1280p). Original 4K recording: <a href="https://www.bnnr.dev">bnnr.dev</a></em></p>
 
 # BNNR (Bulletproof Neural Network Recipe)
 
