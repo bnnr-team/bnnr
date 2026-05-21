@@ -14,11 +14,23 @@ Use this for no-code workflows: training, report reading, dashboard replay/expor
 python3 -m bnnr --help
 ```
 
+## `quickstart`
+
+```bash
+python3 -m bnnr quickstart [OPTIONS]
+```
+
+Interactive zero-config demo: prompts for dataset, preset, and dashboard, then runs training with built-in defaults and sample limits (128 train / 64 val).
+
+Options: `--dashboard-port`, `--no-auto-open`.
+
 ## `train`
 
 ```bash
-python3 -m bnnr train --config CONFIG [OPTIONS]
+python3 -m bnnr train [OPTIONS]
 ```
+
+Omit `--config` to use built-in quickstart defaults (`m_epochs=3`, `max_iterations=2`, `device=auto`, etc.).
 
 ### Supported datasets
 
@@ -40,7 +52,7 @@ python3 -m bnnr train --config CONFIG [OPTIONS]
 
 ### Main options
 
-- `--config, -c` (required)
+- `--config, -c` (optional YAML; omit for built-in defaults)
 - `--dataset`
 - `--data-dir`
 - `--data-path` (required for `imagefolder`, `coco_mini`, and `yolo`)
@@ -68,7 +80,10 @@ python3 -m bnnr train --config CONFIG [OPTIONS]
 ### Examples
 
 ```bash
-# CIFAR-10 one-shot run
+# Zero-config CIFAR-10 (built-in defaults)
+python3 -m bnnr train --dataset cifar10 --preset light --with-dashboard
+
+# CIFAR-10 with custom YAML
 python3 -m bnnr train \
   --config examples/configs/classification/cifar10_example.yaml \
   --dataset cifar10 \

@@ -12,6 +12,23 @@ from bnnr.core import BNNRConfig
 from bnnr.utils import _parse_fbeta
 
 
+def default_train_config(
+    *,
+    checkpoint_dir: Path | None = None,
+    report_dir: Path | None = None,
+) -> BNNRConfig:
+    """Sensible defaults for ``bnnr train`` when ``--config`` is omitted."""
+    return BNNRConfig(
+        m_epochs=3,
+        max_iterations=2,
+        device="auto",
+        xai_enabled=True,
+        checkpoint_dir=checkpoint_dir or Path("checkpoints"),
+        report_dir=report_dir or Path("reports"),
+        candidate_pruning_enabled=True,
+    )
+
+
 def load_config(config_path: Path) -> BNNRConfig:
     if not config_path.exists():
         raise FileNotFoundError(f"Config not found: {config_path}")

@@ -16,7 +16,6 @@ Start training with dashboard:
 
 ```bash
 python3 -m bnnr train \
-  --config examples/configs/classification/cifar10_example.yaml \
   --dataset cifar10 \
   --max-train-samples 128 \
   --max-val-samples 64 \
@@ -24,6 +23,8 @@ python3 -m bnnr train \
   --with-dashboard \
   --dashboard-port 8080
 ```
+
+Optional: add `--config path/to/config.yaml` for custom settings.
 
 Terminal prints:
 - Local URL

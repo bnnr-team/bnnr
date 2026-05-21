@@ -1,0 +1,22 @@
+name: Question
+description: Ask a how-to question (prefer Discussions when enabled)
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Tip:** If [GitHub Discussions](https://github.com/bnnr-team/bnnr/discussions) is enabled, post there for faster community answers.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What you tried
+      description: Commands, docs links, versions
+    validations:
+      required: true

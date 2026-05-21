@@ -341,3 +341,154 @@ def test_cli_train_command_rejects_unknown_dataset(temp_dir) -> None:
     runner = CliRunner()
     result = runner.invoke(cli_module.app, ["train", "--config", str(cfg_path), "--dataset", "custom"])
     assert result.exit_code == 1
+
+
+def test_cli_train_without_config_uses_defaults(temp_dir, monkeypatch) -> None:
+    loader = _gray_loader()
+    model = GrayCNN()
+    adapter = SimpleTorchAdapter(
+        model=model,
+        criterion=nn.CrossEntropyLoss(),
+        optimizer=torch.optim.Adam(model.parameters(), lr=1e-3),
+        target_layers=[model.conv1],
+        device="cpu",
+    )
+    augmentations = [BasicAugmentation(probability=0.2)]
+
+    def fake_build_pipeline(*_args, **_kwargs):
+        return adapter, loader, loader, augmentations
+
+    monkeypatch.setattr(pipelines_module, "build_pipeline", fake_build_pipeline)
+
+    runner = CliRunner()
+    train_result = runner.invoke(
+        cli_module.app,
+        [
+            "train",
+            "--dataset",
+            "mnist",
+            "--without-dashboard",
+            "--max-train-samples",
+            "8",
+            "--max-val-samples",
+            "4",
+        ],
+    )
+    assert train_result.exit_code == 0
+    assert "TRAINING COMPLETE" in train_result.output
+
+
+def test_cli_train_without_config_respects_epochs_override(temp_dir, monkeypatch) -> None:
+    loader = _gray_loader()
+    model = GrayCNN()
+    adapter = SimpleTorchAdapter(
+        model=model,
+        criterion=nn.CrossEntropyLoss(),
+        optimizer=torch.optim.Adam(model.parameters(), lr=1e-3),
+        target_layers=[model.conv1],
+        device="cpu",
+    )
+    augmentations = [BasicAugmentation(probability=0.2)]
+    captured: dict[str, object] = {}
+
+    def fake_build_pipeline(*_args, **kwargs):
+        captured["config"] = kwargs.get("config")
+        return adapter, loader, loader, augmentations
+
+    monkeypatch.setattr(pipelines_module, "build_pipeline", fake_build_pipeline)
+
+    runner = CliRunner()
+    train_result = runner.invoke(
+        cli_module.app,
+        [
+            "train",
+            "--dataset",
+            "mnist",
+            "--without-dashboard",
+            "--epochs",
+            "2",
+            "--max-train-samples",
+            "8",
+        ],
+    )
+    assert train_result.exit_code == 0
+    cfg = captured["config"]
+    assert cfg is not None
+    assert cfg.m_epochs == 2
+
+
+def test_cli_train_with_config_still_works(temp_dir, monkeypatch) -> None:
+    loader = _gray_loader()
+    model = GrayCNN()
+    adapter = SimpleTorchAdapter(
+        model=model,
+        criterion=nn.CrossEntropyLoss(),
+        optimizer=torch.optim.Adam(model.parameters(), lr=1e-3),
+        target_layers=[model.conv1],
+        device="cpu",
+    )
+    augmentations = [BasicAugmentation(probability=0.2)]
+
+    def fake_build_pipeline(*_args, **_kwargs):
+        return adapter, loader, loader, augmentations
+
+    monkeypatch.setattr(pipelines_module, "build_pipeline", fake_build_pipeline)
+
+    cfg_path = temp_dir / "cfg.yaml"
+    cfg_path.write_text(
+        "\n".join(
+            [
+                "m_epochs: 1",
+                "max_iterations: 1",
+                "xai_enabled: false",
+                "device: cpu",
+                f"checkpoint_dir: {temp_dir / 'checkpoints'}",
+                f"report_dir: {temp_dir / 'reports'}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    train_result = runner.invoke(
+        cli_module.app,
+        [
+            "train",
+            "--config",
+            str(cfg_path),
+            "--dataset",
+            "mnist",
+            "--without-dashboard",
+            "--max-train-samples",
+            "8",
+        ],
+    )
+    assert train_result.exit_code == 0
+    assert "TRAINING COMPLETE" in train_result.output
+
+
+def test_cli_quickstart_invokes_train(temp_dir, monkeypatch) -> None:
+    loader = _gray_loader()
+    model = GrayCNN()
+    adapter = SimpleTorchAdapter(
+        model=model,
+        criterion=nn.CrossEntropyLoss(),
+        optimizer=torch.optim.Adam(model.parameters(), lr=1e-3),
+        target_layers=[model.conv1],
+        device="cpu",
+    )
+    augmentations = [BasicAugmentation(probability=0.2)]
+
+    def fake_build_pipeline(*_args, **_kwargs):
+        return adapter, loader, loader, augmentations
+
+    monkeypatch.setattr(pipelines_module, "build_pipeline", fake_build_pipeline)
+
+    prompts = iter(["cifar10", "classification", "light"])
+    monkeypatch.setattr(cli_module.typer, "prompt", lambda *_a, **_k: next(prompts))
+    monkeypatch.setattr(cli_module.typer, "confirm", lambda *_a, **_k: False)
+
+    runner = CliRunner()
+    result = runner.invoke(cli_module.app, ["quickstart", "--no-auto-open"])
+    assert result.exit_code == 0
+    assert "TRAINING COMPLETE" in result.output

@@ -5,6 +5,7 @@ management without requiring any Python code.
 
 Commands:
 - ``bnnr train``: Run BNNR augmentation search
+- ``bnnr quickstart``: Interactive zero-config demo run
 - ``bnnr report``: View/export training reports
 - ``bnnr list-augmentations``: List registered augmentations
 - ``bnnr list-presets``: List augmentation presets
@@ -21,9 +22,10 @@ import time
 from pathlib import Path
 from typing import Any, Optional, Union
 
+import click
 import typer
 
-from bnnr.config import load_config
+from bnnr.config import default_train_config, load_config
 from bnnr.core import BNNRTrainer
 from bnnr.dashboard.serve import (
     _find_frontend_dist,
@@ -148,11 +150,137 @@ def _print_pipeline_summary(
         )
 
 
+def _resolve_train_config(
+    config: Optional[Path],
+    output: Optional[Path],
+    device: Optional[str],
+    epochs: Optional[int],
+    seed: Optional[int],
+    no_xai: bool,
+) -> Any:
+    """Build BNNRConfig from optional YAML file and CLI overrides."""
+    if config is None:
+        cfg = default_train_config(
+            checkpoint_dir=(output / "checkpoints") if output is not None else None,
+            report_dir=(output / "reports") if output is not None else None,
+        )
+    else:
+        cfg = load_config(config)
+    overrides: dict[str, Any] = {"event_log_enabled": True}
+    if output is not None:
+        overrides["checkpoint_dir"] = output / "checkpoints"
+        overrides["report_dir"] = output / "reports"
+    if device is not None:
+        overrides["device"] = device
+    if epochs is not None:
+        overrides["m_epochs"] = epochs
+    if seed is not None:
+        overrides["seed"] = seed
+    if no_xai:
+        overrides["xai_enabled"] = False
+    return cfg.model_copy(update=overrides)
+
+
+def _run_train(
+    *,
+    cfg: Any,
+    dataset: str,
+    data_dir: Path,
+    data_path: Optional[Path],
+    augmentation_preset: str,
+    with_dashboard: bool,
+    dashboard_port: int,
+    no_auto_open: bool,
+    dashboard_token: Optional[str],
+    batch_size: int,
+    max_train_samples: Optional[int],
+    max_val_samples: Optional[int],
+    num_classes: Optional[int],
+) -> None:
+    """Shared training path for ``train`` and ``quickstart`` commands."""
+    from bnnr.pipelines import build_pipeline
+
+    try:
+        adapter, train_loader, val_loader, augmentations = build_pipeline(
+            dataset_name=dataset,
+            config=cfg,
+            data_dir=data_dir,
+            batch_size=batch_size,
+            max_train_samples=max_train_samples,
+            max_val_samples=max_val_samples,
+            augmentation_preset=augmentation_preset,
+            custom_data_path=data_path,
+            num_classes=num_classes,
+        )
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except FileNotFoundError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    _print_pipeline_summary(
+        dataset_name=dataset,
+        adapter=adapter,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        augmentations=augmentations,
+        config=cfg,
+        preset=augmentation_preset,
+        custom_data_path=data_path,
+    )
+
+    dashboard_url: str | None = None
+    if with_dashboard:
+        dashboard_url = start_dashboard(
+            run_root=cfg.report_dir,
+            port=dashboard_port,
+            auto_open=not no_auto_open,
+            auth_token=dashboard_token,
+        )
+
+    trainer = BNNRTrainer(adapter, train_loader, val_loader, augmentations, cfg)
+    result = trainer.run()
+
+    typer.echo("")
+    typer.echo("=" * 64)
+    typer.echo("  TRAINING COMPLETE")
+    typer.echo("-" * 64)
+    typer.echo(f"  Best path      : {result.best_path}")
+    typer.echo(f"  Best metrics   : {result.best_metrics}")
+    typer.echo(f"  Report JSON    : {result.report_json_path}")
+    events_path = result.report_json_path.parent / "events.jsonl"
+    if events_path.exists():
+        typer.echo(f"  Events (JSONL) : {events_path}")
+    if with_dashboard and dashboard_url:
+        typer.echo(f"  Dashboard      : {dashboard_url}")
+    elif with_dashboard:
+        typer.echo(
+            "  Dashboard      : not started (install optional deps: pip install \"bnnr[dashboard]\"). "
+            "Events were still written for export/replay."
+        )
+    typer.echo("=" * 64)
+    typer.echo("")
+
+    if with_dashboard and dashboard_url:
+        typer.echo("Dashboard is still running — press Ctrl+C to stop.")
+        try:
+            while True:
+                time.sleep(60)
+        except KeyboardInterrupt:
+            typer.echo("\nShutting down.")
+
+
 @app.command("train")
 def train_command(
-    config: Path = typer.Option(..., "--config", "-c", help="Path to YAML config file"),
+    config: Optional[Path] = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Optional YAML config. Omit for built-in quickstart defaults.",
+    ),
     dataset: str = typer.Option(
-        "mnist",
+        "cifar10",
         "--dataset",
         help="Dataset: mnist, fashion_mnist, cifar10, stl10, imagefolder, coco_mini, yolo",
     ),
@@ -199,105 +327,99 @@ def train_command(
 
     Examples::
 
-        # Quick MNIST experiment
+        # Zero-config quickstart (built-in defaults)
+        bnnr train --dataset cifar10 --preset light --with-dashboard
+
+        # Custom YAML config
         bnnr train -c config.yaml --dataset mnist --max-train-samples 1000 -e 2
 
         # CIFAR-10 with GPU augmentations
         bnnr train -c config.yaml --dataset cifar10 --preset gpu --device cuda
-
-        # Custom ImageFolder dataset
-        bnnr train -c config.yaml --dataset imagefolder --data-path /path/to/data
     """
-    from bnnr.pipelines import build_pipeline
-
-    cfg = load_config(config)
-    # Keep event logs enabled even when live dashboard serving is disabled.
-    # B2 CLI flow expects post-run dashboard export to work from the same run dir.
-    overrides: dict[str, Any] = {"event_log_enabled": True}
-    if output is not None:
-        overrides["checkpoint_dir"] = output / "checkpoints"
-        overrides["report_dir"] = output / "reports"
-    if device is not None:
-        overrides["device"] = device
-    if epochs is not None:
-        overrides["m_epochs"] = epochs
-    if seed is not None:
-        overrides["seed"] = seed
-    if no_xai:
-        overrides["xai_enabled"] = False
-    cfg = cfg.model_copy(update=overrides)
-
-    try:
-        adapter, train_loader, val_loader, augmentations = build_pipeline(
-            dataset_name=dataset,
-            config=cfg,
-            data_dir=data_dir,
-            batch_size=batch_size,
-            max_train_samples=max_train_samples,
-            max_val_samples=max_val_samples,
-            augmentation_preset=augmentation_preset,
-            custom_data_path=data_path,
-            num_classes=num_classes,
-        )
-    except ValueError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-    except FileNotFoundError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-
-    # ── Print pipeline summary so user knows what is being trained ──────
-    _print_pipeline_summary(
-        dataset_name=dataset,
-        adapter=adapter,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        augmentations=augmentations,
-        config=cfg,
-        preset=augmentation_preset,
-        custom_data_path=data_path,
+    cfg = _resolve_train_config(config, output, device, epochs, seed, no_xai)
+    _run_train(
+        cfg=cfg,
+        dataset=dataset,
+        data_dir=data_dir,
+        data_path=data_path,
+        augmentation_preset=augmentation_preset,
+        with_dashboard=with_dashboard,
+        dashboard_port=dashboard_port,
+        no_auto_open=no_auto_open,
+        dashboard_token=dashboard_token,
+        batch_size=batch_size,
+        max_train_samples=max_train_samples,
+        max_val_samples=max_val_samples,
+        num_classes=num_classes,
     )
 
-    # ── Start dashboard server in background (before training) ─────────
-    dashboard_url: str | None = None
-    if with_dashboard:
-        dashboard_url = start_dashboard(
-            run_root=cfg.report_dir,
-            port=dashboard_port,
-            auto_open=not no_auto_open,
-            auth_token=dashboard_token,
-        )
 
-    trainer = BNNRTrainer(adapter, train_loader, val_loader, augmentations, cfg)
-    result = trainer.run()
-
-    typer.echo("")
-    typer.echo("=" * 64)
-    typer.echo("  TRAINING COMPLETE")
-    typer.echo("-" * 64)
-    typer.echo(f"  Best path      : {result.best_path}")
-    typer.echo(f"  Best metrics   : {result.best_metrics}")
-    typer.echo(f"  Report JSON    : {result.report_json_path}")
-    events_path = result.report_json_path.parent / "events.jsonl"
-    if events_path.exists():
-        typer.echo(f"  Events (JSONL) : {events_path}")
-    if with_dashboard and dashboard_url:
-        typer.echo(f"  Dashboard      : {dashboard_url}")
-    elif with_dashboard:
-        typer.echo(
-            "  Dashboard      : not started (install optional deps: pip install \"bnnr[dashboard]\"). "
-            "Events were still written for export/replay."
-        )
-    typer.echo("=" * 64)
+@app.command("quickstart")
+def quickstart_command(
+    dashboard_port: int = typer.Option(8080, "--dashboard-port", help="Dashboard server port"),
+    no_auto_open: bool = typer.Option(
+        False,
+        "--no-auto-open",
+        help="Don't auto-open browser when dashboard starts.",
+    ),
+) -> None:
+    """Interactive zero-config demo — guided train run with built-in defaults."""
+    typer.echo("BNNR Quickstart — zero-config demo run")
     typer.echo("")
 
-    if with_dashboard and dashboard_url:
-        typer.echo("Dashboard is still running — press Ctrl+C to stop.")
-        try:
-            while True:
-                time.sleep(60)
-        except KeyboardInterrupt:
-            typer.echo("\nShutting down.")
+    dataset = typer.prompt(
+        "Dataset",
+        default="cifar10",
+        type=click.Choice(["cifar10", "stl10", "mnist", "fashion_mnist"], case_sensitive=False),
+    )
+    task = typer.prompt(
+        "Task",
+        default="classification",
+        type=click.Choice(["classification"], case_sensitive=False),
+    )
+    if task != "classification":
+        typer.echo("Detection quickstart requires the Python API. See docs/detection.md.", err=True)
+        raise typer.Exit(code=1)
+
+    preset = typer.prompt(
+        "Augmentation preset",
+        default="light",
+        type=click.Choice(["light", "standard", "auto"], case_sensitive=False),
+    )
+    with_dashboard = typer.confirm("Enable live dashboard?", default=True)
+
+    typer.echo("")
+    typer.echo(
+        f"Starting: dataset={dataset}, preset={preset}, "
+        f"dashboard={'on' if with_dashboard else 'off'}, samples=128/64"
+    )
+    typer.echo("")
+
+    cfg = default_train_config()
+    cfg = cfg.model_copy(
+        update={
+            "event_log_enabled": True,
+            "m_epochs": 1,
+            "max_iterations": 1,
+            "xai_enabled": True,
+            "device": "auto",
+        }
+    )
+    _run_train(
+        cfg=cfg,
+        dataset=dataset,
+        data_dir=Path("data"),
+        data_path=None,
+        augmentation_preset=preset,
+        with_dashboard=with_dashboard,
+        dashboard_port=dashboard_port,
+        no_auto_open=no_auto_open,
+        dashboard_token=None,
+        batch_size=64,
+        max_train_samples=128,
+        max_val_samples=64,
+        num_classes=None,
+    )
 
 
 @app.command("report")

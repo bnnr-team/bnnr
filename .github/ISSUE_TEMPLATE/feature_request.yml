@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest an improvement or new capability
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem you are solving and the outcome you want.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What pain point does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How should BNNR behave?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI
+        - Dashboard
+        - XAI / ICD / AICD
+        - Augmentations
+        - Detection
+        - Documentation
+        - Other
+    validations:
+      required: true

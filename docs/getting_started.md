@@ -70,21 +70,30 @@ python -m bnnr train --help
 python -m bnnr dashboard serve --help
 ```
 
-## 4) Create a minimal config
+## 4) First training run (no YAML required)
+
+Built-in defaults apply when you omit `--config`:
+
+```bash
+python -m bnnr train --dataset cifar10 --preset light --with-dashboard --no-auto-open
+```
+
+Or use the interactive wizard:
+
+```bash
+python -m bnnr quickstart
+```
+
+**Advanced:** optional YAML overrides — see [configuration.md](configuration.md). Example minimal file:
 
 ```bash
 cat > /tmp/bnnr_quickstart.yaml <<'YAML'
 m_epochs: 1
 max_iterations: 1
-metrics: [accuracy, f1_macro, loss]
-selection_metric: accuracy
-selection_mode: max
+device: auto
 checkpoint_dir: checkpoints_quickstart
 report_dir: reports_quickstart
 xai_enabled: false
-device: auto
-seed: 42
-candidate_pruning_enabled: false
 YAML
 ```
 
@@ -98,7 +107,6 @@ Run with dashboard enabled (`--with-dashboard` is default):
 
 ```bash
 python -m bnnr train \
-  --config /tmp/bnnr_quickstart.yaml \
   --dataset cifar10 \
   --max-train-samples 128 \
   --max-val-samples 64 \
@@ -107,6 +115,8 @@ python -m bnnr train \
   --dashboard-port 8080 \
   --no-auto-open
 ```
+
+With a custom config file, add `--config /tmp/bnnr_quickstart.yaml`.
 
 What you should see in terminal:
 

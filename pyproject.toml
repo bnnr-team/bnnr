@@ -30,7 +30,7 @@ keywords = [
   "automated-ml",
 ]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "Intended Audience :: Science/Research",
   "License :: OSI Approved :: MIT License",
@@ -77,7 +77,7 @@ dev = [
   "mypy>=1.0.0",
   "types-PyYAML>=6.0.12",
   "pre-commit>=3.0.0",
-  "playwright>=1.40.0",
+  "playwright>=1.40.0",  # README dashboard screenshots (scripts/readme_capture_dashboard.py)
   "ultralytics>=8.3.0,<9.0",
 ]
 
