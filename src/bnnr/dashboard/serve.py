@@ -40,20 +40,19 @@ def _get_lan_ip() -> str:
 def _pick_bind_host(port: int) -> str:
     """Pick the best bind host for the dashboard server.
 
-    Prefer ``0.0.0.0`` for LAN access. If that bind is not permitted in the
-    environment, gracefully fall back to ``127.0.0.1`` so local access still
-    works.
+    Bind to loopback only (``127.0.0.1``) to avoid exposing the dashboard on
+    all network interfaces.
     """
-    for host in ("0.0.0.0", "127.0.0.1"):
+    for host in ("127.0.0.1",):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.bind((host, port))
             return host
         except OSError:
             continue
-    # If both probes fail, keep historical behavior so uvicorn surfaces
+    # If probing fails, keep loopback as the default so uvicorn surfaces
     # the concrete bind error to the user.
-    return "0.0.0.0"
+    return "127.0.0.1"
 
 
 def _print_qr_code(url: str) -> None:
