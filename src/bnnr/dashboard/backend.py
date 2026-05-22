@@ -307,8 +307,12 @@ def create_dashboard_app(
     @app.post("/api/run/{run_id}/export", dependencies=[Depends(_require_control_auth)])
     def api_run_export(run_id: str) -> dict[str, Any]:
         run_dir = _resolve_run_dir(run_root, run_id)
-        out_dir = run_dir / "dashboard_export" / datetime.now().strftime("%Y%m%d_%H%M%S")
-        exported = export_dashboard_snapshot(run_dir=run_dir, out_dir=out_dir, frontend_dist=static_dir)
+        resolved_root = run_root.resolve()
+        resolved_run_dir = run_dir.resolve()
+        if resolved_root not in resolved_run_dir.parents:
+            raise HTTPException(status_code=400, detail="Invalid run directory")
+        out_dir = resolved_run_dir / "dashboard_export" / datetime.now().strftime("%Y%m%d_%H%M%S")
+        exported = export_dashboard_snapshot(run_dir=resolved_run_dir, out_dir=out_dir, frontend_dist=static_dir)
         return {"ok": True, "path": str(exported), "index": str(exported / "index.html")}
 
     @app.get("/api/run/{run_id}/events")
