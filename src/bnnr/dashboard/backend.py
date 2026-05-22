@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -104,7 +105,20 @@ def list_runs(run_root: Path) -> list[dict[str, Any]]:
     return runs
 
 
+_RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_run_id(run_id: str) -> None:
+    if not run_id or run_id in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid run id")
+    if "/" in run_id or "\\" in run_id:
+        raise HTTPException(status_code=400, detail="Invalid run id")
+    if not _RUN_ID_RE.fullmatch(run_id):
+        raise HTTPException(status_code=400, detail="Invalid run id")
+
+
 def _resolve_run_dir(run_root: Path, run_id: str) -> Path:
+    _validate_run_id(run_id)
     run_dir = (run_root / run_id).resolve()
     if not run_dir.exists() or run_root.resolve() not in run_dir.parents:
         raise HTTPException(status_code=404, detail="Run not found")
