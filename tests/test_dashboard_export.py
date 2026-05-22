@@ -61,8 +61,8 @@ def test_export_standalone_report_escapes_run_name_in_html(temp_dir) -> None:
 
     exported = export_dashboard_snapshot(run_dir, temp_dir / "exported_xss")
     index_html = (exported / "index.html").read_text(encoding="utf-8")
-    assert "<script>alert(1)</script>" not in index_html
-    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in index_html
+    assert '<div class="run-id">&lt;script&gt;alert(1)&lt;/script&gt;</div>' in index_html
+    assert f"<title>BNNR Report — &lt;script&gt;alert(1)&lt;/script&gt;</title>" in index_html
 
 
 def test_export_with_frontend_generates_single_index_with_visual_sections(temp_dir) -> None:
