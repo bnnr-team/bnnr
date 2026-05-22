@@ -64,6 +64,8 @@ jobs:
   notebooks-smoke:
     name: notebooks-smoke
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 5
 
     steps:
