@@ -4,8 +4,9 @@ Every script — CLI, examples, and user-written — should call
 :func:`start_dashboard` instead of rolling its own ``uvicorn.run``
 wrapper.  This guarantees that:
 
-* The server always binds to ``0.0.0.0`` so phones on the same LAN can
-  connect.
+* The server binds to ``0.0.0.0`` so phones on the same LAN can connect
+  (intentional trade-off for local training dashboards; use
+  ``BNNR_DASHBOARD_TOKEN`` for mutating control endpoints).
 * A QR code with the LAN URL is always printed.
 * Frontend discovery / auto-build logic is consistent.
 """

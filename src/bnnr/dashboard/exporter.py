@@ -24,13 +24,14 @@ def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path 
 
     # Build state from events
     state = replay_events(load_events(events_file))
+    run_label = str(state.get("run", {}).get("run_name") or "offline_run")
     # Always generate a single-file offline dashboard report.
     # This avoids blank-page issues from file:// + module scripts and gives
     # deterministic export UX for end users.
     _copy_logos_to(trusted_out)
     index_html = child_path(trusted_out, "index.html")
     index_html.write_text(
-        _standalone_report_html(state, trusted_run.name),
+        _standalone_report_html(state, run_label),
         encoding="utf-8",
     )
 
@@ -64,7 +65,7 @@ def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path 
             {
                 "version": "1.0",
                 "mode": "offline_replay",
-                "run_dir": trusted_run.name,
+                "run_dir": run_label,
                 "has_frontend": False,
                 "files": {
                     "events": "data/events.jsonl",
