@@ -13,12 +13,21 @@ from bnnr.events import load_events, replay_events
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
+def _ensure_within(base: Path, candidate: Path) -> Path:
+    """Resolve *candidate* and ensure it stays within *base*."""
+    resolved_base = base.resolve()
+    resolved_candidate = candidate.resolve()
+    if resolved_candidate != resolved_base and resolved_base not in resolved_candidate.parents:
+        raise ValueError(f"Path escapes base directory: {resolved_candidate}")
+    return resolved_candidate
+
+
 def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path | None = None) -> Path:
     run_dir = run_dir.resolve()
     out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    events_file = run_dir / "events.jsonl"
+    events_file = _ensure_within(run_dir, run_dir / "events.jsonl")
     if not events_file.exists():
         raise FileNotFoundError(f"events.jsonl not found in run directory: {run_dir}")
 
@@ -42,12 +51,12 @@ def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path 
     shutil.copy2(events_file, data_dir / "events.jsonl")
     (data_dir / "state.json").write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
 
-    report_json = run_dir / "report.json"
+    report_json = _ensure_within(run_dir, run_dir / "report.json")
     if report_json.exists():
         shutil.copy2(report_json, data_dir / "report.json")
 
     # Copy artifacts
-    artifacts_src = run_dir / "artifacts"
+    artifacts_src = _ensure_within(run_dir, run_dir / "artifacts")
     artifacts_dst = out_dir / "artifacts"
     if artifacts_src.exists():
         shutil.copytree(artifacts_src, artifacts_dst, dirs_exist_ok=True)
