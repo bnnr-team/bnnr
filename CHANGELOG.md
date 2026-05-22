@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.4] — 2026-05-22
+
+### Security
+
+- **CodeQL path hardening**: consolidated fix for *Uncontrolled data used in path expression* alerts in dashboard backend, exporter, and events loader (`path_security` helpers with `ensure_child`, `validate_run_id`, `resolve_events_jsonl`).
+
 ## [0.4.3] — 2026-05-22
 
 ### Fixed
