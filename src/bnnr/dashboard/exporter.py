@@ -93,6 +93,8 @@ def _copy_logos_to(dest: Path) -> None:
 def _standalone_report_html(state: dict, run_name: str) -> str:
     """Generate a professional standalone HTML report when no frontend build is available."""
 
+    safe_run_name = html.escape(str(run_name))
+
     # Extract key data
     mt = state.get("metrics_timeline", [])
     decisions = state.get("decision_history", [])
@@ -360,7 +362,7 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>BNNR Report — {run_name}</title>
+    <title>BNNR Report — {safe_run_name}</title>
     <style>
         :root {{
             --bg: #f8fafc; --card: #ffffff; --fg: #0f172a; --muted: #64748b;
@@ -423,7 +425,7 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
         <div class="header">
             <img src="./logo_light.png" alt="BNNR" class="logo" onerror="this.style.display='none'"/>
             <h1>BNNR Training Report</h1>
-            <div class="run-id">{run_name}</div>
+            <div class="run-id">{safe_run_name}</div>
             <div class="badge">Offline Report</div>
         </div>
 
