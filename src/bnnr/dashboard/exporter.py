@@ -13,9 +13,20 @@ from bnnr.events import load_events, replay_events
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
+def _ensure_within_root(path: Path, root: Path, label: str) -> Path:
+    """Return *path* if it is contained within *root*, otherwise raise."""
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"{label} must be within {root}") from exc
+    return path
+
+
 def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path | None = None) -> Path:
     run_dir = run_dir.resolve()
+    _ensure_within_root(run_dir, run_dir, "run_dir")
     out_dir = out_dir.resolve()
+    _ensure_within_root(out_dir, run_dir, "out_dir")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     events_file = run_dir / "events.jsonl"
