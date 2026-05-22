@@ -104,9 +104,25 @@ def list_runs(run_root: Path) -> list[dict[str, Any]]:
     return runs
 
 
+def _validate_run_id(run_id: str) -> str:
+    """Validate route-provided run_id so it can only reference a direct run directory name."""
+    if not run_id:
+        raise HTTPException(status_code=400, detail="Invalid run id")
+    p = Path(run_id)
+    if p.is_absolute() or len(p.parts) != 1 or p.name != run_id or run_id in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid run id")
+    return run_id
+
+
 def _resolve_run_dir(run_root: Path, run_id: str) -> Path:
-    run_dir = (run_root / run_id).resolve()
-    if not run_dir.exists() or run_root.resolve() not in run_dir.parents:
+    run_id = _validate_run_id(run_id)
+    resolved_root = run_root.resolve()
+    run_dir = (resolved_root / run_id).resolve()
+    try:
+        run_dir.relative_to(resolved_root)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if not run_dir.exists() or not run_dir.is_dir():
         raise HTTPException(status_code=404, detail="Run not found")
     return run_dir
 
