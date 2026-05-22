@@ -261,11 +261,13 @@ def create_dashboard_app(
 
     @app.get("/api/run/{run_id}/state")
     def api_run_state(run_id: str) -> dict[str, Any]:
+        _validate_run_id(run_id)
         state = _state_for_run(run_id)
         return _trim_state_for_api(state)
 
     @app.get("/api/run/{run_id}/kpi-trends")
     def api_run_kpi_trends(run_id: str) -> dict[str, Any]:
+        _validate_run_id(run_id)
         state = _state_for_run(run_id)
         return {
             "metrics_timeline": state.get("metrics_timeline", []),
@@ -274,6 +276,7 @@ def create_dashboard_app(
 
     @app.get("/api/run/{run_id}/branch-graph")
     def api_run_branch_graph(run_id: str) -> dict[str, Any]:
+        _validate_run_id(run_id)
         state = _state_for_run(run_id)
         return {
             "branch_graph": state.get("branch_graph", {"nodes": [], "edges": []}),
@@ -282,11 +285,13 @@ def create_dashboard_app(
 
     @app.get("/api/run/{run_id}/class-metrics")
     def api_run_class_metrics(run_id: str) -> dict[str, Any]:
+        _validate_run_id(run_id)
         state = _state_for_run(run_id)
         return {"per_class_timeline": state.get("per_class_timeline", {})}
 
     @app.get("/api/run/{run_id}/xai-insights")
     def api_run_xai_insights(run_id: str) -> dict[str, Any]:
+        _validate_run_id(run_id)
         state = _state_for_run(run_id)
         return {
             "xai_insights_timeline": state.get("xai_insights_timeline", []),
@@ -295,11 +300,13 @@ def create_dashboard_app(
 
     @app.get("/api/run/{run_id}/samples")
     def api_run_samples(run_id: str) -> dict[str, Any]:
+        _validate_run_id(run_id)
         state = _state_for_run(run_id)
         return {"probe_set": state.get("probe_set", []), "sample_timelines": state.get("sample_timelines", {})}
 
     @app.get("/api/run/{run_id}/sample/{sample_id}/timeline")
     def api_run_sample_timeline(run_id: str, sample_id: str) -> dict[str, Any]:
+        _validate_run_id(run_id)
         state = _state_for_run(run_id)
         rows = state.get("sample_timelines", {}).get(sample_id, [])
         return {"sample_id": sample_id, "timeline": rows}
@@ -349,6 +356,7 @@ def create_dashboard_app(
 
     @app.get("/api/run/{run_id}/branch/{branch_id}")
     def api_run_branch_detail(run_id: str, branch_id: str) -> dict[str, Any]:
+        _validate_run_id(run_id)
         state = _state_for_run(run_id)
         branch_data = state.get("branches", {}).get(branch_id, {})
         node_info = None
