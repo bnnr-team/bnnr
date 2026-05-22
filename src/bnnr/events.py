@@ -142,6 +142,9 @@ def _contains_large_base64(value: Any) -> bool:
 def load_events(events_file: Path) -> list[dict[str, Any]]:
     if not events_file.exists():
         return []
+    from bnnr.path_security import resolve_events_jsonl
+
+    events_file = resolve_events_jsonl(events_file)
     rows: list[dict[str, Any]] = []
     for line in events_file.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -166,6 +169,9 @@ def load_events_from_offset(events_file: Path, byte_offset: int) -> tuple[list[d
     """
     if not events_file.exists():
         return [], 0
+    from bnnr.path_security import resolve_events_jsonl
+
+    events_file = resolve_events_jsonl(events_file)
     rows: list[dict[str, Any]] = []
     with events_file.open("r", encoding="utf-8") as fh:
         fh.seek(byte_offset)

@@ -8,63 +8,68 @@ import shutil
 from pathlib import Path
 
 from bnnr.events import load_events, replay_events
+from bnnr.path_security import child_path, resolve_directory, resolve_output_directory
 
 # Directory containing bundled static assets (logos, etc.)
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
 def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path | None = None) -> Path:
-    run_dir = run_dir.resolve()
-    out_dir = out_dir.resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
+    trusted_run = resolve_directory(run_dir, name="run directory")
+    trusted_out = resolve_output_directory(out_dir)
 
-    events_file = run_dir / "events.jsonl"
-    if not events_file.exists():
-        raise FileNotFoundError(f"events.jsonl not found in run directory: {run_dir}")
+    events_file = child_path(trusted_run, "events.jsonl")
+    if not events_file.is_file():
+        raise FileNotFoundError(f"events.jsonl not found in run directory: {trusted_run}")
 
     # Build state from events
     state = replay_events(load_events(events_file))
     # Always generate a single-file offline dashboard report.
     # This avoids blank-page issues from file:// + module scripts and gives
     # deterministic export UX for end users.
-    _copy_logos_to(out_dir)
-    (out_dir / "index.html").write_text(
-        _standalone_report_html(state, run_dir.name),
+    _copy_logos_to(trusted_out)
+    index_html = child_path(trusted_out, "index.html")
+    index_html.write_text(
+        _standalone_report_html(state, trusted_run.name),
         encoding="utf-8",
     )
 
     # Ensure logos are present in the output directory (for file:// usage)
-    _copy_logos_to(out_dir)
+    _copy_logos_to(trusted_out)
 
     # Write state.json for offline mode (also used when served via HTTP)
-    data_dir = out_dir / "data"
+    data_dir = child_path(trusted_out, "data")
     data_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(events_file, data_dir / "events.jsonl")
-    (data_dir / "state.json").write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
+    shutil.copy2(events_file, child_path(data_dir, "events.jsonl"))
+    child_path(data_dir, "state.json").write_text(
+        json.dumps(state, indent=2, default=str),
+        encoding="utf-8",
+    )
 
-    report_json = run_dir / "report.json"
-    if report_json.exists():
-        shutil.copy2(report_json, data_dir / "report.json")
+    report_json = child_path(trusted_run, "report.json")
+    report_exists = report_json.is_file()
+    if report_exists:
+        shutil.copy2(report_json, child_path(data_dir, "report.json"))
 
     # Copy artifacts
-    artifacts_src = run_dir / "artifacts"
-    artifacts_dst = out_dir / "artifacts"
-    if artifacts_src.exists():
+    artifacts_src = child_path(trusted_run, "artifacts")
+    artifacts_dst = child_path(trusted_out, "artifacts")
+    if artifacts_src.is_dir():
         shutil.copytree(artifacts_src, artifacts_dst, dirs_exist_ok=True)
     else:
         artifacts_dst.mkdir(parents=True, exist_ok=True)
 
-    (out_dir / "manifest.json").write_text(
+    child_path(trusted_out, "manifest.json").write_text(
         json.dumps(
             {
                 "version": "1.0",
                 "mode": "offline_replay",
-                "run_dir": str(run_dir),
+                "run_dir": str(trusted_run),
                 "has_frontend": False,
                 "files": {
                     "events": "data/events.jsonl",
                     "state": "data/state.json",
-                    "report": "data/report.json" if report_json.exists() else None,
+                    "report": "data/report.json" if report_exists else None,
                     "artifacts": "artifacts/",
                 },
             },
@@ -72,15 +77,16 @@ def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path 
         ),
         encoding="utf-8",
     )
-    return out_dir
+    return trusted_out
 
 
 def _copy_logos_to(dest: Path) -> None:
     """Copy logo PNGs from the bundled static dir into *dest* (if they exist)."""
+    resolved_dest = dest.resolve()
     for name in ("logo_light.png", "logo_dark.png"):
-        src = _STATIC_DIR / name
-        dst = dest / name
-        if src.exists() and not dst.exists():
+        src = child_path(_STATIC_DIR, name)
+        dst = child_path(resolved_dest, name)
+        if src.is_file() and not dst.exists():
             shutil.copy2(src, dst)
 
 

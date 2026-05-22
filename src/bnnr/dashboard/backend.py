@@ -6,7 +6,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -20,6 +19,7 @@ from pydantic import BaseModel as _PydanticBaseModel
 
 from bnnr.dashboard.exporter import export_dashboard_snapshot
 from bnnr.events import IncrementalReplayState, load_events, load_events_from_offset
+from bnnr.path_security import child_path, validate_run_id
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def list_runs(run_root: Path) -> list[dict[str, Any]]:
     for item in sorted(run_root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if not item.is_dir():
             continue
-        events_file = item / "events.jsonl"
+        events_file = child_path(item, "events.jsonl")
         if not events_file.exists():
             continue
         runs.append(
@@ -105,39 +105,45 @@ def list_runs(run_root: Path) -> list[dict[str, Any]]:
     return runs
 
 
-_RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
-
-
-def _validate_run_id(run_id: str) -> None:
-    if not run_id or run_id in {".", ".."}:
-        raise HTTPException(status_code=400, detail="Invalid run id")
-    if "/" in run_id or "\\" in run_id:
-        raise HTTPException(status_code=400, detail="Invalid run id")
-    if not _RUN_ID_RE.fullmatch(run_id):
-        raise HTTPException(status_code=400, detail="Invalid run id")
-
-
 def _resolve_run_dir(run_root: Path, run_id: str) -> Path:
-    _validate_run_id(run_id)
-    run_dir = (run_root / run_id).resolve()
-    if not run_dir.exists() or run_root.resolve() not in run_dir.parents:
+    try:
+        run_id = validate_run_id(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid run id") from exc
+
+    resolved_root = run_root.resolve()
+    try:
+        run_dir = child_path(resolved_root, run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
+
+    if not run_dir.is_dir() or not child_path(run_dir, "events.jsonl").is_file():
         raise HTTPException(status_code=404, detail="Run not found")
     return run_dir
 
 
 def _safe_artifact_path(run_root: Path, path: str) -> Path:
     resolved_root = run_root.resolve()
-    candidate = (run_root / path).resolve()
-    if resolved_root not in candidate.parents:
+    parts = Path(path).parts
+    if not parts:
         raise HTTPException(status_code=400, detail="Invalid artifact path")
-    if not candidate.exists() or not candidate.is_file():
-        parts = Path(path).parts
-        if len(parts) > 1:
-            alt = (run_root / Path(*parts[1:])).resolve()
-            if alt.exists() and alt.is_file() and resolved_root in alt.parents:
+    try:
+        candidate = child_path(resolved_root, *parts)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid artifact path") from exc
+
+    if candidate.is_file():
+        return candidate
+
+    if len(parts) > 1:
+        try:
+            alt = child_path(resolved_root, *parts[1:])
+            if alt.is_file():
                 return alt
-        raise HTTPException(status_code=404, detail="Artifact not found")
-    return candidate
+        except ValueError:
+            pass
+
+    raise HTTPException(status_code=404, detail="Artifact not found")
 
 
 def create_dashboard_app(
@@ -162,7 +168,7 @@ def create_dashboard_app(
         replay of completed/interrupted runs.
     """
     run_root = _normalize_run_root(run_root)
-    app = FastAPI(title="BNNR Dashboard API", version="0.4.3")
+    app = FastAPI(title="BNNR Dashboard API", version="0.4.4")
     state_cache: dict[str, _CacheEntry] = {}
     static_dir = static_dir.resolve() if static_dir is not None else None
 
@@ -180,7 +186,7 @@ def create_dashboard_app(
 
     def _events_file(run_id: str) -> Path:
         run_dir = _resolve_run_dir(run_root, run_id)
-        events_file = run_dir / "events.jsonl"
+        events_file = child_path(run_dir, "events.jsonl")
         if not events_file.exists():
             raise HTTPException(status_code=404, detail="Run has no events.jsonl")
         return events_file
