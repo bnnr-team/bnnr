@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -104,23 +105,22 @@ def list_runs(run_root: Path) -> list[dict[str, Any]]:
     return runs
 
 
-def _resolve_run_dir(run_root: Path, run_id: str) -> Path:
-    if (
-        not run_id
-        or run_id in {".", ".."}
-        or "/" in run_id
-        or "\\" in run_id
-        or Path(run_id).name != run_id
-    ):
-        raise HTTPException(status_code=404, detail="Run not found")
+_RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
-    resolved_root = run_root.resolve()
-    run_dir = (resolved_root / run_id).resolve()
-    if not run_dir.exists() or not run_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Run not found")
-    try:
-        run_dir.relative_to(resolved_root)
-    except ValueError:
+
+def _validate_run_id(run_id: str) -> None:
+    if not run_id or run_id in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid run id")
+    if "/" in run_id or "\\" in run_id:
+        raise HTTPException(status_code=400, detail="Invalid run id")
+    if not _RUN_ID_RE.fullmatch(run_id):
+        raise HTTPException(status_code=400, detail="Invalid run id")
+
+
+def _resolve_run_dir(run_root: Path, run_id: str) -> Path:
+    _validate_run_id(run_id)
+    run_dir = (run_root / run_id).resolve()
+    if not run_dir.exists() or run_root.resolve() not in run_dir.parents:
         raise HTTPException(status_code=404, detail="Run not found")
     return run_dir
 
