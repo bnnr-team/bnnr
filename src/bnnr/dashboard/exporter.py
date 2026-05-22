@@ -16,6 +16,8 @@ _STATIC_DIR = Path(__file__).parent / "static"
 def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path | None = None) -> Path:
     run_dir = run_dir.resolve()
     out_dir = out_dir.resolve()
+    if out_dir != run_dir and run_dir not in out_dir.parents:
+        raise ValueError(f"Output directory must be inside run directory: {out_dir}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     events_file = run_dir / "events.jsonl"
