@@ -155,7 +155,7 @@ def load_events(events_file: Path) -> list[dict[str, Any]]:
         except json.JSONDecodeError as exc:
             logger.warning(
                 "Skipping invalid JSONL line in %s: %s",
-                events_file,
+                "events.jsonl",
                 exc,
             )
     return rows
@@ -184,7 +184,7 @@ def load_events_from_offset(events_file: Path, byte_offset: int) -> tuple[list[d
             except json.JSONDecodeError as exc:
                 logger.warning(
                     "Skipping invalid JSONL line in %s (from offset %s): %s",
-                    events_file,
+                    "events.jsonl",
                     byte_offset,
                     exc,
                 )
