@@ -16,6 +16,10 @@ _STATIC_DIR = Path(__file__).parent / "static"
 def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path | None = None) -> Path:
     run_dir = run_dir.resolve()
     out_dir = out_dir.resolve()
+    try:
+        out_dir.relative_to(run_dir)
+    except ValueError as exc:
+        raise ValueError(f"Export output directory must be within run directory: {out_dir}") from exc
     out_dir.mkdir(parents=True, exist_ok=True)
 
     events_file = run_dir / "events.jsonl"
@@ -37,7 +41,11 @@ def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path 
     _copy_logos_to(out_dir)
 
     # Write state.json for offline mode (also used when served via HTTP)
-    data_dir = out_dir / "data"
+    data_dir = (out_dir / "data").resolve()
+    try:
+        data_dir.relative_to(out_dir)
+    except ValueError as exc:
+        raise ValueError(f"Export data directory escapes output directory: {data_dir}") from exc
     data_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(events_file, data_dir / "events.jsonl")
     (data_dir / "state.json").write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
