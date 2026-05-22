@@ -140,7 +140,7 @@ def _contains_large_base64(value: Any) -> bool:
 
 
 def load_events(events_file: Path) -> list[dict[str, Any]]:
-    if not events_file.exists():
+    if not events_file.exists() or not events_file.is_file():
         return []
     rows: list[dict[str, Any]] = []
     for line in events_file.read_text(encoding="utf-8").splitlines():
@@ -164,7 +164,7 @@ def load_events_from_offset(events_file: Path, byte_offset: int) -> tuple[list[d
     Returns ``(new_events, new_byte_offset)`` so the caller can resume
     from where it left off on the next call.
     """
-    if not events_file.exists():
+    if not events_file.exists() or not events_file.is_file():
         return [], 0
     rows: list[dict[str, Any]] = []
     with events_file.open("r", encoding="utf-8") as fh:
