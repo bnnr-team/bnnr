@@ -139,7 +139,16 @@ def _contains_large_base64(value: Any) -> bool:
     return False
 
 
+def _validate_events_file_path(events_file: Path) -> Path:
+    """Validate that the events path points to the expected JSONL file."""
+    candidate = events_file.resolve()
+    if candidate.name != "events.jsonl":
+        raise ValueError(f"Invalid events file path: {events_file}")
+    return candidate
+
+
 def load_events(events_file: Path) -> list[dict[str, Any]]:
+    events_file = _validate_events_file_path(events_file)
     if not events_file.exists():
         return []
     rows: list[dict[str, Any]] = []
@@ -164,6 +173,7 @@ def load_events_from_offset(events_file: Path, byte_offset: int) -> tuple[list[d
     Returns ``(new_events, new_byte_offset)`` so the caller can resume
     from where it left off on the next call.
     """
+    events_file = _validate_events_file_path(events_file)
     if not events_file.exists():
         return [], 0
     rows: list[dict[str, Any]] = []
