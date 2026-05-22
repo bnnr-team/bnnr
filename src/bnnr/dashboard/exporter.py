@@ -16,9 +16,17 @@ _STATIC_DIR = Path(__file__).parent / "static"
 def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path | None = None) -> Path:
     run_dir = run_dir.resolve()
     out_dir = out_dir.resolve()
+
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"run directory not found: {run_dir}")
+    if run_dir != out_dir and run_dir not in out_dir.parents:
+        raise ValueError(f"out_dir must be within run_dir: {out_dir}")
+
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    events_file = run_dir / "events.jsonl"
+    events_file = (run_dir / "events.jsonl").resolve()
+    if run_dir not in events_file.parents:
+        raise ValueError(f"events.jsonl path escapes run_dir: {events_file}")
     if not events_file.exists():
         raise FileNotFoundError(f"events.jsonl not found in run directory: {run_dir}")
 
@@ -42,14 +50,14 @@ def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path 
     shutil.copy2(events_file, data_dir / "events.jsonl")
     (data_dir / "state.json").write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
 
-    report_json = run_dir / "report.json"
-    if report_json.exists():
+    report_json = (run_dir / "report.json").resolve()
+    if run_dir in report_json.parents and report_json.exists():
         shutil.copy2(report_json, data_dir / "report.json")
 
     # Copy artifacts
-    artifacts_src = run_dir / "artifacts"
+    artifacts_src = (run_dir / "artifacts").resolve()
     artifacts_dst = out_dir / "artifacts"
-    if artifacts_src.exists():
+    if run_dir in artifacts_src.parents and artifacts_src.exists():
         shutil.copytree(artifacts_src, artifacts_dst, dirs_exist_ok=True)
     else:
         artifacts_dst.mkdir(parents=True, exist_ok=True)
