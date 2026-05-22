@@ -104,8 +104,17 @@ def list_runs(run_root: Path) -> list[dict[str, Any]]:
     return runs
 
 
+def _validate_run_id(run_id: str) -> str:
+    rid = run_id.strip()
+    p = Path(rid)
+    if not rid or p.is_absolute() or len(p.parts) != 1 or rid in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid run id")
+    return rid
+
+
 def _resolve_run_dir(run_root: Path, run_id: str) -> Path:
-    run_dir = (run_root / run_id).resolve()
+    safe_run_id = _validate_run_id(run_id)
+    run_dir = (run_root / safe_run_id).resolve()
     if not run_dir.exists() or run_root.resolve() not in run_dir.parents:
         raise HTTPException(status_code=404, detail="Run not found")
     return run_dir
