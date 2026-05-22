@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -46,6 +47,9 @@ _MAX_CONFUSION_ENTRIES = 30
 
 # Signal file name used for pause/resume
 PAUSE_SIGNAL_FILENAME = ".bnnr_pause"
+
+# Restrict externally provided run IDs to simple directory-name-safe tokens.
+_RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 class ControlAction(_PydanticBaseModel):
@@ -105,8 +109,12 @@ def list_runs(run_root: Path) -> list[dict[str, Any]]:
 
 
 def _resolve_run_dir(run_root: Path, run_id: str) -> Path:
-    run_dir = (run_root / run_id).resolve()
-    if not run_dir.exists() or run_root.resolve() not in run_dir.parents:
+    if not run_id or not _RUN_ID_RE.fullmatch(run_id):
+        raise HTTPException(status_code=400, detail="Invalid run id")
+
+    resolved_root = run_root.resolve()
+    run_dir = (resolved_root / run_id).resolve()
+    if not run_dir.exists() or resolved_root not in run_dir.parents:
         raise HTTPException(status_code=404, detail="Run not found")
     return run_dir
 
