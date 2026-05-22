@@ -24,7 +24,7 @@
 
 **Already have a trained model?** Run **`bnnr analyze`** for a full diagnostic report (metrics, XAI, failure patterns, recommendations) — no retraining. See [Model analysis docs](https://github.com/bnnr-team/bnnr/blob/main/docs/analyze.md).
 
-Supported tasks (**v0.4.2**): single-label classification, multi-label classification, and object detection (COCO-mini / YOLO). See [Detection docs](https://github.com/bnnr-team/bnnr/blob/main/docs/detection.md).
+Supported tasks (**v0.4.3**): single-label classification, multi-label classification, and object detection (COCO-mini / YOLO). See [Detection docs](https://github.com/bnnr-team/bnnr/blob/main/docs/detection.md).
 
 ```bash
 python3 -m bnnr analyze --model checkpoints/best.pt --data cifar10 --output ./analysis_out

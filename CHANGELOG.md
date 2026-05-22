@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.3] — 2026-05-22
+
+### Fixed
+
+- **`bnnr demo` post-run messages**: `Your report` and XAI paths print immediately after training (before the dashboard wait loop), using the real artifact location `reports/<run>/artifacts/xai/`.
+
 ## [0.4.2] — 2026-05-22
 
 ### Fixed

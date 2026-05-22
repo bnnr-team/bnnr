@@ -3,22 +3,24 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from bnnr.cli import app
+from bnnr.cli import _print_demo_followup, _resolve_xai_artifact_dir, _run_train, app
 from bnnr.icd import ICD
 from bnnr.reporting import BNNRRunResult
 
 runner = CliRunner()
 
 
-def _mock_run_result(tmp_path: Path) -> BNNRRunResult:
+def _mock_run_result(tmp_path: Path, *, with_xai: bool = True) -> BNNRRunResult:
     run_dir = tmp_path / "reports" / "run_demo"
     run_dir.mkdir(parents=True)
-    xai_dir = run_dir / "xai"
-    xai_dir.mkdir()
+    if with_xai:
+        xai_dir = run_dir / "artifacts" / "xai" / "iter_1_icd" / "epoch_1"
+        xai_dir.mkdir(parents=True)
+        (xai_dir / "heatmap.png").write_bytes(b"png")
     report_json = run_dir / "report.json"
     report_json.write_text("{}", encoding="utf-8")
     from bnnr.config_model import BNNRConfig
@@ -41,13 +43,10 @@ class TestDemoCommand:
         assert result.exit_code == 0
         assert "demo" in result.stdout
 
-    def test_demo_invokes_train_path(self, tmp_path: Path) -> None:
+    def test_demo_invokes_train_with_on_complete(self, tmp_path: Path) -> None:
         mock_result = _mock_run_result(tmp_path)
 
-        with (
-            patch("bnnr.cli._run_train", return_value=mock_result) as mock_run,
-            patch("bnnr.cli._print_demo_followup") as mock_followup,
-        ):
+        with patch("bnnr.cli._run_train", return_value=mock_result) as mock_run:
             result = runner.invoke(app, ["demo"])
 
         assert result.exit_code == 0
@@ -56,17 +55,75 @@ class TestDemoCommand:
         assert call_kwargs["dataset"] == "cifar10"
         assert call_kwargs["augmentation_preset"] == "demo"
         assert call_kwargs["max_train_samples"] == 128
-        mock_followup.assert_called_once_with(mock_result)
+        assert call_kwargs["on_complete"] is _print_demo_followup
 
-    def test_demo_followup_messages(self, tmp_path: Path) -> None:
-        from bnnr.cli import _print_demo_followup
-
+    def test_demo_followup_messages_with_artifacts_xai(self, tmp_path: Path) -> None:
         mock_result = _mock_run_result(tmp_path)
         with patch("bnnr.cli.typer.echo") as echo:
             _print_demo_followup(mock_result)
         combined = " ".join(str(c.args[0]) for c in echo.call_args_list if c.args)
         assert "Your report:" in combined
+        assert "artifacts/xai" in combined.replace("\\", "/")
         assert "XAI heatmaps" in combined
+
+    def test_resolve_xai_artifact_dir_prefers_artifacts(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "run"
+        legacy = run_dir / "xai"
+        legacy.mkdir(parents=True)
+        (legacy / "old.png").write_bytes(b"x")
+        canonical = run_dir / "artifacts" / "xai" / "iter_0"
+        canonical.mkdir(parents=True)
+        (canonical / "new.png").write_bytes(b"x")
+
+        resolved = _resolve_xai_artifact_dir(run_dir)
+        assert resolved == run_dir / "artifacts" / "xai"
+
+
+class TestRunTrainOnCompleteOrdering:
+    def test_on_complete_runs_before_dashboard_wait(self, tmp_path: Path) -> None:
+        """Demo follow-up must print while training is done, not after Ctrl+C."""
+        mock_result = _mock_run_result(tmp_path, with_xai=False)
+        order: list[str] = []
+
+        def on_complete(_result: object) -> None:
+            order.append("on_complete")
+
+        cfg = MagicMock()
+        cfg.report_dir = tmp_path / "reports"
+        cfg.seed = 42
+
+        with (
+            patch(
+                "bnnr.pipelines.build_pipeline",
+                return_value=(MagicMock(), MagicMock(), MagicMock(), []),
+            ),
+            patch("bnnr.cli._print_pipeline_summary"),
+            patch("bnnr.cli.start_dashboard", return_value="http://127.0.0.1:8080/"),
+            patch("bnnr.cli.BNNRTrainer") as trainer_cls,
+            patch("bnnr.cli.time.sleep", side_effect=InterruptedError),
+        ):
+            trainer_cls.return_value.run.return_value = mock_result
+            try:
+                _run_train(
+                    cfg=cfg,
+                    dataset="cifar10",
+                    data_dir=tmp_path,
+                    data_path=None,
+                    augmentation_preset="demo",
+                    with_dashboard=True,
+                    dashboard_port=8080,
+                    no_auto_open=True,
+                    dashboard_token=None,
+                    batch_size=64,
+                    max_train_samples=128,
+                    max_val_samples=64,
+                    num_classes=None,
+                    on_complete=on_complete,
+                )
+            except InterruptedError:
+                order.append("dashboard_wait")
+
+        assert order == ["on_complete", "dashboard_wait"]
 
 
 class TestDemoPresetIntegration:

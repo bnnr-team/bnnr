@@ -26,7 +26,7 @@ Zero-config onboarding run — **no flags, no YAML**.
 - Trains a small **demo CNN** (not ResNet-18) with preset **`demo`** (saliency-guided **ICD** + ChurchNoise).
 - Sample limits: 128 train / 64 val; `m_epochs=1`, `max_iterations=1`, XAI enabled.
 - Starts the **live dashboard** and opens it in your browser (same as `--with-dashboard` on `train`).
-- Writes artifacts under `reports/` and `checkpoints/`; after the run prints paths to the JSON report and `reports/<run>/xai/` heatmaps.
+- Writes artifacts under `reports/` and `checkpoints/`; after training (before the dashboard wait loop) prints paths to the JSON report and `reports/<run>/artifacts/xai/` heatmaps when present.
 
 For an interactive wizard with prompts, use [`quickstart`](#quickstart) instead.
 

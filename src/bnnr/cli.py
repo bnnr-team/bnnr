@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -197,6 +198,7 @@ def _run_train(
     max_train_samples: Optional[int],
     max_val_samples: Optional[int],
     num_classes: Optional[int],
+    on_complete: Optional[Callable[[Any], None]] = None,
 ) -> Any:
     """Shared training path for ``train``, ``demo``, and ``quickstart`` commands."""
     from bnnr.pipelines import build_pipeline
@@ -263,6 +265,9 @@ def _run_train(
     typer.echo("=" * 64)
     typer.echo("")
 
+    if on_complete is not None:
+        on_complete(result)
+
     if with_dashboard and dashboard_url:
         typer.echo("Dashboard is still running — press Ctrl+C to stop.")
         try:
@@ -274,13 +279,21 @@ def _run_train(
     return result
 
 
+def _resolve_xai_artifact_dir(run_dir: Path) -> Path | None:
+    """Return the run directory that contains XAI heatmaps, if any exist."""
+    for candidate in (run_dir / "artifacts" / "xai", run_dir / "xai"):
+        if candidate.is_dir() and any(candidate.iterdir()):
+            return candidate
+    return None
+
+
 def _print_demo_followup(result: Any) -> None:
     """Post-run hints for ``bnnr demo`` (report + XAI artifact paths)."""
     run_dir = result.report_json_path.parent
     typer.echo("")
     typer.echo(f"  Your report: {result.report_json_path}")
-    xai_dir = run_dir / "xai"
-    if xai_dir.is_dir():
+    xai_dir = _resolve_xai_artifact_dir(run_dir)
+    if xai_dir is not None:
         typer.echo(f"  View XAI heatmaps: {xai_dir}/")
     typer.echo("")
 
@@ -300,7 +313,7 @@ def demo_command() -> None:
     typer.echo("")
 
     cfg = default_demo_config()
-    result = _run_train(
+    _run_train(
         cfg=cfg,
         dataset="cifar10",
         data_dir=Path("data"),
@@ -314,8 +327,8 @@ def demo_command() -> None:
         max_train_samples=128,
         max_val_samples=64,
         num_classes=None,
+        on_complete=_print_demo_followup,
     )
-    _print_demo_followup(result)
 
 
 @app.command("train")
