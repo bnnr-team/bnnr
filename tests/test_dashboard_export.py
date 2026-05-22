@@ -36,6 +36,33 @@ def test_export_dashboard_snapshot_creates_static_bundle(temp_dir) -> None:
     assert (exported / "data" / "state.json").exists()
     assert (exported / "artifacts" / "a.txt").exists()
     assert (exported / "manifest.json").exists()
+    manifest = json.loads((exported / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["run_dir"] == "run_1"
+
+
+def test_export_standalone_report_escapes_run_name_in_html(temp_dir) -> None:
+    run_name = "<script>alert(1)</script>"
+    run_dir = temp_dir / run_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "events.jsonl").write_text(
+        json.dumps(
+            {
+                "schema_version": "2.1",
+                "sequence": 1,
+                "run_id": run_name,
+                "timestamp": "2026-01-01T00:00:00Z",
+                "type": "run_started",
+                "payload": {"run_name": run_name},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    exported = export_dashboard_snapshot(run_dir, temp_dir / "exported_xss")
+    index_html = (exported / "index.html").read_text(encoding="utf-8")
+    assert "<script>alert(1)</script>" not in index_html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in index_html
 
 
 def test_export_with_frontend_generates_single_index_with_visual_sections(temp_dir) -> None:
