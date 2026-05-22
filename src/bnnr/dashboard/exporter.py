@@ -16,6 +16,11 @@ _STATIC_DIR = Path(__file__).parent / "static"
 def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path | None = None) -> Path:
     run_dir = run_dir.resolve()
     out_dir = out_dir.resolve()
+    allowed_export_root = (run_dir / "dashboard_export").resolve()
+    try:
+        out_dir.relative_to(allowed_export_root)
+    except ValueError as exc:
+        raise ValueError(f"Invalid export output directory: {out_dir}") from exc
     out_dir.mkdir(parents=True, exist_ok=True)
 
     events_file = run_dir / "events.jsonl"
