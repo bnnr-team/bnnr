@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -105,6 +106,16 @@ def list_runs(run_root: Path) -> list[dict[str, Any]]:
 
 
 def _validate_run_id(run_id: str) -> str:
+    rid = (run_id or "").strip()
+    if not rid:
+        raise HTTPException(status_code=404, detail="Run not found")
+    # Must be a single path segment (no traversal, no nested paths).
+    if Path(rid).name != rid or rid in {".", ".."}:
+        raise HTTPException(status_code=404, detail="Run not found")
+    # Conservative allow-list for run directory names.
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", rid):
+        raise HTTPException(status_code=404, detail="Run not found")
+    return rid
     rid = run_id.strip()
     p = Path(rid)
     if not rid or p.is_absolute() or len(p.parts) != 1 or rid in {".", ".."}:
