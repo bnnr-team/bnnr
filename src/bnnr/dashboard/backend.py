@@ -186,6 +186,7 @@ def create_dashboard_app(
         return events_file
 
     def _state_for_run(run_id: str) -> dict[str, Any]:
+        _validate_run_id(run_id)
         events_file = _events_file(run_id)
         mtime = events_file.stat().st_mtime
         now = time.monotonic()
