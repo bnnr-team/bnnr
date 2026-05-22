@@ -105,9 +105,14 @@ def list_runs(run_root: Path) -> list[dict[str, Any]]:
 
 
 def _resolve_run_dir(run_root: Path, run_id: str) -> Path:
-    run_dir = (run_root / run_id).resolve()
-    if not run_dir.exists() or run_root.resolve() not in run_dir.parents:
+    resolved_root = _normalize_run_root(run_root).resolve()
+    run_dir = (resolved_root / run_id).resolve()
+    if not run_dir.exists() or not run_dir.is_dir():
         raise HTTPException(status_code=404, detail="Run not found")
+    try:
+        run_dir.relative_to(resolved_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
     return run_dir
 
 
