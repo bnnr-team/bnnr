@@ -119,8 +119,9 @@ def _validate_run_id(run_id: str) -> None:
 
 def _resolve_run_dir(run_root: Path, run_id: str) -> Path:
     _validate_run_id(run_id)
-    run_dir = (run_root / run_id).resolve()
-    if not run_dir.exists() or run_root.resolve() not in run_dir.parents:
+    resolved_root = run_root.resolve()
+    run_dir = (resolved_root / run_id).resolve()
+    if not run_dir.exists() or (run_dir != resolved_root and resolved_root not in run_dir.parents):
         raise HTTPException(status_code=404, detail="Run not found")
     return run_dir
 
