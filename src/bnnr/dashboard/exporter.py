@@ -64,7 +64,7 @@ def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path 
             {
                 "version": "1.0",
                 "mode": "offline_replay",
-                "run_dir": str(trusted_run),
+                "run_dir": trusted_run.name,
                 "has_frontend": False,
                 "files": {
                     "events": "data/events.jsonl",
