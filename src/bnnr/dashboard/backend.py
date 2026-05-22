@@ -114,6 +114,16 @@ def _validate_run_id(run_id: str) -> str:
 
 def _resolve_run_dir(run_root: Path, run_id: str) -> Path:
     safe_run_id = _validate_run_id(run_id)
+    rid_path = Path(safe_run_id)
+    if (
+        not safe_run_id
+        or safe_run_id in {".", ".."}
+        or rid_path.is_absolute()
+        or rid_path.name != safe_run_id
+        or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for ch in safe_run_id)
+    ):
+        raise HTTPException(status_code=404, detail="Run not found")
+
     resolved_root = run_root.resolve()
     run_dir = (resolved_root / safe_run_id).resolve()
     try:
