@@ -13,8 +13,17 @@ from bnnr.events import load_events, replay_events
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
-def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path | None = None) -> Path:
+def export_dashboard_snapshot(
+    run_dir: Path,
+    out_dir: Path,
+    frontend_dist: Path | None = None,
+    safe_run_root: Path | None = None,
+) -> Path:
     run_dir = run_dir.resolve()
+    if safe_run_root is not None:
+        resolved_root = safe_run_root.resolve()
+        if run_dir != resolved_root and resolved_root not in run_dir.parents:
+            raise ValueError(f"run_dir must be inside safe_run_root: {run_dir}")
     out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 

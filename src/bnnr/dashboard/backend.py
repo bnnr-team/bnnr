@@ -308,7 +308,12 @@ def create_dashboard_app(
     def api_run_export(run_id: str) -> dict[str, Any]:
         run_dir = _resolve_run_dir(run_root, run_id)
         out_dir = run_dir / "dashboard_export" / datetime.now().strftime("%Y%m%d_%H%M%S")
-        exported = export_dashboard_snapshot(run_dir=run_dir, out_dir=out_dir, frontend_dist=static_dir)
+        exported = export_dashboard_snapshot(
+            run_dir=run_dir,
+            out_dir=out_dir,
+            frontend_dist=static_dir,
+            safe_run_root=run_root,
+        )
         return {"ok": True, "path": str(exported), "index": str(exported / "index.html")}
 
     @app.get("/api/run/{run_id}/events")
