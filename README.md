@@ -21,67 +21,15 @@
 
 # BNNR (Bulletproof Neural Network Recipe)
 
-**Audit why your vision model fails — then fix it with XAI-guided augmentation.**
+**BNNR automatically improves your PyTorch vision models using XAI** — find what your model gets wrong, fix it with intelligent augmentation, and prove the result with structured reports and a live dashboard.
 
-BNNR is an open-source PyTorch toolkit: structured reports, live dashboard, and saliency-driven augmentations (ICD / AICD) that test what actually improves validation metrics.
+**Already have a trained model?** Run **`bnnr analyze`** for a full diagnostic report (metrics, XAI, failure patterns, recommendations) — no retraining. See [Model analysis docs](docs/analyze.md).
 
----
-
-## Audit in 60 seconds (`bnnr analyze`)
-
-**Lowest-friction entry:** run diagnostics on a checkpoint you already have — no retraining.
+Supported tasks (**v0.4.4**): single-label classification, multi-label classification, and object detection (COCO-mini / YOLO). See [Detection docs](docs/detection.md).
 
 ```bash
-pip install bnnr
 python3 -m bnnr analyze --model checkpoints/best.pt --data cifar10 --output ./analysis_out
-# open ./analysis_out/report.html
 ```
-
-Metrics, confusion patterns, XAI overlays, failure analysis, and recommendations. Details: [docs/analyze.md](docs/analyze.md).
-
----
-
-## Same accuracy — different model behavior
-
-Validation accuracy alone can hide shortcut learning. BNNR makes attention and branch decisions visible:
-
-<p align="center">
-  <img src="docs/assets/xai-same-accuracy-diff-behavior.png" alt="Same validation accuracy but different saliency and confidence after BNNR" width="800">
-</p>
-<p align="center"><em>Same val accuracy — different where the model looks (and confidence on the sample).</em></p>
-
-<p align="center">
-  <img src="docs/assets/xai-measurable-gains-wrong-to-correct.png" alt="Wrong to correct prediction with measurable branch selection" width="800">
-</p>
-<p align="center"><em>Only measurable improvements are kept along the selected path.</em></p>
-
----
-
-## Quickstart
-
-```bash
-pip install "bnnr[dashboard]"
-```
-
-| Command | What it does |
-|---------|----------------|
-| **`python3 -m bnnr demo`** | Fastest — zero flags, CIFAR-10, live dashboard (~1 min) → `http://127.0.0.1:8080/` |
-| **`python3 -m bnnr quickstart`** | Interactive wizard (dataset, preset; sample limits 128/64) |
-| **`python3 -m bnnr train --dataset cifar10 --preset light --with-dashboard`** | Full run with built-in defaults (no YAML required) |
-
-```bash
-# Recommended first run
-python3 -m bnnr demo
-```
-
-```bash
-# Guided run
-python3 -m bnnr quickstart
-```
-
-Advanced: pass `--config path.yaml` to override defaults. See [Getting started](docs/getting_started.md) and [CLI](docs/cli.md).
-
-Supported tasks (**v0.4.5**): single-label classification, multi-label classification, object detection (COCO-mini / YOLO). See [Detection docs](docs/detection.md).
 
 ---
 
@@ -105,21 +53,46 @@ BNNR uses saliency maps to guide augmentation — not random flips and crops.
 
 | Dataset | Baseline | + BNNR | Gain |
 |---------|----------|--------|------|
-| CIFAR-10 | TBD | TBD | — |
-| Fashion-MNIST | TBD | TBD | — |
-| STL-10 | TBD | TBD | — |
+| *Coming soon* | — | — | — |
 
-*Run [`benchmarks/run_benchmarks.py`](benchmarks/run_benchmarks.py) to fill this table. See [benchmarks/README.md](benchmarks/README.md) and [docs/benchmarks.md](docs/benchmarks.md).*
+Reproducible benchmark results on CIFAR-10, STL-10, and Fashion-MNIST will be published here. Track progress in [GitHub Issues](https://github.com/bnnr-team/bnnr/issues).
+
+---
+
+## Quickstart
+
+```bash
+pip install "bnnr[dashboard]"
+
+# Zero flags — CIFAR-10 demo CNN, ICD preset, live dashboard (~1 min)
+python3 -m bnnr demo
+```
+
+Interactive wizard (prompts for dataset/preset; sample limits 128/64):
+
+```bash
+python3 -m bnnr quickstart
+```
+
+Full CLI training with built-in defaults:
+
+```bash
+python3 -m bnnr train --dataset cifar10 --preset light --with-dashboard
+```
+
+Open `http://127.0.0.1:8080/` for the live dashboard (QR code in terminal for mobile on the same Wi-Fi).
+
+Advanced: pass `--config path.yaml` to override defaults.
 
 ---
 
 ## Live dashboard
 
-Real metrics from a BNNR training run — branch tree, charts, XAI previews, and dataset insights. After `bnnr demo` or `bnnr train --with-dashboard`, open `http://127.0.0.1:8080/` (QR code in terminal for mobile on the same Wi-Fi).
+Real metrics from a BNNR training run — branch tree, charts, XAI previews, and dataset insights.
 
 | Overview | Branch Tree | Metrics |
 |:---:|:---:|:---:|
-| ![Dashboard Overview](docs/assets/dashboard-overview.png) | ![Branch tree — test improvements before you commit](docs/assets/branch-tree-improvements.png) | ![Metrics](docs/assets/dashboard-metrics.png) |
+| ![Dashboard Overview](docs/assets/dashboard-overview.png) | ![Branch Tree](docs/assets/dashboard-tree.png) | ![Metrics](docs/assets/dashboard-metrics.png) |
 
 | Samples & XAI | Analysis | Dataset Insight |
 |:---:|:---:|:---:|
