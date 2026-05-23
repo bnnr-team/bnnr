@@ -94,7 +94,7 @@ Real metrics from a BNNR training run — branch tree, charts, XAI previews, and
 
 ---
 
-## Analyze an existing model (optional)
+## Analyze an existing model
 
 If you already have a trained checkpoint, run diagnostics without retraining:
 
