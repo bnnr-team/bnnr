@@ -21,15 +21,50 @@
 
 # BNNR (Bulletproof Neural Network Recipe)
 
-**BNNR automatically improves your PyTorch vision models using XAI** — find what your model gets wrong, fix it with intelligent augmentation, and prove the result with structured reports and a live dashboard.
+**Audit why your vision model fails — then fix it with XAI-guided augmentation.**
 
-**Already have a trained model?** Run **`bnnr analyze`** for a full diagnostic report (metrics, XAI, failure patterns, recommendations) — no retraining. See [Model analysis docs](docs/analyze.md).
+BNNR is an open-source PyTorch toolkit: structured reports, live dashboard, and saliency-driven augmentations (ICD / AICD) that test what actually improves validation metrics.
 
-Supported tasks (**v0.4.4**): single-label classification, multi-label classification, and object detection (COCO-mini / YOLO). See [Detection docs](docs/detection.md).
+---
+
+## Audit in 60 seconds (`bnnr analyze`)
+
+**Lowest-friction entry:** run diagnostics on a checkpoint you already have — no retraining.
 
 ```bash
+pip install bnnr
 python3 -m bnnr analyze --model checkpoints/best.pt --data cifar10 --output ./analysis_out
+# open ./analysis_out/report.html
 ```
+
+Metrics, confusion patterns, XAI overlays, failure analysis, and recommendations. Details: [docs/analyze.md](docs/analyze.md).
+
+---
+
+## Same accuracy — different model behavior
+
+Validation accuracy alone can hide shortcut learning. BNNR makes attention and branch decisions visible:
+
+<p align="center">
+  <img src="docs/assets/xai-same-accuracy-diff-behavior.png" alt="Same validation accuracy but different saliency and confidence after BNNR" width="800">
+</p>
+<p align="center"><em>Same val accuracy — different where the model looks (and confidence on the sample).</em></p>
+
+<p align="center">
+  <img src="docs/assets/xai-measurable-gains-wrong-to-correct.png" alt="Wrong to correct prediction with measurable branch selection" width="800">
+</p>
+<p align="center"><em>Only measurable improvements are kept along the selected path.</em></p>
+
+---
+
+## Train with a live loop
+
+```bash
+pip install "bnnr[dashboard]"
+python3 -m bnnr demo   # ~1 min CIFAR-10 + dashboard at http://127.0.0.1:8080/
+```
+
+Supported tasks (**v0.4.4**): single-label classification, multi-label classification, object detection (COCO-mini / YOLO). See [Detection docs](docs/detection.md).
 
 ---
 
@@ -53,9 +88,11 @@ BNNR uses saliency maps to guide augmentation — not random flips and crops.
 
 | Dataset | Baseline | + BNNR | Gain |
 |---------|----------|--------|------|
-| *Coming soon* | — | — | — |
+| CIFAR-10 | TBD | TBD | — |
+| Fashion-MNIST | TBD | TBD | — |
+| STL-10 | TBD | TBD | — |
 
-Reproducible benchmark results on CIFAR-10, STL-10, and Fashion-MNIST will be published here. Track progress in [GitHub Issues](https://github.com/bnnr-team/bnnr/issues).
+*Run [`benchmarks/run_benchmarks.py`](benchmarks/run_benchmarks.py) to fill this table. See [benchmarks/README.md](benchmarks/README.md) and [docs/benchmarks.md](docs/benchmarks.md).*
 
 ---
 
@@ -92,7 +129,7 @@ Real metrics from a BNNR training run — branch tree, charts, XAI previews, and
 
 | Overview | Branch Tree | Metrics |
 |:---:|:---:|:---:|
-| ![Dashboard Overview](docs/assets/dashboard-overview.png) | ![Branch Tree](docs/assets/dashboard-tree.png) | ![Metrics](docs/assets/dashboard-metrics.png) |
+| ![Dashboard Overview](docs/assets/dashboard-overview.png) | ![Branch tree — test improvements before you commit](docs/assets/branch-tree-improvements.png) | ![Metrics](docs/assets/dashboard-metrics.png) |
 
 | Samples & XAI | Analysis | Dataset Insight |
 |:---:|:---:|:---:|
