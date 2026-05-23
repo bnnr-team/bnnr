@@ -1,0 +1,6 @@
+{
+  "protocol_version": 1,
+  "notes": "Fill: python benchmarks/run_benchmarks.py --pilot --dataset cifar10 --seed 42",
+  "hardware": {"gpu": null, "pytorch_version": null, "platform": null},
+  "runs": []
+}

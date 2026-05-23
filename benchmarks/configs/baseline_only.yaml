@@ -1,0 +1,20 @@
+# Baseline-only: no augmentation branching (max_iterations: 0)
+m_epochs: 5
+max_iterations: 0
+metrics: [accuracy, f1_macro, loss]
+selection_metric: accuracy
+selection_mode: max
+checkpoint_dir: checkpoints
+report_dir: reports
+xai_enabled: true
+xai_samples: 4
+xai_method: opticam
+device: auto
+seed: 42
+save_checkpoints: true
+verbose: true
+early_stopping_patience: 2
+event_log_enabled: false
+candidate_pruning_enabled: true
+candidate_pruning_relative_threshold: 0.8
+candidate_pruning_warmup_epochs: 2
