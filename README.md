@@ -151,6 +151,7 @@ See [docs/analyze.md](docs/analyze.md) for the full workflow.
 | API reference | [docs/api_reference.md](docs/api_reference.md) |
 | Model analysis (`bnnr analyze`) | [docs/analyze.md](docs/analyze.md) |
 | Sample analyze report (live HTML) | [raw.githack.com preview](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) |
+| GitHub Discussions | [Q&A and showcase](https://github.com/bnnr-team/bnnr/discussions) |
 
 ---
 

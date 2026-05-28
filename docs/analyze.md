@@ -6,7 +6,7 @@
 
 How to run **zero-friction diagnostics** on a trained model without running full BNNR training: metrics, XAI, data quality, failure analysis, patterns, and recommendations.
 
-**Preview:** open the [sample HTML report](../assets/analyze-report-sample.html) (MNIST checkpoint, no install required).
+**Preview (live in browser, no install):** [sample HTML report on raw.githack.com](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) — MNIST checkpoint, self-contained report.
 
 ## When to use this page
 
