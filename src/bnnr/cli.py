@@ -73,6 +73,7 @@ def _print_pipeline_summary(
     try:
         val_samples = len(val_loader.dataset)  # type: ignore[arg-type]
     except (TypeError, AttributeError):
+        # Some loader/dataset wrappers are not sized or don't expose `.dataset`; keep "?" fallback.
         pass
 
     # Optimizer & scheduler
