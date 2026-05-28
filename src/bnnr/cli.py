@@ -68,11 +68,13 @@ def _print_pipeline_summary(
     try:
         train_samples = len(train_loader.dataset)  # type: ignore[arg-type]
     except (TypeError, AttributeError):
+        # Some loader wrappers do not expose a sized dataset; keep fallback "?".
         pass
     val_samples: Union[int, str] = "?"
     try:
         val_samples = len(val_loader.dataset)  # type: ignore[arg-type]
     except (TypeError, AttributeError):
+        # Some loader wrappers do not expose a sized dataset; keep fallback "?".
         pass
 
     # Optimizer & scheduler
