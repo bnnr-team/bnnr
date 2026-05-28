@@ -849,6 +849,7 @@ def list_augmentations(verbose: bool = typer.Option(False, "--verbose", "-v")) -
     try:
         import bnnr.kornia_aug  # noqa: F401
     except ImportError:
+        # Optional dependency: listing should still work without Kornia augmentations.
         pass
 
     names = AugmentationRegistry.list_all()
