@@ -7,19 +7,25 @@ import argparse
 import json
 import statistics
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 BENCHMARKS_DIR = Path(__file__).resolve().parent
 DEFAULT_RESULTS = BENCHMARKS_DIR / "results.json"
 
-DISPLAY = {
+DisplayMap = dict[str, str]
+RunRecord = dict[str, Any]
+AggregateFn = Callable[[list[float]], float]
+
+DISPLAY: DisplayMap = {
     "no_bnnr": "Without BNNR (crop + flip)",
     "randaugment": "RandAugment (torchvision)",
     "bnnr_branch_search": "BNNR branch search (ICD + AICD)",
 }
 
 
-def _agg(values: list[float], fn) -> float | None:
+def _agg(values: list[float], fn: AggregateFn) -> float | None:
     return fn(values) if values else None
 
 
@@ -40,7 +46,7 @@ def main() -> None:
 
     agg_fn = statistics.median if args.aggregate == "median" else statistics.mean
 
-    by_cond: dict[str, list[dict]] = defaultdict(list)
+    by_cond: dict[str, list[RunRecord]] = defaultdict(list)
     for r in runs:
         by_cond[r["condition"]].append(r)
 
@@ -53,7 +59,7 @@ def main() -> None:
     for comp in data.get("comparisons") or []:
         print(f"- **{comp['label']}**: {', '.join(comp['conditions'])}")
 
-    rows: list[tuple[str, str, str, str, str, str]] = []
+    rows: list[tuple[str, str, str, str, str, str, str]] = []
     for cid in DISPLAY:
         if cid not in by_cond:
             continue
@@ -71,19 +77,19 @@ def main() -> None:
         edge_s = f"{agg_fn(edges):.2f}" if edges else "—"
 
         per_seed = ", ".join(f"{v*100:.1f}%" for v in accs)
-        xai = rs[-1].get("xai_dir") or "—"
+        xai = str(rs[-1].get("xai_dir") or "—")
         rows.append((DISPLAY[cid], acc_s, delta, cov_s, edge_s, per_seed, xai))
 
     if args.markdown:
         print("\n| Condition | Val accuracy | Δ vs no BNNR | Mean attention coverage | Edge ratio | Per-seed | XAI dir |")
         print("|-----------|--------------|--------------|-------------------------|------------|----------|---------|")
-        for label, acc, delta, cov, edge, ps, xai in rows:
-            print(f"| {label} | {acc} | {delta} | {cov} | {edge} | {ps} | `{xai}` |")
+        for label, acc_text, delta_text, cov_text, edge_text, per_seed_text, xai in rows:
+            print(f"| {label} | {acc_text} | {delta_text} | {cov_text} | {edge_text} | {per_seed_text} | `{xai}` |")
     else:
         print(f"\n{'Condition':<36} {'Accuracy':>12} {'Δ no BNNR':>12} {'Coverage':>10} {'Edge':>8}")
         print("-" * 82)
-        for label, acc, delta, cov, edge, _, xai in rows:
-            print(f"{label:<36} {acc:>12} {delta:>12} {cov:>10} {edge:>8}")
+        for label, acc_text, delta_text, cov_text, edge_text, _, xai in rows:
+            print(f"{label:<36} {acc_text:>12} {delta_text:>12} {cov_text:>10} {edge_text:>8}")
             print(f"  xai: {xai}")
 
     print(
