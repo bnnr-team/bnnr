@@ -187,14 +187,16 @@ class AugmentationRunner:
 
         try:
             while True:
-                if self._worker_exception is not None:
-                    raise self._worker_exception  # type: ignore[misc]
+                worker_exc = self._worker_exception
+                if worker_exc is not None:
+                    raise worker_exc
 
                 batch = self._prefetch_queue.get()
                 if batch is None:
                     # Worker is done
-                    if self._worker_exception is not None:
-                        raise self._worker_exception  # type: ignore[misc]
+                    worker_exc = self._worker_exception
+                    if worker_exc is not None:
+                        raise worker_exc
                     break
 
                 images, labels = batch
