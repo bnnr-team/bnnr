@@ -101,7 +101,7 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
     decisions = state.get("decision_history", [])
     selected_path = state.get("selected_path", ["baseline"])
     branches = state.get("branches", {})
-    state.get("xai", [])  # reserved for future use
+    _xai = state.get("xai", [])  # reserved for future use
     sample_timelines = state.get("sample_timelines", {})
     task = state.get("task")
     if not isinstance(task, str):
