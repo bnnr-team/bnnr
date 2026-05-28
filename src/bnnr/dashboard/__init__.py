@@ -3,13 +3,19 @@
 __all__ = ["create_dashboard_app", "list_runs", "start_dashboard"]
 
 
-def __getattr__(name: str):
-    if name in {"create_dashboard_app", "list_runs"}:
-        from bnnr.dashboard.backend import create_dashboard_app, list_runs
+def create_dashboard_app(*args, **kwargs):
+    from bnnr.dashboard.backend import create_dashboard_app as _create_dashboard_app
 
-        return {"create_dashboard_app": create_dashboard_app, "list_runs": list_runs}[name]
-    if name == "start_dashboard":
-        from bnnr.dashboard.serve import start_dashboard
+    return _create_dashboard_app(*args, **kwargs)
 
-        return start_dashboard
-    raise AttributeError(name)
+
+def list_runs(*args, **kwargs):
+    from bnnr.dashboard.backend import list_runs as _list_runs
+
+    return _list_runs(*args, **kwargs)
+
+
+def start_dashboard(*args, **kwargs):
+    from bnnr.dashboard.serve import start_dashboard as _start_dashboard
+
+    return _start_dashboard(*args, **kwargs)
