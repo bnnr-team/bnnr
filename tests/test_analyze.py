@@ -109,6 +109,57 @@ def test_analysis_report_to_html(tmp_path: Path) -> None:
     assert "Use ICD" in html
 
 
+def test_analysis_report_to_html_embeds_overlay_images(tmp_path: Path) -> None:
+    """Portable HTML embeds artifact PNGs when artifact_root is set."""
+    import cv2
+    import numpy as np
+
+    rel = "artifacts/confusion_pairs/4_to_9/mean_correct_0.png"
+    png_path = tmp_path / rel
+    png_path.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(png_path), np.zeros((16, 16, 3), dtype=np.uint8))
+
+    report = AnalysisReport(
+        confusion_pair_xai=[
+            {
+                "class_a": "4",
+                "class_b": "9",
+                "count": 10,
+                "mean_overlay_correct_a": rel,
+                "mean_overlay_confused_ab": rel,
+                "sample_overlays": [{"overlay_path": rel}],
+                "heuristic_description": "test",
+            }
+        ],
+        best_worst_examples={
+            "4": {
+                "best": [{"overlay_path": rel, "confidence": 0.9, "description": "ok"}],
+                "worst": [],
+            }
+        },
+        xai_quality_per_class={"4": {"mean_quality": 0.8, "sample_count": 1, "flags": []}},
+        xai_quality_summary={"mean_quality_score": 0.8},
+    )
+    out = tmp_path / "report.html"
+    report.to_html(out, artifact_root=tmp_path, embed_images=True)
+    html = out.read_text()
+    assert "data:image/png;base64," in html
+    assert 'src="artifacts/' not in html
+
+    report.to_html(tmp_path / "report_relative.html", embed_images=False)
+    rel_html = (tmp_path / "report_relative.html").read_text()
+    assert "artifacts/confusion_pairs" in rel_html
+
+
+def test_analyze_sample_report_is_self_contained() -> None:
+    """Committed sample report must not reference external artifact paths."""
+    sample = Path(__file__).resolve().parents[1] / "docs" / "assets" / "analyze-report-sample.html"
+    if not sample.exists():
+        return
+    html = sample.read_text(encoding="utf-8")
+    assert 'src="artifacts/' not in html
+    assert "data:image/png;base64," in html
+
 def test_analyze_model_extended_report_fields(model_adapter, tmp_path: Path) -> None:
     """Extended analysis populates executive_summary, findings, class_diagnostics, recommendations_structured."""
     loader = _make_indexed_loader()

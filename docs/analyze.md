@@ -41,7 +41,22 @@ The report includes: accuracy/F1, per-class diagnostics, confusion matrix, XAI q
 5. **Failure patterns** — e.g. top confused class pairs, classes with low XAI quality.
 6. **Recommendations** — text list of improvement hints (e.g. add data for class X, consider ICD).
 
-Output: `AnalysisReport` in memory, plus on disk: `analysis_report.json`, optional `report.html`, and artifact directories (e.g. `worst_overlays/` if XAI overlays are generated).
+Output: `AnalysisReport` in memory, plus on disk: `analysis_report.json`, `report.html` (self-contained with embedded XAI PNGs when generated via CLI), and optional `artifacts/` for raw overlay files referenced in JSON.
+
+## Portable HTML report
+
+`bnnr analyze` writes **`report.html` as a single portable file**: confusion-pair saliency maps, best/worst examples, and data-quality thumbnails are embedded as **base64 data URIs**. You can email the file, open it from GitHub, or share it without the `artifacts/` folder.
+
+- **CLI:** automatic (`artifact_root` = `--output` directory).
+- **Python API:**
+
+```python
+report.to_html("./out/report.html", artifact_root="./out", embed_images=True)
+```
+
+`analysis_report.json` still stores relative paths to PNGs under `artifacts/` for tooling; only the HTML is self-contained.
+
+Regenerate the public sample: `python scripts/generate_analyze_sample_report.py` → `docs/assets/analyze-report-sample.html`.
 
 ## CLI: `bnnr analyze`
 
@@ -72,7 +87,7 @@ python3 -m bnnr analyze --model PATH --data PATH_OR_DATASET --output DIR [OPTION
 
 - The CLI builds a pipeline (dataset + adapter) from `--data` and loads the checkpoint into the adapter. For ImageFolder, use `--data /path/to/val_root`; the pipeline expects `--config` or compatible defaults (e.g. `num_classes` for imagefolder).
 - XAI requires an adapter that implements `XAICapableModel` (e.g. `SimpleTorchAdapter` with `target_layers`). If the checkpoint was saved by BNNR train, the same config/dataset usually provides the right adapter.
-- Output layout: `output_dir/analysis_report.json`, `output_dir/report.html`, and optionally `output_dir/worst_overlays/`, `output_dir/data_quality/` (see `artifacts.md`).
+- Output layout: `output_dir/analysis_report.json`, `output_dir/report.html` (portable, embedded images), and optionally `output_dir/artifacts/` (raw PNGs; see `artifacts.md`).
 - `--cv-folds` is a lightweight estimate of metric variability on validation predictions: analyze runs one inference pass, then computes k-fold metrics on cached predictions (it does not train k separate models).
 
 ### Metric definitions (practical)

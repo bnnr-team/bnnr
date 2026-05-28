@@ -75,6 +75,41 @@ def _load_logo_b64() -> str:
     return ""
 
 
+def _resolve_img_src(
+    path: str,
+    artifact_root: Path | None,
+    *,
+    embed: bool = True,
+) -> str:
+    """Resolve overlay path to a relative path or embedded data URI for portable HTML."""
+    if not path:
+        return ""
+    if path.startswith("data:"):
+        return path
+    if not embed or artifact_root is None:
+        return path
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = artifact_root / path
+    if not candidate.is_file():
+        logger.debug("Image not found for HTML embed: %s", candidate)
+        return path
+    try:
+        data = candidate.read_bytes()
+        b64 = base64.b64encode(data).decode("ascii")
+        suffix = candidate.suffix.lower()
+        if suffix in (".jpg", ".jpeg"):
+            mime = "image/jpeg"
+        elif suffix == ".webp":
+            mime = "image/webp"
+        else:
+            mime = "image/png"
+        return f"data:{mime};base64,{b64}"
+    except OSError:
+        logger.debug("Failed to read image for HTML embed: %s", candidate)
+        return path
+
+
 def _css() -> str:
     return """
 :root {
@@ -800,7 +835,12 @@ def _confusion_heatmap(confusion: dict[str, Any]) -> str:
 
 # ─── Confusion Pair XAI Analysis ──────────────────────────────────────────
 
-def _confusion_pair_xai_block(pairs: list[dict[str, Any]]) -> str:
+def _confusion_pair_xai_block(
+    pairs: list[dict[str, Any]],
+    *,
+    artifact_root: Path | None = None,
+    embed_images: bool = True,
+) -> str:
     if not pairs:
         return '<p class="empty">No confusion pair analysis available.</p>'
 
@@ -816,19 +856,21 @@ def _confusion_pair_xai_block(pairs: list[dict[str, Any]]) -> str:
         h += f'<span class="pair-count">{count} confusions</span>'
         h += '</div>'
 
-        mean_correct = pair.get("mean_overlay_correct_a", "")
-        mean_confused = pair.get("mean_overlay_confused_ab", "")
+        mean_correct = str(pair.get("mean_overlay_correct_a", "") or "")
+        mean_confused = str(pair.get("mean_overlay_confused_ab", "") or "")
         if mean_correct or mean_confused:
             h += '<div class="pair-overlays" style="justify-content:center;">'
             if mean_correct:
+                src = _resolve_img_src(mean_correct, artifact_root, embed=embed_images)
                 h += '<div class="pair-overlay-card correct">'
-                h += (f'<img src="{_esc(mean_correct)}" alt="Mean saliency (correct)" loading="lazy" '
+                h += (f'<img src="{_esc(src)}" alt="Mean saliency (correct)" loading="lazy" '
                       f'style="width:240px;height:240px;" />')
                 h += f'<div class="pair-overlay-label">Correctly classified as {cls_a} (mean saliency)</div>'
                 h += '</div>'
             if mean_confused:
+                src = _resolve_img_src(mean_confused, artifact_root, embed=embed_images)
                 h += '<div class="pair-overlay-card confused">'
-                h += (f'<img src="{_esc(mean_confused)}" alt="Mean saliency (confused)" loading="lazy" '
+                h += (f'<img src="{_esc(src)}" alt="Mean saliency (confused)" loading="lazy" '
                       f'style="width:240px;height:240px;" />')
                 h += f'<div class="pair-overlay-label">Confused {cls_a}\u2192{cls_b} (mean saliency)</div>'
                 h += '</div>'
@@ -844,9 +886,10 @@ def _confusion_pair_xai_block(pairs: list[dict[str, Any]]) -> str:
             h += f'<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Individual confused samples ({len(samples)})</div>'
             h += '<div class="pair-samples-grid">'
             for s in samples[:8]:
-                overlay = _esc(str(s.get("overlay_path", "")))
-                if overlay:
-                    h += f'<img src="{overlay}" alt="Confused sample" loading="lazy" />'
+                overlay_raw = str(s.get("overlay_path", "") or "")
+                if overlay_raw:
+                    src = _resolve_img_src(overlay_raw, artifact_root, embed=embed_images)
+                    h += f'<img src="{_esc(src)}" alt="Confused sample" loading="lazy" />'
             h += '</div></div>'
 
         h += '</div>'
@@ -881,6 +924,9 @@ def _xai_overview_block(
     summary: dict[str, Any],
     per_class: dict[str, Any],
     best_worst: dict[str, dict[str, list]],
+    *,
+    artifact_root: Path | None = None,
+    embed_images: bool = True,
 ) -> str:
     if not summary and not per_class:
         return '<p class="empty">No XAI analysis was performed.</p>'
@@ -963,22 +1009,24 @@ def _xai_overview_block(
         if best_list or worst_list:
             h += '<div class="xai-example-grid">'
             for ex in best_list[:4]:
-                overlay = _esc(str(ex.get("overlay_path", "")))
+                overlay_raw = str(ex.get("overlay_path", "") or "")
                 desc = ex.get("description", "")
                 h += '<div class="xai-example-card correct">'
-                if overlay:
-                    h += f'<img src="{overlay}" loading="lazy" />'
+                if overlay_raw:
+                    src = _resolve_img_src(overlay_raw, artifact_root, embed=embed_images)
+                    h += f'<img src="{_esc(src)}" loading="lazy" />'
                 h += '<div class="xai-example-meta">'
                 h += f'<strong style="color:var(--green);">CORRECT</strong> conf={float(ex.get("confidence", 0)):.2f}'
                 if desc:
                     h += f'<br>{_esc(desc)}'
                 h += '</div></div>'
             for ex in worst_list[:4]:
-                overlay = _esc(str(ex.get("overlay_path", "")))
+                overlay_raw = str(ex.get("overlay_path", "") or "")
                 desc = ex.get("description", "")
                 h += '<div class="xai-example-card wrong">'
-                if overlay:
-                    h += f'<img src="{overlay}" loading="lazy" />'
+                if overlay_raw:
+                    src = _resolve_img_src(overlay_raw, artifact_root, embed=embed_images)
+                    h += f'<img src="{_esc(src)}" loading="lazy" />'
                 h += '<div class="xai-example-meta">'
                 h += (f'<strong style="color:var(--red);">WRONG</strong> '
                       f'pred={ex.get("pred_label", "")} conf={float(ex.get("confidence", 0)):.2f}')
@@ -994,7 +1042,12 @@ def _xai_overview_block(
 
 # ─── XAI Examples (legacy) ────────────────────────────────────────────────
 
-def _xai_examples_block(examples_per_class: dict[str, Any]) -> str:
+def _xai_examples_block(
+    examples_per_class: dict[str, Any],
+    *,
+    artifact_root: Path | None = None,
+    embed_images: bool = True,
+) -> str:
     if not examples_per_class:
         return ""
     h = ""
@@ -1010,12 +1063,13 @@ def _xai_examples_block(examples_per_class: dict[str, Any]) -> str:
               f'</div>')
         h += '<div class="xai-example-grid">'
         for ex in examples[:max_visible]:
-            overlay = _esc(str(ex.get("overlay_path", ex.get("image_path", ""))))
+            overlay_raw = str(ex.get("overlay_path", ex.get("image_path", "")) or "")
             is_wrong = ex.get("true_label") != ex.get("pred_label")
             card_cls = "wrong" if is_wrong else ""
             h += f'<div class="xai-example-card {card_cls}">'
-            if overlay:
-                h += f'<img src="{overlay}" alt="XAI overlay class {_esc(str(cls_id))}" loading="lazy" />'
+            if overlay_raw:
+                src = _resolve_img_src(overlay_raw, artifact_root, embed=embed_images)
+                h += f'<img src="{_esc(src)}" alt="XAI overlay class {_esc(str(cls_id))}" loading="lazy" />'
             h += '<div class="xai-example-meta">'
             wrong_tag = ' <span style="color:var(--red);font-weight:700;">WRONG</span>' if is_wrong else ""
             h += (f'<strong>#{ex.get("index","")}</strong>{wrong_tag}<br>'
@@ -1278,8 +1332,16 @@ def _rec_block(recs_struct: list[dict[str, Any]], recs_legacy: list[str]) -> str
 
 # ─── Main Renderer ────────────────────────────────────────────────────────
 
-def render_analysis_html(report: Any) -> str:
+def render_analysis_html(
+    report: Any,
+    *,
+    artifact_root: Path | str | None = None,
+    embed_images: bool = True,
+) -> str:
     """Generate full HTML report aligned with BNNR dashboard design language."""
+    root: Path | None = None
+    if artifact_root is not None:
+        root = Path(artifact_root)
 
     schema_version = getattr(report, "schema_version", "0.2.1")
     metrics = getattr(report, "metrics", {}) or {}
@@ -1412,15 +1474,28 @@ def render_analysis_html(report: Any) -> str:
     # 5. Confusion Analysis (XAI-powered)
     if has_confusion_xai:
         lines.append(_section_open("confusion-xai", "Confusion Analysis", count=len(confusion_pair_xai)))
-        lines.append(_confusion_pair_xai_block(confusion_pair_xai))
+        lines.append(
+            _confusion_pair_xai_block(
+                confusion_pair_xai, artifact_root=root, embed_images=embed_images,
+            )
+        )
         lines.append(_section_close())
 
     # 6. XAI Insights
     if has_xai:
         lines.append(_section_open("xai", "XAI Insights"))
-        lines.append(_xai_overview_block(xai_summary, xai_per_class, best_worst))
+        lines.append(
+            _xai_overview_block(
+                xai_summary, xai_per_class, best_worst,
+                artifact_root=root, embed_images=embed_images,
+            )
+        )
         if xai_examples and not best_worst:
-            lines.append(_xai_examples_block(xai_examples))
+            lines.append(
+                _xai_examples_block(
+                    xai_examples, artifact_root=root, embed_images=embed_images,
+                )
+            )
         lines.append(_section_close())
 
     # 7. Dataset Health

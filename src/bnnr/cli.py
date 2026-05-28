@@ -699,7 +699,7 @@ def analyze_command(
         cv_folds=cv_folds,
         xai_samples=xai_samples,
     )
-    report.to_html(output / "report.html")
+    report.to_html(output / "report.html", artifact_root=output, embed_images=True)
     if output_summary:
         _print_analyze_summary(report, output)
     else:

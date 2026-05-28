@@ -118,11 +118,24 @@ class AnalysisReport:
         json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return json_path
 
-    def to_html(self, path: Path | str) -> Path:
-        """Write a single HTML report file."""
+    def to_html(
+        self,
+        path: Path | str,
+        *,
+        artifact_root: Path | str | None = None,
+        embed_images: bool = True,
+    ) -> Path:
+        """Write a single HTML report file.
+
+        When *artifact_root* points at the analyze output directory (contains
+        ``artifacts/``), overlay PNGs are embedded as base64 for a portable report.
+        """
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        html = _render_analysis_html(self)
+        root = Path(artifact_root) if artifact_root is not None else None
+        html = _render_analysis_html(
+            self, artifact_root=root, embed_images=embed_images,
+        )
         p.write_text(html, encoding="utf-8")
         return p
 
@@ -1278,8 +1291,13 @@ def _embed_thumbnails_as_base64(dq: dict[str, Any], save_dir: Path) -> None:
         dq["flagged_thumbnails"] = flagged_thumbs
 
 
-def _render_analysis_html(report: AnalysisReport) -> str:
+def _render_analysis_html(
+    report: AnalysisReport,
+    *,
+    artifact_root: Path | None = None,
+    embed_images: bool = True,
+) -> str:
     """Generate HTML report (dashboard-aligned layout and styling)."""
     from bnnr.analysis.html_report import render_analysis_html as _render
 
-    return _render(report)
+    return _render(report, artifact_root=artifact_root, embed_images=embed_images)

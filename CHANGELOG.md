@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.7] — 2026-05-28
+
+### Fixed
+
+- **Analyze HTML reports** embed all XAI and confusion overlay PNGs as base64 when `artifact_root` is provided — single portable `report.html` (CLI and `report.to_html(..., artifact_root=...)`).
+
+### Changed
+
+- Regenerated [sample analyze HTML report](docs/assets/analyze-report-sample.html) (self-contained, images visible on GitHub).
+- Maintainer script: `scripts/generate_analyze_sample_report.py`.
+
 ## [0.4.6] — 2026-05-28
 
 ### Added
