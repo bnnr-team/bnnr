@@ -7,7 +7,9 @@ import argparse
 import json
 import statistics
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 BENCHMARKS_DIR = Path(__file__).resolve().parent
 DEFAULT_RESULTS = BENCHMARKS_DIR / "results.json"
@@ -19,7 +21,7 @@ DISPLAY = {
 }
 
 
-def _agg(values: list[float], fn) -> float | None:
+def _agg(values: list[float], fn: Callable[[list[float]], float]) -> float | None:
     return fn(values) if values else None
 
 
@@ -40,7 +42,7 @@ def main() -> None:
 
     agg_fn = statistics.median if args.aggregate == "median" else statistics.mean
 
-    by_cond: dict[str, list[dict]] = defaultdict(list)
+    by_cond: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in runs:
         by_cond[r["condition"]].append(r)
 
@@ -53,7 +55,7 @@ def main() -> None:
     for comp in data.get("comparisons") or []:
         print(f"- **{comp['label']}**: {', '.join(comp['conditions'])}")
 
-    rows: list[tuple[str, str, str, str, str, str]] = []
+    rows: list[tuple[str, str, str, str, str, str, str]] = []
     for cid in DISPLAY:
         if cid not in by_cond:
             continue
@@ -71,7 +73,7 @@ def main() -> None:
         edge_s = f"{agg_fn(edges):.2f}" if edges else "—"
 
         per_seed = ", ".join(f"{v*100:.1f}%" for v in accs)
-        xai = rs[-1].get("xai_dir") or "—"
+        xai = str(rs[-1].get("xai_dir") or "—")
         rows.append((DISPLAY[cid], acc_s, delta, cov_s, edge_s, per_seed, xai))
 
     if args.markdown:
