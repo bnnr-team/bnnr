@@ -208,6 +208,7 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
                 if 0 <= class_idx < len(class_names):
                     class_name = str(class_names[class_idx])
             except (TypeError, ValueError):
+                # Non-numeric class IDs are valid; keep fallback string(class_id).
                 pass
 
             support = latest.get("support")
