@@ -635,7 +635,9 @@ def get_detection_preset(
                 )
             )
         except ImportError:
-            pass
+            logger.debug(
+                "albumentations is not installed; skipping optional detection color jitter augmentation."
+            )
         return augs
 
     if preset_name == "aggressive":
