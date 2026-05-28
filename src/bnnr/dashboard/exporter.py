@@ -250,38 +250,6 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
             if not (original or augmented or xai or has_split_xai):
                 continue
 
-            def _img(src: object, label: str) -> str:
-                if not isinstance(src, str) or not src:
-                    return ""
-                esc_src = html.escape(src)
-                return (
-                    "<div class='img-block'>"
-                    f"<img src='./{esc_src}' alt='{html.escape(label)}'/>"
-                    f"<div class='caption'>{html.escape(label)}</div>"
-                    "</div>"
-                )
-
-            def _detection_xai_panels_split(gt: str, sal: str, pred: str) -> str:
-                return (
-                    "<div class='xai-triptych-row'>"
-                    "<div class='xai-triptych-title'>XAI Panels</div>"
-                    "<div class='xai-triptych'>"
-                    "<div class='img-block'>"
-                    f"<img src='./{html.escape(gt)}' alt='XAI GT' class='xai-panel xai-panel-split'/>"
-                    "<div class='caption'>GT</div>"
-                    "</div>"
-                    "<div class='img-block'>"
-                    f"<img src='./{html.escape(sal)}' alt='XAI Saliency' class='xai-panel xai-panel-split'/>"
-                    "<div class='caption'>Saliency</div>"
-                    "</div>"
-                    "<div class='img-block'>"
-                    f"<img src='./{html.escape(pred)}' alt='XAI Pred+Saliency' class='xai-panel xai-panel-split'/>"
-                    "<div class='caption'>Pred + Saliency</div>"
-                    "</div>"
-                    "</div>"
-                    "</div>"
-                )
-
             def _detection_xai_panels_legacy(src: object) -> str:
                 if not isinstance(src, str) or not src:
                     return ""
@@ -340,6 +308,38 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
             )
             if len(sample_cards) >= 18:
                 break
+
+    def _img(src: object, label: str) -> str:
+        if not isinstance(src, str) or not src:
+            return ""
+        esc_src = html.escape(src)
+        return (
+            "<div class='img-block'>"
+            f"<img src='./{esc_src}' alt='{html.escape(label)}'/>"
+            f"<div class='caption'>{html.escape(label)}</div>"
+            "</div>"
+        )
+
+    def _detection_xai_panels_split(gt: str, sal: str, pred: str) -> str:
+        return (
+            "<div class='xai-triptych-row'>"
+            "<div class='xai-triptych-title'>XAI Panels</div>"
+            "<div class='xai-triptych'>"
+            "<div class='img-block'>"
+            f"<img src='./{html.escape(gt)}' alt='XAI GT' class='xai-panel xai-panel-split'/>"
+            "<div class='caption'>GT</div>"
+            "</div>"
+            "<div class='img-block'>"
+            f"<img src='./{html.escape(sal)}' alt='XAI Saliency' class='xai-panel xai-panel-split'/>"
+            "<div class='caption'>Saliency</div>"
+            "</div>"
+            "<div class='img-block'>"
+            f"<img src='./{html.escape(pred)}' alt='XAI Pred+Saliency' class='xai-panel xai-panel-split'/>"
+            "<div class='caption'>Pred + Saliency</div>"
+            "</div>"
+            "</div>"
+            "</div>"
+        )
 
     # Optional textual XAI insights
     xai_insights = state.get("xai_insights_timeline", [])
