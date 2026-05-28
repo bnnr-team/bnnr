@@ -12,6 +12,12 @@
 </p>
 
 <p align="center">
+  <a href="https://www.bnnr.dev/">Website</a>
+  ·
+  <a href="https://www.linkedin.com/company/bnnr/">LinkedIn</a>
+</p>
+
+<p align="center">
   <video width="720" controls playsinline poster="https://raw.githubusercontent.com/bnnr-team/bnnr/main/docs/assets/hero-promo-poster.jpg">
     <source src="https://raw.githubusercontent.com/bnnr-team/bnnr/main/docs/assets/hero-promo.mp4" type="video/mp4">
     <a href="https://www.bnnr.dev">Watch the demo on bnnr.dev</a>
@@ -21,11 +27,13 @@
 
 # BNNR (Bulletproof Neural Network Recipe)
 
+<p align="center"><strong>Train → Explain → Improve → Prove</strong></p>
+
 **BNNR automatically improves your PyTorch vision models using XAI** — find what your model gets wrong, fix it with intelligent augmentation, and prove the result with structured reports and a live dashboard.
 
-Supported tasks (**v0.4.7**): single-label classification, multi-label classification, and object detection (COCO-mini / YOLO). See [Detection docs](docs/detection.md).
+Supported tasks (**v0.4.7**): single-label classification, multi-label classification, and object detection (COCO-mini / YOLO). See [Documentation](docs/README.md) ([detection](docs/detection.md) · [analyze](docs/analyze.md) · [benchmarks](docs/benchmarks.md)).
 
-**Try without installing:** [sample analyze HTML report](docs/assets/analyze-report-sample.html) (MNIST, real run — confusion pairs, XAI heatmaps, recommendations).
+**Try without installing:** [sample analyze HTML report](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) (MNIST, real run — confusion pairs, XAI heatmaps, recommendations).
 
 ---
 
@@ -117,7 +125,7 @@ pip install bnnr
 python3 -m bnnr analyze --model checkpoints/best.pt --data cifar10 --output ./analysis_out
 ```
 
-**No checkpoint yet?** Open the [sample HTML report](docs/assets/analyze-report-sample.html) from a MNIST run (metrics, confused pairs, saliency on failures).
+**No checkpoint yet?** Open the [sample HTML report](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) from a MNIST run (metrics, confused pairs, saliency on failures).
 
 See [docs/analyze.md](docs/analyze.md) for the full workflow.
 
@@ -135,13 +143,14 @@ See [docs/analyze.md](docs/analyze.md) for the full workflow.
 
 | Resource | URL |
 |----------|-----|
-| Website | [bnnr.dev](https://bnnr.dev) |
+| Website | [bnnr.dev](https://www.bnnr.dev/) |
+| LinkedIn | [BNNR on LinkedIn](https://www.linkedin.com/company/bnnr/) |
 | Documentation | [docs/README.md](docs/README.md) |
 | Examples | [docs/examples.md](docs/examples.md) |
 | Colab (classification) | [Open in Colab](https://colab.research.google.com/github/bnnr-team/bnnr/blob/main/examples/classification/bnnr_classification_demo.ipynb) |
 | API reference | [docs/api_reference.md](docs/api_reference.md) |
 | Model analysis (`bnnr analyze`) | [docs/analyze.md](docs/analyze.md) |
-| Sample analyze report (HTML) | [docs/assets/analyze-report-sample.html](docs/assets/analyze-report-sample.html) |
+| Sample analyze report (live HTML) | [raw.githack.com preview](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) |
 
 ---
 

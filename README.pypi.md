@@ -12,6 +12,12 @@
 </p>
 
 <p align="center">
+  <a href="https://www.bnnr.dev/">Website</a>
+  ·
+  <a href="https://www.linkedin.com/company/bnnr/">LinkedIn</a>
+</p>
+
+<p align="center">
   <a href="https://www.bnnr.dev">
     <img src="https://raw.githubusercontent.com/bnnr-team/bnnr/main/docs/assets/hero-promo-poster.jpg" alt="Watch BNNR demo with audio on bnnr.dev" width="720">
   </a>
@@ -20,11 +26,13 @@
 
 # BNNR (Bulletproof Neural Network Recipe)
 
+<p align="center"><strong>Train → Explain → Improve → Prove</strong></p>
+
 **BNNR automatically improves your PyTorch vision models using XAI** — find what your model gets wrong, fix it with intelligent augmentation, and prove the result with structured reports and a live dashboard.
 
-Supported tasks (**v0.4.7**): single-label classification, multi-label classification, and object detection (COCO-mini / YOLO). See [Detection docs](https://github.com/bnnr-team/bnnr/blob/main/docs/detection.md).
+Supported tasks (**v0.4.7**): single-label classification, multi-label classification, and object detection (COCO-mini / YOLO). See [Documentation](https://github.com/bnnr-team/bnnr/blob/main/docs/README.md).
 
-**Sample analyze report (no install):** [HTML preview](https://github.com/bnnr-team/bnnr/blob/main/docs/assets/analyze-report-sample.html)
+**Sample analyze report (no install):** [live HTML preview](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html)
 
 ---
 
@@ -107,12 +115,14 @@ Real metrics from a BNNR training run — branch tree, charts, XAI previews, and
 
 | Resource | URL |
 |----------|-----|
-| Website | [bnnr.dev](https://bnnr.dev) |
+| Website | [bnnr.dev](https://www.bnnr.dev/) |
+| LinkedIn | [BNNR on LinkedIn](https://www.linkedin.com/company/bnnr/) |
 | Documentation | [docs/README.md](https://github.com/bnnr-team/bnnr/blob/main/docs/README.md) |
 | Examples | [docs/examples.md](https://github.com/bnnr-team/bnnr/blob/main/docs/examples.md) |
 | Colab (classification) | [Open in Colab](https://colab.research.google.com/github/bnnr-team/bnnr/blob/main/examples/classification/bnnr_classification_demo.ipynb) |
 | API reference | [docs/api_reference.md](https://github.com/bnnr-team/bnnr/blob/main/docs/api_reference.md) |
 | Model analysis (`bnnr analyze`) | [docs/analyze.md](https://github.com/bnnr-team/bnnr/blob/main/docs/analyze.md) |
+| Sample analyze report (live HTML) | [raw.githack.com preview](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) |
 
 ---
 
