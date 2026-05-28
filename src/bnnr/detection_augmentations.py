@@ -76,7 +76,7 @@ class BboxAwareAugmentation(BaseAugmentation, abc.ABC):
         -------
         (augmented_image, augmented_target)
         """
-        ...
+        raise NotImplementedError
 
     def apply(self, image: np.ndarray) -> np.ndarray:
         """Image-only fallback (boxes are not updated)."""
