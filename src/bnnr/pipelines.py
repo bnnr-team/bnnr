@@ -164,7 +164,7 @@ class _STL10Net(nn.Module):
 
     @property
     def target_layer(self) -> nn.Module:
-        return self.features[24]
+        return self.features[23]
 
 
 class _STL10NetQuick(nn.Module):
