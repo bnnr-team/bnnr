@@ -8,7 +8,9 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-REPORT_SCHEMA_VERSION = "0.2.1"
+from bnnr import version as _bnnr_version
+
+REPORT_SCHEMA_VERSION = _bnnr_version.__version__
 
 
 @dataclass

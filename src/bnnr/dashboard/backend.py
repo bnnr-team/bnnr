@@ -168,7 +168,9 @@ def create_dashboard_app(
         replay of completed/interrupted runs.
     """
     run_root = _normalize_run_root(run_root)
-    app = FastAPI(title="BNNR Dashboard API", version="0.4.7")
+    from bnnr.version import __version__
+
+    app = FastAPI(title="BNNR Dashboard API", version=__version__)
     state_cache: dict[str, _CacheEntry] = {}
     static_dir = static_dir.resolve() if static_dir is not None else None
 

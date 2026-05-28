@@ -153,12 +153,15 @@ def test_analysis_report_to_html_embeds_overlay_images(tmp_path: Path) -> None:
 
 def test_analyze_sample_report_is_self_contained() -> None:
     """Committed sample report must not reference external artifact paths."""
+    from bnnr import __version__
+
     sample = Path(__file__).resolve().parents[1] / "docs" / "assets" / "analyze-report-sample.html"
     if not sample.exists():
         return
     html = sample.read_text(encoding="utf-8")
     assert 'src="artifacts/' not in html
     assert "data:image/png;base64," in html
+    assert f"v{__version__}" in html
 
 def test_analyze_model_extended_report_fields(model_adapter, tmp_path: Path) -> None:
     """Extended analysis populates executive_summary, findings, class_diagnostics, recommendations_structured."""
@@ -171,7 +174,9 @@ def test_analyze_model_extended_report_fields(model_adapter, tmp_path: Path) -> 
         output_dir=None,
         run_data_quality=False,
     )
-    assert report.schema_version == "0.2.1"
+    from bnnr import __version__
+
+    assert report.schema_version == __version__
     assert isinstance(report.executive_summary, dict)
     assert "health_status" in report.executive_summary or len(report.executive_summary) >= 0
     assert isinstance(report.findings, list)

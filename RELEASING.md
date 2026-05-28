@@ -16,22 +16,29 @@ Fix any failures **before** tagging. Pushing `v*` triggers the **publish-pypi** 
 
 ## Version bump
 
-1. **Version** — bump `version` in `pyproject.toml` and `__version__` in `src/bnnr/__init__.py` (and dashboard `FastAPI(..., version=...)` in `src/bnnr/dashboard/backend.py` if you keep it in sync). Update `CHANGELOG.md`, `README.md` if they mention the version, `examples/detection/bnnr_detection_demo.ipynb` if the install pin changes, then `uv lock`.
+1. **Version** — bump `__version__` in [`src/bnnr/version.py`](src/bnnr/version.py) and `version` in `pyproject.toml` (must match). `src/bnnr/__init__.py` re-exports from `bnnr.version`; analyze `REPORT_SCHEMA_VERSION` follows the same value. Dashboard `FastAPI` reads `bnnr.version.__version__`. Update `CHANGELOG.md`, `README.md` / `README.pypi.md` if they mention the version, `examples/detection/bnnr_detection_demo.ipynb` if the install pin changes, then `uv lock`.
+2. **Analyze sample HTML** — after an analyze or version change affecting reports, regenerate the public preview:
 
-2. **Build** — dashboard frontend must be built (see `README.md` / CI). Then:
+   ```bash
+   .venv-uv/bin/python scripts/generate_analyze_sample_report.py
+   ```
+
+   Confirm `docs/assets/analyze-report-sample.html` shows `v<version>` (not a stale schema number) and embedded base64 images.
+
+3. **Build** — dashboard frontend must be built (see `README.md` / CI). Then:
 
    ```bash
    pip install hatch
    hatch build
    ```
 
-3. **Upload** — CI uses [PyPI trusted publishing](https://docs.pypi.org/trusted-publishers/) on tag `v*`. For a manual upload:
+4. **Upload** — CI uses [PyPI trusted publishing](https://docs.pypi.org/trusted-publishers/) on tag `v*`. For a manual upload:
 
    ```bash
    pip install twine
    twine upload dist/bnnr-<version>*
    ```
 
-4. **Verify** — in a clean venv: `pip install "bnnr>=<version>"`; run `pytest` or the detection notebook on Colab.
+5. **Verify** — in a clean venv: `pip install "bnnr>=<version>"`; run `pytest` or the detection notebook on Colab.
 
-5. **Tag** — after `main` contains the release commit, create and push the annotated tag (e.g. `v0.2.8`) so CI publishes the wheel.
+6. **Tag** — after `main` contains the release commit, create and push the annotated tag (e.g. `v0.4.8`) so CI publishes the wheel.

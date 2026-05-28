@@ -55,8 +55,8 @@ class AnalysisReport:
     data_quality_result: dict[str, Any] = field(default_factory=dict)
     failure_patterns: list[dict[str, Any]] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
-    # Extended v0.2 schema
-    schema_version: str = "0.2.1"
+    # Extended analyze schema (version aligned with package — see bnnr.version)
+    schema_version: str = field(default_factory=lambda: REPORT_SCHEMA_VERSION)
     executive_summary: dict[str, Any] = field(default_factory=dict)
     findings: list[dict[str, Any]] = field(default_factory=list)
     recommendations_structured: list[dict[str, Any]] = field(default_factory=list)

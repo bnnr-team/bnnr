@@ -1343,7 +1343,8 @@ def render_analysis_html(
     if artifact_root is not None:
         root = Path(artifact_root)
 
-    schema_version = getattr(report, "schema_version", "0.2.1")
+    from bnnr.version import __version__
+
     metrics = getattr(report, "metrics", {}) or {}
     confusion = getattr(report, "confusion", {}) or {}
     summary = getattr(report, "executive_summary", {}) or {}
@@ -1412,7 +1413,7 @@ def render_analysis_html(
         '<div>',
         "<h1>BNNR Analysis Report</h1>",
         '<div class="report-meta">',
-        f'<span>v{_esc(schema_version)}</span>',
+        f'<span>v{_esc(__version__)}</span>',
         f'<span>{_esc(task_label.title())}</span>',
         f'<span>{num_classes} classes \u00b7 {num_samples:,} samples</span>' if num_samples else "",
         '</div></div></div>',
@@ -1523,7 +1524,7 @@ def render_analysis_html(
         '<div class="footer">'
         '<div class="brand">BNNR \u2014 Train \u2192 Explain \u2192 Improve \u2192 Prove</div>'
         '<div class="tagline">Helping your model earn its place in production.</div>'
-        f'<div style="margin-top:8px;">Schema v{_esc(schema_version)}</div>'
+        f'<div style="margin-top:8px;">BNNR v{_esc(__version__)}</div>'
         '</div>'
     )
 

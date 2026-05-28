@@ -15,9 +15,8 @@ from bnnr.icd import AICD, ICD
 from bnnr.presets import auto_select_augmentations, get_preset, list_presets
 from bnnr.quick_run import quick_run
 from bnnr.reporting import BNNRRunResult, Reporter, compare_runs, load_report
+from bnnr.version import __version__
 from bnnr.xai import OptiCAMExplainer, generate_saliency_maps
-
-__version__ = '0.4.7'
 
 # Full API available via subpackage imports (bnnr.xai, bnnr.augmentations,
 # bnnr.detection_adapter, bnnr.events, bnnr.kornia_aug, etc.).
