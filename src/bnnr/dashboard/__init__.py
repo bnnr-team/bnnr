@@ -2,6 +2,11 @@
 
 __all__ = ["create_dashboard_app", "list_runs", "start_dashboard"]
 
+# Explicitly define exported names for static analysis; values are provided lazily.
+create_dashboard_app = None
+list_runs = None
+start_dashboard = None
+
 
 def __getattr__(name: str):
     if name in {"create_dashboard_app", "list_runs"}:
