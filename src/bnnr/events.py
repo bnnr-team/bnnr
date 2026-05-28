@@ -378,7 +378,9 @@ def _apply_events_to_state(
                     try:
                         row[mk] = float(mv)
                     except (TypeError, ValueError):
-                        pass
+                        # Ignore non-numeric optional metrics so malformed extras
+                        # do not break replay/state reconstruction.
+                        continue
             metrics_timeline.append(row)
             per_class = payload.get("per_class_accuracy", {})
             xai_insights_raw = payload.get("xai_insights", {})
