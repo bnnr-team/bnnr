@@ -28,7 +28,6 @@ def export_dashboard_snapshot(run_dir: Path, out_dir: Path, frontend_dist: Path 
     # Always generate a single-file offline dashboard report.
     # This avoids blank-page issues from file:// + module scripts and gives
     # deterministic export UX for end users.
-    _copy_logos_to(trusted_out)
     index_html = child_path(trusted_out, "index.html")
     index_html.write_text(
         _standalone_report_html(state, run_label),
