@@ -59,7 +59,7 @@ class EventSink(Protocol):
         ...
 
     def close(self) -> None:
-        ...
+        pass
 
 
 def _utc_now_iso() -> str:
