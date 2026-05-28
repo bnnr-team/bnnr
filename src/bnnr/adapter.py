@@ -22,7 +22,7 @@ class ModelAdapter(Protocol):
         ...
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
-        ...
+        pass
 
 
 @runtime_checkable
