@@ -125,8 +125,11 @@ def _run_evaluation_classification(
         for name, fn in custom_metrics.items():
             try:
                 result_metrics[name] = float(fn(last_eval_preds, last_eval_labels))
-            except Exception:
-                pass
+            except Exception as exc:
+                # Custom metrics are optional; keep evaluation non-fatal if a metric callback fails.
+                # Record NaN so consumers can detect the failure instead of silently dropping it.
+                _ = exc
+                result_metrics[name] = float("nan")
 
     if last_eval_preds is None or last_eval_labels is None:
         return result_metrics, {}, {}, None, None
