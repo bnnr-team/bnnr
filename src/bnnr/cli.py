@@ -85,6 +85,7 @@ def _print_pipeline_summary(
             try:
                 lr = opt.param_groups[0]["lr"]
             except (IndexError, KeyError, AttributeError):
+                # Optimizer structure can vary; keep default "?" when LR is unavailable.
                 pass
             break
     sched_name = "none"
