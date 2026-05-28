@@ -31,7 +31,7 @@ class XAICapableModel(ModelAdapter, Protocol):
         ...
 
     def get_model(self) -> nn.Module:
-        ...
+        pass
 
 
 class SimpleTorchAdapter:
