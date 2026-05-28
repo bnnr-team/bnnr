@@ -44,7 +44,7 @@ When you run `bnnr analyze --model ... --data ... --output DIR`, the following a
 
 Structure of `analysis_report.json` (top-level keys, v0.2):
 
-- `schema_version` — report schema version string.
+- `schema_version` — report schema version string (aligned with package version since 0.4.8; legacy artifacts may use `0.2.1`).
 - `metrics` — e.g. `accuracy`, `f1_macro`, `loss`.
 - `per_class_accuracy` — per-class counts and accuracy.
 - `confusion` — confusion matrix (format depends on task).

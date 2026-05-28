@@ -37,7 +37,7 @@ gh issue create --title "Add type hints to a small module in src/bnnr/" \
 Use [CHANGELOG.md](../CHANGELOG.md) for GitHub Release notes:
 
 ```bash
-gh release create v0.4.7 --title "v0.4.7" --notes-file CHANGELOG.md
+gh release create v0.4.8 --title "v0.4.8" --notes-file CHANGELOG.md
 ```
 
 (Trim to the section for that version before publishing, or copy the relevant block into the release body.)

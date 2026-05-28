@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.8] — 2026-05-28
+
+### Added
+
+- Regression test for `benchmarks/results.json` conditions (#49).
+- GitHub Discussions link in README; live githack link in `docs/analyze.md`; benchmark protocol caveat in `docs/benchmarks.md` (#47–#50).
+
+### Changed
+
+- Analyze report `schema_version` aligned with package version (0.4.8); single source in `src/bnnr/version.py`.
+- HTML report header and footer show package version, not legacy 0.2.1.
+- Type hints in `benchmarks/summarize.py` (#51).
+
+### Fixed
+
+- Version display in analyze HTML reports and regenerated sample artifact.
+
 ## [0.4.7] — 2026-05-28
 
 ### Fixed

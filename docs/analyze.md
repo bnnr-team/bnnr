@@ -171,7 +171,7 @@ report.to_html("./analysis_out/report.html")
 
 - **Attributes (core)**: `metrics`, `per_class_accuracy`, `confusion`, `xai_insights`, `xai_diagnoses`, `xai_quality_summary`, `data_quality_result`, `failure_patterns`, `recommendations`.
 - **Attributes (extended v0.2)**:
-  - `schema_version` — report schema version string.
+  - `schema_version` — report schema version string (from 0.4.8 onward, matches the installed `bnnr` package version; older reports may show `0.2.1`).
   - `executive_summary` — health badge/score, key findings, top actions, critical classes.
   - `findings` — structured, root-cause oriented findings (type, evidence, interpretation, severity).
   - `recommendations_structured` — prioritized, causal recommendations linked to findings.

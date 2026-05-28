@@ -17,7 +17,7 @@ from bnnr.quick_run import quick_run
 from bnnr.reporting import BNNRRunResult, Reporter, compare_runs, load_report
 from bnnr.xai import OptiCAMExplainer, generate_saliency_maps
 
-__version__ = '0.4.7'
+from bnnr.version import __version__
 
 # Full API available via subpackage imports (bnnr.xai, bnnr.augmentations,
 # bnnr.detection_adapter, bnnr.events, bnnr.kornia_aug, etc.).
