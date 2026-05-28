@@ -206,7 +206,8 @@ def _run_evaluation_multilabel(
             try:
                 result_metrics[name] = float(fn(last_eval_preds, last_eval_labels))
             except Exception:
-                pass
+                # Custom metric failures are non-fatal; mark metric as invalid.
+                result_metrics[name] = float("nan")
 
     if last_eval_preds is None or last_eval_labels is None:
         return result_metrics, {}, {}, None, None
