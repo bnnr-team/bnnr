@@ -79,6 +79,8 @@ dev = [
   "pre-commit>=3.0.0",
   "playwright>=1.40.0",  # README dashboard screenshots (scripts/readme_capture_dashboard.py)
   "ultralytics>=8.3.0,<9.0",
+  "pip-audit>=2.7.0",
+  "bandit>=1.8.0",
 ]
 
 [project.scripts]
@@ -147,6 +149,21 @@ disable_error_code = ["no-any-return"]
 [[tool.mypy.overrides]]
 module = ["torch.*"]
 follow_imports = "skip"
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+# ML/dashboard patterns reviewed; fail CI only on new High findings (see ci.yml -lll).
+skips = [
+  "B101",  # assert
+  "B104",  # bind 0.0.0.0 — local dashboard default
+  "B112",  # try/except/continue in dataset iteration
+  "B311",  # random — augmentation RNG, not crypto
+  "B404",  # subprocess import — dashboard npm build
+  "B602",  # shell=True only on Windows for npm.cmd
+  "B607",  # npm on PATH
+  "B614",  # torch.load — user checkpoints by design
+  "B310",  # curated example_data download URL
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

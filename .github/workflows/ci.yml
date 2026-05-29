@@ -44,6 +44,18 @@ jobs:
       - name: Type check with mypy
         run: mypy src/bnnr/
 
+      - name: Scan dependencies for known vulnerabilities (pip-audit)
+        run: |
+          ALLOWLIST_ARGS=()
+          while IFS= read -r vuln || [[ -n "${vuln}" ]]; do
+            [[ -z "${vuln}" || "${vuln}" =~ ^# ]] && continue
+            ALLOWLIST_ARGS+=(--ignore-vuln "${vuln}")
+          done < security/pip-audit-allowlist.txt
+          pip-audit "${ALLOWLIST_ARGS[@]}"
+
+      - name: Security lint (bandit)
+        run: bandit -r src/bnnr -c pyproject.toml -lll -f txt
+
       # Includes ``tests/test_ultralytics_detection_train_integration.py`` (YOLOv8 + YOLO26).
       # YOLO26 tests are marked ``yolo26``; on GITHUB_ACTIONS the fixture fails instead of skipping.
       - name: Test with coverage
