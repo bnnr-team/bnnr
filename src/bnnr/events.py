@@ -259,7 +259,6 @@ def _apply_events_to_state(
     xai_insights_timeline = acc.xai_insights_timeline
     branch_graph_nodes = acc.branch_graph_nodes
     branch_graph_edges = acc.branch_graph_edges
-    probe_set = acc.probe_set
     decision_history = acc.decision_history
     sample_branch_snapshots = acc.sample_branch_snapshots
 
