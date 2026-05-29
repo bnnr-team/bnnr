@@ -10,6 +10,7 @@ exercises BNNR + YOLO26 when this file runs (see ``pytest`` in ``.github/workflo
 
 from __future__ import annotations
 
+import math
 import os
 
 import pytest
@@ -183,5 +184,5 @@ def test_yolo26_multiple_train_steps_finite(yolo26_cpu_adapter) -> None:
         assert metrics.get("loss_yolo_pred_format_error") is None
         assert metrics.get("loss_yolo_fused_head") is None
         loss = float(metrics["loss"])
-        assert loss == loss
+        assert math.isfinite(loss)
         assert loss >= 0.0
