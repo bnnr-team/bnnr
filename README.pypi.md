@@ -122,6 +122,7 @@ Real metrics from a BNNR training run — branch tree, charts, XAI previews, and
 | Colab (classification) | [Open in Colab](https://colab.research.google.com/github/bnnr-team/bnnr/blob/main/examples/classification/bnnr_classification_demo.ipynb) |
 | API reference | [docs/api_reference.md](https://github.com/bnnr-team/bnnr/blob/main/docs/api_reference.md) |
 | Model analysis (`bnnr analyze`) | [docs/analyze.md](https://github.com/bnnr-team/bnnr/blob/main/docs/analyze.md) |
+| Integrations (Grad-CAM, Ultralytics YOLO) | [docs/integrations.md](https://github.com/bnnr-team/bnnr/blob/main/docs/integrations.md) |
 | Sample analyze report (live HTML) | [raw.githack.com preview](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) |
 | GitHub Discussions | [Q&A and showcase](https://github.com/bnnr-team/bnnr/discussions) |
 
