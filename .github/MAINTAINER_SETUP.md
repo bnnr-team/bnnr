@@ -60,6 +60,10 @@ gh release create v0.4.8 --title "v0.4.8" --notes-file CHANGELOG.md
 - [`.github/dependabot.yml`](dependabot.yml) covers pip, GitHub Actions, and `dashboard_web` npm.
 - Enable **Dependabot security updates** under **Settings → Code security and analysis**.
 
+**Batch policy (avoid PR storms):** merge dependency updates in maintainer PRs when several land at once (Actions → safe minors → vite stack). Do not merge many parallel Dependabot PRs with conflicting lockfiles. Groups in `dependabot.yml` bundle weekly Actions and npm minor/patch updates; React major and vite majors are handled manually.
+
+Suggested order: GitHub Actions → `albumentations` / TypeScript / recharts → vite + `@vitejs/plugin-react` together → React major in a dedicated sprint.
+
 ### 7. Code scanning autofix
 
 To avoid dozens of one-alert PRs (CodeQL / Copilot autofix):

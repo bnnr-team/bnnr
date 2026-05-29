@@ -12,8 +12,21 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
 
   - package-ecosystem: npm
     directory: "/dashboard_web"
     schedule:
       interval: weekly
+    groups:
+      vite-ecosystem:
+        patterns: ["vite", "@vitejs/*"]
+      dashboard-non-major:
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
