@@ -1,6 +1,6 @@
 # BNNR integration examples (third-party stacks)
 
-Runnable scripts referenced from [docs/integrations.md](../../docs/integrations.md) (hub lands in a follow-up PR).
+Runnable scripts referenced from [docs/integrations.md](../../docs/integrations.md) (hub: [integrations.md](../../docs/integrations.md)).
 
 ## pytorch-grad-cam
 
