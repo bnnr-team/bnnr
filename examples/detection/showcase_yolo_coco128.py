@@ -1,6 +1,10 @@
 """
 YOLO COCO128 detection showcase for BNNR with live dashboard support.
 
+Note: uses YOLO-format labels with torchvision Faster R-CNN via ``build_pipeline("yolo")`` —
+not the Ultralytics SDK. For ``UltralyticsDetectionAdapter`` + YOLOv8, see
+``examples/integrations/ultralytics_yolo_quickstart.py`` and ``docs/integrations.md``.
+
 This example is focused on lightweight, practical validation:
 - dataset: YOLO format (COCO128 by default)
 - model: Faster R-CNN pipeline via BNNR YOLO loader
