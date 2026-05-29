@@ -217,8 +217,11 @@ def auto_select_augmentations(
             if kornia_available():
                 logger.info("Auto-select: Using Kornia GPU augmentations (CUDA + kornia available)")
                 return _build_kornia_preset(random_state)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.debug(
+                "Auto-select: Kornia integration unavailable, falling back to built-in GPU augmentations: %s",
+                exc,
+            )
 
         # Fall back to built-in GPU-native augmentations
         logger.info("Auto-select: Using GPU-native built-in augmentations (CUDA available)")

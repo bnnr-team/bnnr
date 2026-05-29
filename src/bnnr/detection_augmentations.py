@@ -76,7 +76,7 @@ class BboxAwareAugmentation(BaseAugmentation, abc.ABC):
         -------
         (augmented_image, augmented_target)
         """
-        ...
+        raise NotImplementedError
 
     def apply(self, image: np.ndarray) -> np.ndarray:
         """Image-only fallback (boxes are not updated)."""
@@ -635,6 +635,7 @@ def get_detection_preset(
                 )
             )
         except ImportError:
+            # Albumentations optional; preset falls back to transforms already added.
             pass
         return augs
 

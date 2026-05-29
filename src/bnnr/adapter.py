@@ -22,7 +22,7 @@ class ModelAdapter(Protocol):
         ...
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
-        ...
+        pass
 
 
 @runtime_checkable
@@ -31,7 +31,7 @@ class XAICapableModel(ModelAdapter, Protocol):
         ...
 
     def get_model(self) -> nn.Module:
-        ...
+        pass
 
 
 class SimpleTorchAdapter:

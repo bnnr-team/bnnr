@@ -980,10 +980,11 @@ def build_yolo_pipeline(
     )
 
     if num_classes is None:
+        class_offset = 1 if torchvision_label_offset else 0
         if isinstance(spec.get("names"), list):
-            num_classes = len(spec["names"]) + 1  # + background
+            num_classes = len(spec["names"]) + class_offset
         elif isinstance(spec.get("nc"), int):
-            num_classes = int(spec["nc"]) + 1
+            num_classes = int(spec["nc"]) + class_offset
         else:
             raise ValueError("Could not infer class count from YOLO data.yaml ('names' or 'nc').")
 

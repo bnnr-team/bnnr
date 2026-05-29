@@ -68,11 +68,13 @@ def _print_pipeline_summary(
     try:
         train_samples = len(train_loader.dataset)  # type: ignore[arg-type]
     except (TypeError, AttributeError):
+        # Some loader wrappers do not expose a sized dataset; keep fallback "?".
         pass
     val_samples: Union[int, str] = "?"
     try:
         val_samples = len(val_loader.dataset)  # type: ignore[arg-type]
     except (TypeError, AttributeError):
+        # Some loader wrappers do not expose a sized dataset; keep fallback "?".
         pass
 
     # Optimizer & scheduler
@@ -85,6 +87,7 @@ def _print_pipeline_summary(
             try:
                 lr = opt.param_groups[0]["lr"]
             except (IndexError, KeyError, AttributeError):
+                # Optimizer structure can vary; keep default "?" when LR is unavailable.
                 pass
             break
     sched_name = "none"
@@ -849,6 +852,7 @@ def list_augmentations(verbose: bool = typer.Option(False, "--verbose", "-v")) -
     try:
         import bnnr.kornia_aug  # noqa: F401
     except ImportError:
+        # Optional dependency: listing should still work without Kornia augmentations.
         pass
 
     names = AugmentationRegistry.list_all()

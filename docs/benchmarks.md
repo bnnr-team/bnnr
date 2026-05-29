@@ -18,4 +18,4 @@ The public table compares **different training budgets**:
 - **`no_bnnr` and `randaugment`:** fixed **5 epochs** on the demo CNN — fast baselines, no branch search.
 - **`bnnr_branch_search`:** full BNNR pipeline (baseline phase + screening branches with ICD/AICD) — **more wall-clock and more epochs** on the winning path.
 
-So the Δaccuracy is **illustrative** (product vs simple baselines), not a equal-compute SOTA claim. Hardware, seeds, and full methodology: [`benchmarks/README.md`](../benchmarks/README.md#results-2026-05-28-seeds-4244-cpu).
+So the Δaccuracy is **illustrative** (product vs simple baselines), not an equal-compute SOTA claim. Hardware, seeds, and full methodology: [`benchmarks/README.md`](../benchmarks/README.md#results-2026-05-28-seeds-4244-cpu).

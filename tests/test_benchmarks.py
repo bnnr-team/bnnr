@@ -21,6 +21,15 @@ def test_results_json_has_runs_for_all_conditions(benchmark_results: dict) -> No
     runs = benchmark_results.get("runs")
     assert isinstance(runs, list) and runs, "runs must be a non-empty list"
 
-    conditions = {run.get("condition") for run in runs if isinstance(run, dict)}
+    for index, run in enumerate(runs):
+        assert isinstance(run, dict), f"run at index {index} must be an object"
+        assert "condition" in run and run["condition"], (
+            f"run at index {index} is missing required 'condition'"
+        )
+        assert "val_metric" in run and run["val_metric"] is not None, (
+            f"run at index {index} is missing required 'val_metric'"
+        )
+
+    conditions = {run["condition"] for run in runs}
     missing = REQUIRED_CONDITIONS - conditions
     assert not missing, f"missing conditions in results.json: {sorted(missing)}"

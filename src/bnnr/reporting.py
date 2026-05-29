@@ -42,6 +42,7 @@ def _atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> Non
             try:
                 tmp_path.unlink(missing_ok=True)
             except OSError:
+                # Best-effort cleanup: don't mask the original write/replace failure.
                 pass
         raise
 

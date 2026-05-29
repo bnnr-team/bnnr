@@ -59,7 +59,7 @@ class EventSink(Protocol):
         ...
 
     def close(self) -> None:
-        ...
+        pass
 
 
 def _utc_now_iso() -> str:
@@ -259,7 +259,6 @@ def _apply_events_to_state(
     xai_insights_timeline = acc.xai_insights_timeline
     branch_graph_nodes = acc.branch_graph_nodes
     branch_graph_edges = acc.branch_graph_edges
-    probe_set = acc.probe_set
     decision_history = acc.decision_history
     sample_branch_snapshots = acc.sample_branch_snapshots
 
@@ -378,7 +377,8 @@ def _apply_events_to_state(
                     try:
                         row[mk] = float(mv)
                     except (TypeError, ValueError):
-                        pass
+                        # Ignore non-numeric optional metrics during event replay.
+                        continue
             metrics_timeline.append(row)
             per_class = payload.get("per_class_accuracy", {})
             xai_insights_raw = payload.get("xai_insights", {})

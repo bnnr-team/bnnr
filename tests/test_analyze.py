@@ -178,7 +178,7 @@ def test_analyze_model_extended_report_fields(model_adapter, tmp_path: Path) -> 
 
     assert report.schema_version == __version__
     assert isinstance(report.executive_summary, dict)
-    assert "health_status" in report.executive_summary or len(report.executive_summary) >= 0
+    assert "health_status" in report.executive_summary or len(report.executive_summary) > 0
     assert isinstance(report.findings, list)
     assert isinstance(report.recommendations_structured, list)
     assert isinstance(report.class_diagnostics, list)

@@ -1419,8 +1419,10 @@ def render_analysis_html(
         '</div></div></div>',
         *(
             [
-                '<div class="confidence-legend" style="margin-bottom:12px;background:rgba(234,179,8,0.12);'
-                'border:1px solid rgba(234,179,8,0.35);border-radius:8px;padding:10px 14px;">',
+                (
+                    '<div class="confidence-legend" style="margin-bottom:12px;background:rgba(234,179,8,0.12);'
+                    + 'border:1px solid rgba(234,179,8,0.35);border-radius:8px;padding:10px 14px;">'
+                ),
                 f'<strong>Scope:</strong> {_esc(scope_reason)}',
                 "</div>",
             ]
@@ -1430,7 +1432,7 @@ def render_analysis_html(
         *(
             [
                 '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;padding:8px 12px;'
-                'background:var(--card);border-radius:6px;">',
+                + 'background:var(--card);border-radius:6px;">',
                 f'<strong>Note:</strong> {_esc(scope_notes)}',
                 "</div>",
             ]

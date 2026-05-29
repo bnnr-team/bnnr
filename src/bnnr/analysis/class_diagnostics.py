@@ -182,7 +182,7 @@ def compute_multilabel_label_diagnostics(
         prec = tp / pred_as_pos if pred_as_pos > 0 else 0.0
         rec = tp / support if support > 0 else 0.0
         f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
-        acc = (tp + tn) / n_samples if n_samples > 0 else 0.0
+        acc = (tp + tn) / n_samples
 
         # Rows/cols: negative vs positive (true × pred) for Cohen's kappa
         binary = np.array([[tn, fp], [fn, tp]], dtype=np.int64)

@@ -101,7 +101,7 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
     decisions = state.get("decision_history", [])
     selected_path = state.get("selected_path", ["baseline"])
     branches = state.get("branches", {})
-    state.get("xai", [])  # reserved for future use
+    _xai = state.get("xai", [])  # reserved for future use
     sample_timelines = state.get("sample_timelines", {})
     task = state.get("task")
     if not isinstance(task, str):
@@ -208,6 +208,7 @@ def _standalone_report_html(state: dict, run_name: str) -> str:
                 if 0 <= class_idx < len(class_names):
                     class_name = str(class_names[class_idx])
             except (TypeError, ValueError):
+                # Non-numeric class IDs are valid; keep fallback string(class_id).
                 pass
 
             support = latest.get("support")

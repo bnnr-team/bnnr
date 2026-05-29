@@ -94,6 +94,7 @@ def _dist_build_mtime(dist_dir: Path) -> float:
             if path.is_file():
                 newest = max(newest, path.stat().st_mtime)
     except OSError:
+        # Best-effort scan: ignore transient filesystem/permission errors.
         pass
     return newest
 

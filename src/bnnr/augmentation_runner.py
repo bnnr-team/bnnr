@@ -187,14 +187,24 @@ class AugmentationRunner:
 
         try:
             while True:
-                if self._worker_exception is not None:
-                    raise self._worker_exception  # type: ignore[misc]
+                exc = self._worker_exception
+                if exc is not None:
+                    if isinstance(exc, BaseException):
+                        raise exc
+                    raise RuntimeError(
+                        f"Prefetch worker failed with non-exception payload: {type(exc).__name__}"
+                    )
 
                 batch = self._prefetch_queue.get()
                 if batch is None:
                     # Worker is done
-                    if self._worker_exception is not None:
-                        raise self._worker_exception  # type: ignore[misc]
+                    exc = self._worker_exception
+                    if exc is not None:
+                        if isinstance(exc, BaseException):
+                            raise exc
+                        raise RuntimeError(
+                            f"Prefetch worker failed with non-exception payload: {type(exc).__name__}"
+                        )
                     break
 
                 images, labels = batch

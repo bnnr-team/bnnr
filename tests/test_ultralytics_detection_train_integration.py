@@ -10,6 +10,7 @@ exercises BNNR + YOLO26 when this file runs (see ``pytest`` in ``.github/workflo
 
 from __future__ import annotations
 
+import math
 import os
 
 import pytest
@@ -129,7 +130,7 @@ def test_many_train_steps_all_finite(yolo_cpu_adapter) -> None:
         assert metrics.get("loss_yolo_pred_format_error") is None
         assert metrics.get("loss_yolo_fused_head") is None
         loss = float(metrics["loss"])
-        assert loss == loss
+        assert math.isfinite(loss)
         assert loss >= 0.0
 
 
@@ -143,7 +144,7 @@ def test_extreme_class_ids_are_clamped_and_run(yolo_cpu_adapter) -> None:
     m = yolo_cpu_adapter.train_step((images, targets))
     assert m.get("loss_yolo_index_error") is None
     assert m.get("loss_yolo_pred_format_error") is None
-    assert float(m["loss"]) == float(m["loss"])
+    assert math.isfinite(float(m["loss"]))
 
 
 @pytest.mark.yolo26
@@ -162,7 +163,7 @@ def test_yolo26_one_train_step_finite(yolo26_cpu_adapter) -> None:
     assert metrics.get("loss_yolo_pred_format_error") is None
     assert metrics.get("loss_yolo_fused_head") is None
     loss = float(metrics["loss"])
-    assert loss == loss
+    assert math.isfinite(loss)
     assert loss >= 0.0
 
 
@@ -183,5 +184,5 @@ def test_yolo26_multiple_train_steps_finite(yolo26_cpu_adapter) -> None:
         assert metrics.get("loss_yolo_pred_format_error") is None
         assert metrics.get("loss_yolo_fused_head") is None
         loss = float(metrics["loss"])
-        assert loss == loss
+        assert math.isfinite(loss)
         assert loss >= 0.0
