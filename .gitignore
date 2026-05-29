@@ -104,6 +104,7 @@ tmp/
 # Internal strategy / planning docs (never publish)
 .internal/
 plans/
+docs/ecosystem-outreach.md
 
 # YOLO XAI manual script outputs (regenerate with tests/integration/smoke_yolo_xai_overlay.py)
 tests/integration/xai_yolov8n_activation_overlay.png

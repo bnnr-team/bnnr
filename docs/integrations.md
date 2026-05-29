@@ -34,18 +34,3 @@ Use these links in upstream docs or issues (replace `main` with a release tag wh
 ## License note
 
 BNNR is **MIT**. The [Ultralytics](https://github.com/ultralytics/ultralytics) repository is **AGPL-3.0**; using `pip install ultralytics` in your project is separate from forking Ultralytics. This documentation describes an optional adapter pattern only.
-
-## Upstream outreach status
-
-| Partner | Action | Status |
-|---------|--------|--------|
-| pytorch-grad-cam | Tutorial link / issue | Pending — see [ecosystem-outreach.md](ecosystem-outreach.md) |
-| Ultralytics | `docs/en/integrations/bnnr.md` PR | Pending — see [ecosystem-outreach.md](ecosystem-outreach.md) |
-
-## Maintainer checklist (before opening upstream PRs)
-
-- [ ] All example scripts run locally (`--quick` where available)
-- [ ] Links in this page resolve on `main`
-- [ ] No “official partnership” language in copy
-- [ ] Ultralytics CLA signed before docs PR
-- [ ] grad-cam: open a short **issue** before submitting a docs PR
