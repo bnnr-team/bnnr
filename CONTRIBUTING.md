@@ -47,7 +47,7 @@ pre-commit run --all-files
 3. Add or update tests for behavior changes.
 4. Update docs (`README.md`, `docs/`) when CLI or user-facing behavior changes.
 5. Ensure `pytest` and `ruff check` pass locally.
-6. Open a PR with a clear summary and test plan.
+6. Open a PR with a clear summary and test plan. PRs must pass CI and [Dependency Review](.github/workflows/dependency-review.yml).
 
 ## Good first issues
 
