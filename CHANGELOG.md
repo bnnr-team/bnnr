@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `docs/plugin_icd.md` and minimal ICD plug-in example (`examples/classification/icd_plugin_minimal.py`) — saliency-guided augmentation without `BNNRTrainer`.
+- Integration examples: Grad-CAM → ICD bridge (`examples/integrations/gradcam_to_icd_loop.py`); Ultralytics YOLOv8 quickstart on COCO128 (`examples/integrations/ultralytics_yolo_quickstart.py`).
+- `docs/integrations.md` hub; optional extra `pip install "bnnr[ultralytics]"`.
+- Outreach templates: `plans/ECOSYSTEM-OUTREACH.md`.
+
+### Changed
+
+- `docs/examples.md`: separate Ultralytics SDK path from YOLO-format + torchvision `showcase_yolo_coco128.py`.
+
 ## [0.4.9] — 2026-05-29
 
 ### Added
