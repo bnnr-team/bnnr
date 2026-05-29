@@ -176,7 +176,7 @@ def main() -> None:
 
     model, target_layers = build_model(device)
     xai_cache = XAICache(cache_dir)
-    print(f"[1/3] Precomputing XAI cache (method=gradcam) → {cache_dir}")
+    print(f"[1/3] Precomputing XAI cache (method=gradcam) -> {cache_dir}")
     written = xai_cache.precompute_cache(
         model=model,
         train_loader=train_loader,
