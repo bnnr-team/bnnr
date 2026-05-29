@@ -21,6 +21,7 @@ def test_gradcam_to_icd_loop_smoke(tmp_path: Path) -> None:
             str(out_dir),
             "--device",
             "cpu",
+            "--synthetic",
         ],
         cwd=REPO_ROOT,
         env=env,

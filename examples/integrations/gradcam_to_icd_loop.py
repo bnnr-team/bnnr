@@ -47,6 +47,21 @@ class IndexedDataset(Dataset):
         return image, label, idx
 
 
+class _SyntheticCifarBatch(Dataset):
+    """Tiny in-memory RGB batch for CI smoke tests (no dataset download)."""
+
+    def __init__(self, n: int, seed: int) -> None:
+        gen = torch.Generator().manual_seed(seed)
+        self.images = torch.rand(n, 3, 224, 224, generator=gen)
+        self.labels = torch.arange(n, dtype=torch.long) % 10
+
+    def __len__(self) -> int:
+        return int(self.labels.shape[0])
+
+    def __getitem__(self, idx: int):
+        return self.images[idx], int(self.labels[idx].item())
+
+
 def _rgb_float_from_tensor(image: torch.Tensor) -> np.ndarray:
     """CHW float [0,1] → HWC float [0,1] RGB."""
     arr = image.detach().cpu().permute(1, 2, 0).numpy()
@@ -60,6 +75,11 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("gradcam_icd_out"))
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument(
+        "--synthetic",
+        action="store_true",
+        help="Use a fixed in-memory batch (no CIFAR-10 download; for CI smoke tests)",
+    )
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -68,22 +88,26 @@ def main() -> None:
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    transform = transforms.Compose(
-        [
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-        ]
-    )
-    val_set = datasets.CIFAR10(
-        root=str(args.output_dir / "cifar_data"),
-        train=False,
-        download=True,
-        transform=transform,
-    )
-    subset = Subset(val_set, range(BATCH_SIZE))
+    if args.synthetic:
+        subset: Dataset = _SyntheticCifarBatch(BATCH_SIZE, seed=args.seed)
+    else:
+        transform = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+            ]
+        )
+        val_set = datasets.CIFAR10(
+            root=str(args.output_dir / "cifar_data"),
+            train=False,
+            download=True,
+            transform=transform,
+        )
+        subset = Subset(val_set, range(BATCH_SIZE))
     loader = DataLoader(IndexedDataset(subset), batch_size=BATCH_SIZE, shuffle=False)
 
-    model = resnet18(weights=ResNet18_Weights.DEFAULT).to(device)
+    weights = None if args.synthetic else ResNet18_Weights.DEFAULT
+    model = resnet18(weights=weights).to(device)
     model.eval()
     target_layers = [model.layer4[-1]]
 

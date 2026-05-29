@@ -5,6 +5,12 @@ type: software
 authors:
   - family-names: Walo
     given-names: Mateusz
+  - family-names: Morzhak
+    given-names: Diana
+  - family-names: Zydorczyk
+    given-names: Dominika
+  - family-names: Saczuk
+    given-names: Zuzanna
 repository-code: "https://github.com/bnnr-team/bnnr"
 url: "https://github.com/bnnr-team/bnnr"
 license: MIT
@@ -16,6 +22,12 @@ preferred-citation:
   authors:
     - family-names: Walo
       given-names: Mateusz
+    - family-names: Morzhak
+      given-names: Diana
+    - family-names: Zydorczyk
+      given-names: Dominika
+    - family-names: Saczuk
+      given-names: Zuzanna
   title: "BNNR (Bulletproof Neural Network Recipe)"
   year: 2026
   url: "https://github.com/bnnr-team/bnnr"

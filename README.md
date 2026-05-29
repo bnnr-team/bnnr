@@ -231,7 +231,7 @@ python3 -m bnnr dashboard export --run-dir reports/run_YYYYMMDD_HHMMSS --out exp
 
 ## Citation
 
-If you use BNNR in academic work or publish an integration that builds on it, cite the repository. BibTeX and stack-specific notes (grad-cam, Ultralytics): [docs/citation.md](docs/citation.md). GitHub: **Cite this repository** (from `CITATION.cff`).
+If you use BNNR in academic work or publish an integration that builds on it, cite the repository (all authors: Walo, Morzhak, Zydorczyk, Saczuk). BibTeX: [docs/citation.md](docs/citation.md). Authors and roles: [AUTHORS.md](AUTHORS.md). GitHub: **Cite this repository** (`CITATION.cff`).
 
 ---
 
