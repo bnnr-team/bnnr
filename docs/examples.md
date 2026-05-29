@@ -94,14 +94,32 @@ See the module docstring and inline comments for wiring; also [api_reference.md]
 
 ## 5) Detection showcases
 
-### YOLO + COCO128
+### 5a) Ultralytics YOLO (SDK)
+
+Scripts:
+- `examples/integrations/ultralytics_yolo_quickstart.py` — copy-paste CLI for maintainers
+- `examples/detection/bnnr_detection_demo.ipynb` — interactive COCO128 + YOLOv8n
+
+What they demonstrate:
+- `UltralyticsDetectionAdapter` (not `yolo train` CLI),
+- COCO128 auto-download via `bnnr.example_data.ensure_coco128_yolo`,
+- bbox-aware augmentations + DetectionICD/AICD,
+- mAP metrics and optional dashboard.
+
+```bash
+pip install "bnnr[ultralytics]"
+PYTHONPATH=src python examples/integrations/ultralytics_yolo_quickstart.py --quick
+```
+
+See also [integrations.md](integrations.md).
+
+### 5b) YOLO-format data + torchvision detector
 
 Script:
 - `examples/detection/showcase_yolo_coco128.py`
 
 What it demonstrates:
-- YOLOv8 via `UltralyticsDetectionAdapter`,
-- COCO128 auto-download,
+- **YOLO dataset layout** (COCO128 `data.yaml`) with `build_pipeline("yolo")` → **torchvision Faster R-CNN** (not Ultralytics SDK),
 - detection-specific bbox augmentations + DetectionICD/AICD,
 - mAP tracking and dashboard.
 

@@ -46,6 +46,8 @@ adapter = DetectionAdapter(
 
 ### Ultralytics YOLO
 
+For the Ultralytics SDK path (YOLOv8 weights, COCO128 quickstart, stable URLs for docs PRs), see [integrations.md](integrations.md).
+
 For YOLOv8 and compatible Ultralytics models, use `UltralyticsDetectionAdapter`:
 
 ```python
