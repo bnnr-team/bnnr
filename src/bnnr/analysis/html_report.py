@@ -1430,7 +1430,7 @@ def render_analysis_html(
         *(
             [
                 '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;padding:8px 12px;'
-                'background:var(--card);border-radius:6px;">',
+                + 'background:var(--card);border-radius:6px;">',
                 f'<strong>Note:</strong> {_esc(scope_notes)}',
                 "</div>",
             ]
