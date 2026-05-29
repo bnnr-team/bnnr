@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.9] — 2026-05-29
+
+### Added
+
+- **Dependabot** (`dependabot.yml`): weekly pip, GitHub Actions, and `dashboard_web` npm groups.
+- **Dependency Review** workflow on pull requests to `main`.
+- **CODEOWNERS** and expanded **MAINTAINER_SETUP** (rulesets, Dependabot batch policy, review/bypass notes).
+- CI security: **pip-audit** (with documented allowlist) and **bandit** in `quality-linux`.
+
+### Changed
+
+- GitHub Actions: `checkout@v6`, `setup-python@v6`, `upload-artifact@v7`, `download-artifact@v8`, `dependency-review-action@v5`.
+- Dashboard toolchain: TypeScript 6, recharts 3, Vite 8 + `@vitejs/plugin-react` 6.
+- `albumentations` optional extra: `>=1.3.0,<3.0`.
+- Consolidated CodeQL quality fixes and closed superseded autofix Dependabot PRs (#59–#103).
+
 ## [0.4.8] — 2026-05-28
 
 ### Added
