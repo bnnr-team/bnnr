@@ -26,3 +26,4 @@ Use this as the starting point when you need the shortest path to the page relev
 - `troubleshooting.md` — real failure modes and fixes
 - `development.md` — tests, linting, type checks, dashboard frontend build
 - `benchmarks.md` — CIFAR-10 benchmark (no BNNR vs RandAugment vs BNNR branch search)
+- `roadmap.md` — product roadmap: shipped features and planned releases by quarter

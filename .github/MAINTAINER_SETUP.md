@@ -25,7 +25,16 @@ gh label sync --file .github/labels.yml
 
 ### 3. Good first issues
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md). Example:
+See [CONTRIBUTING.md](../CONTRIBUTING.md) and [docs/roadmap.md](../docs/roadmap.md).
+
+**Contributor response SLA (weekdays):**
+
+- Reply to *"I'd like to work on this"* on a GFI within **48 hours** (assign or redirect).
+- First review pass on GFI PRs within **48 hours**; merge when CI is green.
+- Keep at most **5 open** issues labeled `good first issue` (+ one tracking epic without that label).
+- Refresh `docs/roadmap.md` **Updated** date when scope changes; add a new GFI every ~2 weeks or close stale ones.
+
+Example:
 
 ```bash
 gh issue create --title "Add type hints to a small module in src/bnnr/" \

@@ -51,14 +51,20 @@ pre-commit run --all-files
 
 ## Good first issues
 
-Maintainers can seed starter issues with:
+Open starter tasks: [**good first issue** filter on GitHub](https://github.com/bnnr-team/bnnr/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
+
+What we plan to build: [docs/roadmap.md](docs/roadmap.md).
+
+**Before you start:** comment on the issue you want (e.g. *"I'd like to work on this"*). Maintainers will assign you to avoid duplicate PRs.
+
+Maintainers can seed new starter issues with:
 
 ```bash
 gh label sync --file .github/labels.yml
 gh issue create --title "..." --label "good first issue"
 ```
 
-Suggested starter tasks:
+Additional ideas when no labeled issue fits:
 
 1. Add a dataset preset example under `examples/configs/`
 2. Improve `docs/troubleshooting.md` for a common install error
@@ -70,8 +76,6 @@ Suggested starter tasks:
 8. Add `ruff format` consistency in a single package submodule
 9. Improve error message when `--data-path` is missing for `imagefolder`
 10. Add a notebook cell explaining ICD vs AICD in `examples/`
-
-Look for issues labeled **good first issue** on GitHub.
 
 ## Code of conduct
 
