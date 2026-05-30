@@ -32,22 +32,28 @@ The report includes: accuracy/F1, per-class diagnostics, confusion matrix, XAI q
 
 ## Torchvision pretrained checkpoint
 
-Use this when you already have a **torchvision** classification model (e.g. ResNet trained on CIFAR-10) and want a failure/XAI report **without** running full BNNR training.
+Use this when you already have a **torchvision** classification model (e.g. ResNet on CIFAR-10) and want a failure/XAI report **without** running full BNNR training.
 
-**Prerequisites**
+**CLI note:** `bnnr analyze --data cifar10` builds the built-in demo CNN (`_CifarCNN`), not ResNet-18. For torchvision architectures, use the Python API (below) or the runnable example.
 
-- Checkpoint saved as `.pt` (BNNR checkpoint or raw `state_dict` loadable by the analyze pipeline).
-- Validation data that matches the model: built-in name (`cifar10`, `mnist`, …) or ImageFolder layout (see [CLI examples](#examples) below).
-- `num_classes` and input size must match the checkpoint (use `--config` for ImageFolder when defaults are not enough).
+**Runnable example (ResNet-18 + CIFAR-10 val set)**
 
-**Example (built-in CIFAR-10 val set)**
+```bash
+PYTHONPATH=src python3 examples/classification/torchvision_analyze_cifar10.py --quick
+xdg-open torchvision_analyze_out/report.html
+```
+
+With your own weights: train or export a `state_dict`, then pass `--checkpoint ./resnet18_cifar10.pt`. See [examples.md](examples.md) for smoke flags.
+
+**CLI when the checkpoint matches the built-in pipeline**
+
+After `python -m bnnr train --dataset cifar10`, analyze the saved demo-CNN checkpoint:
 
 ```bash
 python3 -m bnnr analyze \
-  --model ./resnet18_cifar10.pt \
+  --model ./checkpoints/iter_2_baseline.pt \
   --data cifar10 \
   --output ./out_analyze
-xdg-open ./out_analyze/report.html
 ```
 
 For custom wrappers or non-BNNR checkpoints, see [golden_path.md](golden_path.md). Expected report layout: [sample HTML on raw.githack.com](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html).

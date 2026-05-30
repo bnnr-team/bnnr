@@ -38,6 +38,30 @@ PYTHONPATH=src python3 examples/classification/showcase_stl10.py \
 
 **First run:** STL-10 is downloaded automatically (needs network). For a shorter interactive run, the script supports `--quick`; see the module docstring for timings and GPU/CPU notes.
 
+## 1b) Torchvision ResNet-18 → analyze (CIFAR-10)
+
+Script:
+- `examples/classification/torchvision_analyze_cifar10.py`
+
+What it demonstrates:
+- torchvision `resnet18` + `SimpleTorchAdapter` + `analyze_model` (HTML report without `BNNRTrainer`),
+- optional short training on a CIFAR-10 subset or `--checkpoint` for existing weights.
+
+### Quick run (downloads CIFAR-10 once)
+
+```bash
+PYTHONPATH=src python3 examples/classification/torchvision_analyze_cifar10.py --quick
+```
+
+### Fast smoke (CI / no download)
+
+```bash
+PYTHONPATH=src python3 examples/classification/torchvision_analyze_cifar10.py \
+  --output-dir /tmp/torchvision_analyze_out --synthetic --no-xai --device cpu
+```
+
+See [analyze.md](analyze.md) for the torchvision checkpoint workflow.
+
 ## 2) Multi-label showcase
 
 Script:
