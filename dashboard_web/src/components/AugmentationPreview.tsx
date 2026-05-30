@@ -8,13 +8,6 @@ interface Props {
   offline: boolean;
 }
 
-/** Human-readable label for a timeline entry */
-function chipLabel(entry: SamplePoint): string {
-  if (entry.branch === "baseline") return `baseline e${entry.epoch}`;
-  // Post-baseline entries: show branch name (iteration context)
-  return entry.branch;
-}
-
 /** Unique key for a timeline entry (handles duplicate epochs) */
 function chipKey(entry: SamplePoint, idx: number): string {
   return `${entry.iteration}_${entry.epoch}_${entry.branch}_${idx}`;
