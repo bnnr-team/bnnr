@@ -4,12 +4,12 @@ from __future__ import annotations
 import re
 from unittest.mock import MagicMock, patch
 
-from bnnr.dashboard.serve import _get_lan_ip, _print_qr_code
+import bnnr.dashboard.serve as serve_mod
 
 # ── _get_lan_ip ──────────────────────────────────────────────────────────────
 
 def test_get_lan_ip_returns_valid_ipv4() -> None:
-    ip = _get_lan_ip()
+    ip = serve_mod._get_lan_ip()
     # Must be a valid IPv4 address (4 groups of 1-3 digits)
     assert re.match(r"^\d{1,3}(\.\d{1,3}){3}$", ip), f"Not a valid IPv4: {ip}"
 
@@ -17,7 +17,7 @@ def test_get_lan_ip_returns_valid_ipv4() -> None:
 def test_get_lan_ip_fallback_on_socket_error() -> None:
     with patch("bnnr.dashboard.serve.socket.socket") as mock_sock:
         mock_sock.side_effect = OSError("no network")
-        ip = _get_lan_ip()
+        ip = serve_mod._get_lan_ip()
     assert ip == "127.0.0.1"
 
 
@@ -28,7 +28,7 @@ def test_get_lan_ip_fallback_on_connect_error() -> None:
     mock_instance.connect.side_effect = OSError("unreachable")
 
     with patch("bnnr.dashboard.serve.socket.socket", return_value=mock_instance):
-        ip = _get_lan_ip()
+        ip = serve_mod._get_lan_ip()
     assert ip == "127.0.0.1"
 
 
@@ -37,7 +37,7 @@ def test_get_lan_ip_fallback_on_connect_error() -> None:
 def test_print_qr_code_without_library(capsys) -> None:
     """When qrcode is not installed, a helpful hint is printed."""
     with patch.dict("sys.modules", {"qrcode": None}):
-        _print_qr_code("http://192.168.1.42:8080/")
+        serve_mod._print_qr_code("http://192.168.1.42:8080/")
     captured = capsys.readouterr().out
     assert "qrcode" in captured.lower()
 
@@ -50,7 +50,7 @@ def test_print_qr_code_with_library(capsys) -> None:
         import pytest
         pytest.skip("qrcode not installed")
 
-    _print_qr_code("http://192.168.1.42:8080/")
+    serve_mod._print_qr_code("http://192.168.1.42:8080/")
     captured = capsys.readouterr().out
     # QR code rendering uses full-block Unicode chars
     assert "\u2588" in captured
@@ -79,7 +79,6 @@ def test_start_dashboard_always_uses_0000(temp_dir) -> None:
         # Re-import to pick up the mocked modules
         import importlib
 
-        import bnnr.dashboard.serve as serve_mod
         importlib.reload(serve_mod)
         serve_mod.start_dashboard(
             run_root=temp_dir / "reports",
@@ -108,7 +107,6 @@ def test_start_dashboard_returns_lan_url(temp_dir) -> None:
     }):
         import importlib
 
-        import bnnr.dashboard.serve as serve_mod
         importlib.reload(serve_mod)
         url = serve_mod.start_dashboard(
             run_root=temp_dir / "reports",
@@ -117,5 +115,5 @@ def test_start_dashboard_returns_lan_url(temp_dir) -> None:
         )
 
     # Should contain the LAN IP, not 127.0.0.1
-    lan_ip = _get_lan_ip()
+    lan_ip = serve_mod._get_lan_ip()
     assert f"http://{lan_ip}:9999/" == url
