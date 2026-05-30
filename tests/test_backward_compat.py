@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from bnnr import __all__ as bnnr_all
 from bnnr import __dict__ as bnnr_dict
+from bnnr import __dict__ as bnnr_dict
 
 # ---------------------------------------------------------------------------
 #  Original 80 names that were importable from `bnnr` before the refactor.
@@ -129,16 +130,16 @@ _REDUCED_ALL = sorted([
 # ---------------------------------------------------------------------------
 
 def test_all_previously_importable_names_still_work() -> None:
-    for name in _ALL_IMPORTABLE_NAMES:
+        obj = bnnr_dict.get(name, None)
         obj = bnnr_dict.get(name, None)
         assert obj is not None, f"bnnr.{name} is no longer importable (backward compat broken)"
 
 
-def test_all_list_matches_reduced_snapshot() -> None:
+    assert sorted(bnnr_all) == _REDUCED_ALL
     assert sorted(bnnr_all) == _REDUCED_ALL
 
 
-def test_all_list_is_subset_of_importable() -> None:
+    for name in bnnr_all:
     for name in bnnr_all:
         if name == "__version__":
             continue
