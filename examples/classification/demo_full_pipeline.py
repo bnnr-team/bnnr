@@ -28,7 +28,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, TensorDataset
@@ -36,7 +35,6 @@ from torch.utils.data import DataLoader, Dataset, TensorDataset
 from bnnr import BNNRConfig, BNNRTrainer, SimpleTorchAdapter
 from bnnr.albumentations_aug import AlbumentationsAugmentation, albumentations_available
 from bnnr.augmentations import (
-    AugmentationRegistry,
     BasicAugmentation,
     ChurchNoise,
     DifPresets,
