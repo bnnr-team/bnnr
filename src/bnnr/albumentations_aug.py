@@ -24,14 +24,11 @@ Example::
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import numpy as np
 
 from bnnr.augmentations import BaseAugmentation
-
-logger = logging.getLogger(__name__)
 
 _ALBUMENTATIONS_AVAILABLE = False
 try:
