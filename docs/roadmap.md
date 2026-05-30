@@ -40,11 +40,13 @@ BNNR is a PyTorch vision toolkit: **train → explain → improve → prove** �
 
 ---
 
-## Q4 2026 — detection analyze + scaling
+## Q4 2026 — depth + scaling
 
 | Planned | Description |
 |---------|-------------|
-| **Detection analyze** | Heatmaps + failure buckets for detection tasks |
+| **Compare runs** | Side-by-side `analyze` for two checkpoints (compliance / audit use cases) |
 | **GPU speedups** | Faster `analyze` runtime; caching and better defaults |
 | **More report templates** | Stakeholder-ready summary pages and comparisons |
+
+**Later (gated):** detection `analyze` (heatmaps + failure buckets) — after classification analyze adoption and explicit community demand; see [detection.md](detection.md) for current train-only scope.
 
