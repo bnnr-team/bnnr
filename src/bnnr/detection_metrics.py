@@ -10,14 +10,11 @@ covers the most common use cases.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import numpy as np
 import torch
 from torch import Tensor
-
-logger = logging.getLogger(__name__)
 
 
 def _compute_iou_matrix(boxes1: Tensor, boxes2: Tensor) -> Tensor:
