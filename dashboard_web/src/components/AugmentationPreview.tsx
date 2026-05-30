@@ -91,39 +91,6 @@ function ImageRegionCanvas({
   return <canvas ref={canvasRef} className={className ?? "preview-img"} aria-label={alt ?? "image-region"} />;
 }
 
-function BoxOverlayPreview({
-  src,
-  alt,
-  box,
-  imageSize,
-  panel,
-}: {
-  src: string;
-  alt: string;
-  box: [number, number, number, number];
-  imageSize: [number, number];
-  panel?: XaiPanel;
-}) {
-  const [h, w] = imageSize;
-  const [x1, y1, x2, y2] = box;
-  const left = `${Math.max(0, (x1 / Math.max(1, w)) * 100)}%`;
-  const top = `${Math.max(0, (y1 / Math.max(1, h)) * 100)}%`;
-  const width = `${Math.max(0, ((x2 - x1) / Math.max(1, w)) * 100)}%`;
-  const height = `${Math.max(0, ((y2 - y1) / Math.max(1, h)) * 100)}%`;
-
-  return (
-    <div className="bbox-overlay-wrap">
-      <ImageRegionCanvas
-        src={src}
-        alt={alt}
-        className="preview-img"
-        panel={panel}
-      />
-      <div className="bbox-overlay-rect" style={{ left, top, width, height }} />
-    </div>
-  );
-}
-
 export function AugmentationPreview({ state, activeRun, offline }: Props) {
   const probes = state.probe_set ?? [];
   const [selectedProbe, setSelectedProbe] = useState<string>("");
