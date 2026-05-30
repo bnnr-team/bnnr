@@ -21,69 +21,6 @@ function panelToIndex(panel: XaiPanel): number {
   return 2;
 }
 
-function ImageRegionCanvas({
-  src,
-  outSize = 512,
-  className,
-  alt,
-  panel,
-  crop,
-  imageSize,
-}: {
-  src: string;
-  outSize?: number;
-  className?: string;
-  alt?: string;
-  panel?: XaiPanel;
-  crop?: [number, number, number, number];
-  imageSize?: [number, number];
-}) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !src) return;
-    const img = new Image();
-    img.onload = () => {
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      canvas.width = outSize;
-      canvas.height = outSize;
-      ctx.clearRect(0, 0, outSize, outSize);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      let sx = 0;
-      let sy = 0;
-      let sw = img.width;
-      let sh = img.height;
-
-      if (panel !== undefined) {
-        // XAI artifacts are 3 horizontal panels: GT | Saliency | Pred+Saliency
-        const panelW = img.width / 3;
-        sx = panelToIndex(panel) * panelW;
-        sw = panelW;
-      }
-
-      if (crop && imageSize) {
-        const [ih, iw] = imageSize;
-        const [x1, y1, x2, y2] = crop;
-        const localX1 = (x1 / Math.max(1, iw)) * sw;
-        const localY1 = (y1 / Math.max(1, ih)) * sh;
-        const localX2 = (x2 / Math.max(1, iw)) * sw;
-        const localY2 = (y2 / Math.max(1, ih)) * sh;
-        sx += localX1;
-        sy += localY1;
-        sw = Math.max(1, localX2 - localX1);
-        sh = Math.max(1, localY2 - localY1);
-      }
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outSize, outSize);
-    };
-    img.src = src;
-  }, [src, outSize, panel, crop, imageSize]);
-
-  return <canvas ref={canvasRef} className={className ?? "preview-img"} aria-label={alt ?? "image-region"} />;
-}
-
 export function AugmentationPreview({ state, activeRun, offline }: Props) {
   const probes = state.probe_set ?? [];
   const [selectedProbe, setSelectedProbe] = useState<string>("");
