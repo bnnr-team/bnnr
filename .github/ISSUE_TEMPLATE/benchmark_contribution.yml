@@ -1,0 +1,45 @@
+name: Benchmark contribution
+description: Propose a new dataset or protocol for benchmarks/
+title: "[Benchmark]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a benchmark extension. See [docs/benchmarks.md](https://github.com/bnnr-team/bnnr/blob/main/docs/benchmarks.md) and [benchmarks/README.md](https://github.com/bnnr-team/bnnr/blob/main/benchmarks/README.md) for the current CIFAR-10 protocol.
+  - type: input
+    id: dataset
+    attributes:
+      label: Dataset name
+      placeholder: e.g. Fashion-MNIST, STL-10
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this benchmark helps BNNR
+      description: What gap does it fill vs the existing CIFAR-10 table?
+    validations:
+      required: true
+  - type: textarea
+    id: protocol
+    attributes:
+      label: Protocol (seeds, metrics, baselines)
+      description: Number of seeds, metrics, and baselines (no BNNR / RandAugment / BNNR branch search, etc.)
+    validations:
+      required: true
+  - type: dropdown
+    id: contribution_type
+    attributes:
+      label: What will you contribute?
+      options:
+        - Run benchmarks/run.py and submit results.json
+        - Documentation / protocol only
+        - Need help from maintainers
+    validations:
+      required: true
+  - type: input
+    id: prior_art
+    attributes:
+      label: Link to prior art / paper (optional)
+      placeholder: https://...
