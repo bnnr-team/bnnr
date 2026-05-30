@@ -141,6 +141,8 @@ def _safe_artifact_path(run_root: Path, path: str) -> Path:
             if alt.is_file():
                 return alt
         except ValueError:
+            # Optional fallback path is invalid; ignore and return the
+            # canonical 404 below to avoid leaking path validation details.
             pass
 
     raise HTTPException(status_code=404, detail="Artifact not found")

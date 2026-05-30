@@ -162,7 +162,7 @@ class TestDashboardLazyImport:
         assert callable(start_dashboard)
 
     def test_unknown_attr_raises(self):
-        import bnnr.dashboard
+        from bnnr import dashboard
 
         with pytest.raises(AttributeError):
-            _ = bnnr.dashboard.nonexistent_thing  # type: ignore[attr-defined]
+            _ = dashboard.nonexistent_thing  # type: ignore[attr-defined]

@@ -61,7 +61,6 @@ export function LossLandscape({ timeline, decisions, task = "classification" }: 
     const ms: Array<{ x: string; label: string }> = [];
     let prevBranch = "";
     for (const r of rows) {
-      const parts = r.label.split("/");
       if (prevBranch !== "" && r.label !== prevBranch) {
         // Check if this is a transition point
         const branchInTimeline = timeline.find((t) =>

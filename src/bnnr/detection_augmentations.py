@@ -22,7 +22,6 @@ Additionally, two detection-specific composite augmentations are included:
 from __future__ import annotations
 
 import abc
-import logging
 from typing import Any
 
 import cv2
@@ -31,9 +30,6 @@ import torch
 from torch import Tensor
 
 from bnnr.augmentations import BaseAugmentation
-
-logger = logging.getLogger(__name__)
-
 
 # ---------------------------------------------------------------------------
 #  BboxAwareAugmentation base

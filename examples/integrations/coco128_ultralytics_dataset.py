@@ -87,7 +87,7 @@ class Coco128BnnrDataset(Dataset):
                     labels.append(c)
 
         if not boxes:
-            raise ValueError(
+            raise IndexError(
                 f"Coco128BnnrDataset: no valid xyxy boxes after resize/clip for {path}. "
                 f"Fix labels in {label_path}."
             )

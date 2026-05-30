@@ -21,13 +21,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_CLASS_COLORS = [
-    "#f0a069", "#818cf8", "#22c55e", "#ef4444", "#facc15",
-    "#06b6d4", "#e879f9", "#f97316", "#a3e635", "#fb7185",
-    "#38bdf8", "#c084fc", "#34d399", "#fbbf24", "#f472b6",
-    "#2dd4bf", "#a78bfa", "#4ade80", "#fb923c", "#94a3b8",
-]
-
 _LOGO_B64_CACHE: str | None = None
 
 _BNNR_LOGO_SVG_FALLBACK = (

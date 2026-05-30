@@ -8,7 +8,6 @@ Requires: fastapi, uvicorn, playwright (install in active env).
 """
 from __future__ import annotations
 
-import subprocess
 import sys
 import time
 import types
