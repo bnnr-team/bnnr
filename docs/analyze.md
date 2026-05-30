@@ -30,6 +30,30 @@ xdg-open out_analyze/report.html
 
 The report includes: accuracy/F1, per-class diagnostics, confusion matrix, XAI quality score, failure patterns, and actionable recommendations. API and CLI produce equivalent results for the same model and data.
 
+## Torchvision pretrained checkpoint
+
+Use this when you already have a **torchvision** classification model (e.g. ResNet trained on CIFAR-10) and want a failure/XAI report **without** running full BNNR training.
+
+**Prerequisites**
+
+- Checkpoint saved as `.pt` (BNNR checkpoint or raw `state_dict` loadable by the analyze pipeline).
+- Validation data that matches the model: built-in name (`cifar10`, `mnist`, …) or ImageFolder layout (see [CLI examples](#examples) below).
+- `num_classes` and input size must match the checkpoint (use `--config` for ImageFolder when defaults are not enough).
+
+**Example (built-in CIFAR-10 val set)**
+
+```bash
+python3 -m bnnr analyze \
+  --model ./resnet18_cifar10.pt \
+  --data cifar10 \
+  --output ./out_analyze
+xdg-open ./out_analyze/report.html
+```
+
+For custom wrappers or non-BNNR checkpoints, see [golden_path.md](golden_path.md). Expected report layout: [sample HTML on raw.githack.com](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html).
+
+**Note:** Object detection checkpoints are not supported by `bnnr analyze` yet (classification and multilabel only).
+
 ## Overview
 
 `bnnr analyze` (and the Python API `analyze_model`) runs:

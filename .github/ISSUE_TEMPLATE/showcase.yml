@@ -1,0 +1,52 @@
+name: Who uses BNNR (showcase)
+description: Share production or research usage of BNNR
+title: "[Showcase]: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share how you use BNNR in the wild. You can also post in [GitHub Discussions → Show and tell](https://github.com/bnnr-team/bnnr/discussions/categories/show-and-tell) without opening an issue.
+  - type: input
+    id: org
+    attributes:
+      label: Organization / project name
+    validations:
+      required: true
+  - type: dropdown
+    id: use_case
+    attributes:
+      label: Primary use case
+      options:
+        - bnnr analyze (failure / XAI report)
+        - ICD / AICD plugin in my training loop
+        - Detection / Ultralytics integration
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Short description
+      description: What problem did BNNR help with?
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: Link (repo, paper, blog, or demo)
+      placeholder: https://
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Screenshot or sample report link (optional)
+  - type: checkboxes
+    id: permission
+    attributes:
+      label: Permission to list publicly
+      options:
+        - label: OK to mention in README or docs
+        - label: OK to highlight in GitHub Discussions
+        - label: Keep private (maintainers only)
