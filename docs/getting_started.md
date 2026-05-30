@@ -21,6 +21,12 @@ Use this on a fresh machine or first setup.
 - `pip`
 - Optional GPU support depends on your local PyTorch/CUDA installation
 
+## Try analyze first (no training)
+
+Open the [sample analyze HTML report](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) in your browser — no install required. It shows validation metrics, top confused class pairs, and XAI heatmaps on failure cases from a real MNIST run.
+
+After you install BNNR (below), run `python -m bnnr demo` for a quick training showcase, then see [analyze.md](analyze.md) for `bnnr analyze` on your own checkpoint.
+
 ## 2) Install BNNR
 
 If `python3 -m venv` fails with `ensurepip is not available`, install your OS venv package (for example `python3.12-venv` on Ubuntu) and retry.

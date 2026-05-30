@@ -75,7 +75,7 @@ If you use ICD/AICD from BNNR in research, cite **BNNR** and **pytorch-grad-cam*
   title = {{BNNR}: Bulletproof Neural Network Recipe},
   year = {2026},
   url = {https://github.com/bnnr-team/bnnr},
-  version = {0.4.10},
+  version = {0.4.11},
   license = {MIT}
 }
 ```
