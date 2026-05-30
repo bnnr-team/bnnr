@@ -328,6 +328,7 @@ def _build_all_detection_augmentations(
             )
         )
     except ImportError:
+        # Albumentations is optional; if unavailable, skip color-jitter augmentation.
         pass
 
     # ── Wave 5 — parameter variants (stronger settings) ──────────────
