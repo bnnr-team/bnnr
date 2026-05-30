@@ -35,11 +35,11 @@ logger = logging.getLogger(__name__)
 
 _ALBUMENTATIONS_AVAILABLE = False
 try:
-    import albumentations as A  # noqa: N812
+    import albumentations
 
     _ALBUMENTATIONS_AVAILABLE = True
 except ImportError:
-    A = None  # type: ignore[assignment]
+    _ALBUMENTATIONS_AVAILABLE = False
 
 
 def albumentations_available() -> bool:
