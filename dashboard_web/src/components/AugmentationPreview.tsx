@@ -8,13 +8,6 @@ interface Props {
   offline: boolean;
 }
 
-/** Human-readable label for a timeline entry */
-function chipLabel(entry: SamplePoint): string {
-  if (entry.branch === "baseline") return `baseline e${entry.epoch}`;
-  // Post-baseline entries: show branch name (iteration context)
-  return entry.branch;
-}
-
 /** Unique key for a timeline entry (handles duplicate epochs) */
 function chipKey(entry: SamplePoint, idx: number): string {
   return `${entry.iteration}_${entry.epoch}_${entry.branch}_${idx}`;
@@ -89,39 +82,6 @@ function ImageRegionCanvas({
   }, [src, outSize, panel, crop, imageSize]);
 
   return <canvas ref={canvasRef} className={className ?? "preview-img"} aria-label={alt ?? "image-region"} />;
-}
-
-function BoxOverlayPreview({
-  src,
-  alt,
-  box,
-  imageSize,
-  panel,
-}: {
-  src: string;
-  alt: string;
-  box: [number, number, number, number];
-  imageSize: [number, number];
-  panel?: XaiPanel;
-}) {
-  const [h, w] = imageSize;
-  const [x1, y1, x2, y2] = box;
-  const left = `${Math.max(0, (x1 / Math.max(1, w)) * 100)}%`;
-  const top = `${Math.max(0, (y1 / Math.max(1, h)) * 100)}%`;
-  const width = `${Math.max(0, ((x2 - x1) / Math.max(1, w)) * 100)}%`;
-  const height = `${Math.max(0, ((y2 - y1) / Math.max(1, h)) * 100)}%`;
-
-  return (
-    <div className="bbox-overlay-wrap">
-      <ImageRegionCanvas
-        src={src}
-        alt={alt}
-        className="preview-img"
-        panel={panel}
-      />
-      <div className="bbox-overlay-rect" style={{ left, top, width, height }} />
-    </div>
-  );
 }
 
 export function AugmentationPreview({ state, activeRun, offline }: Props) {
