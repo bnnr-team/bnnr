@@ -1,6 +1,6 @@
 # Product roadmap
 
-**Updated:** 2026-05-30 · **Current release:** v0.4.10
+**Updated:** 2026-05-30 · **Current release:** v0.4.11
 
 BNNR is a PyTorch vision toolkit: **train → explain → improve → prove** — with `bnnr analyze` (failure + XAI HTML report), ICD/AICD augmentations, and optional detection training via adapters.
 

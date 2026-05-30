@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.4.11] — 2026-05-30
+
+### Added
+
+- `examples/classification/torchvision_analyze_cifar10.py` — ResNet-18 on CIFAR-10 → `analyze_model` HTML report (Python API).
+- GitHub issue templates: benchmark contribution, “Who uses BNNR” showcase.
+- `docs/getting_started.md`: “Try analyze first” section with live sample HTML link.
+
+### Changed
+
+- `docs/analyze.md`: torchvision checkpoint workflow (example script + CLI note for demo CNN).
+- `docs/examples.md`: torchvision analyze example section.
+
 ## [0.4.10] — 2026-05-29
 
 ### Added
