@@ -32,8 +32,6 @@ from torch import Tensor
 
 from bnnr.augmentations import BaseAugmentation
 
-logger = logging.getLogger(__name__)
-
 
 # ---------------------------------------------------------------------------
 #  BboxAwareAugmentation base
