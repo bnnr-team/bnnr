@@ -14,6 +14,7 @@
 
 - `docs/analyze.md`: torchvision checkpoint workflow (example script + CLI note for demo CNN).
 - `docs/examples.md`: torchvision analyze example section.
+- `docs/assets/analyze-report-sample.html`: footer/header version synced to 0.4.11.
 
 ## [0.4.10] — 2026-05-29
 
