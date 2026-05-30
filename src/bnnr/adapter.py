@@ -13,13 +13,13 @@ from bnnr.utils import calculate_metrics, get_device
 @runtime_checkable
 class ModelAdapter(Protocol):
     def train_step(self, batch: tuple[Tensor, Tensor]) -> dict[str, float]:
-        ...
+        raise NotImplementedError
 
     def eval_step(self, batch: tuple[Tensor, Tensor]) -> dict[str, float]:
-        ...
+        raise NotImplementedError
 
     def state_dict(self) -> dict[str, Any]:
-        ...
+        raise NotImplementedError
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
         pass
@@ -28,7 +28,7 @@ class ModelAdapter(Protocol):
 @runtime_checkable
 class XAICapableModel(ModelAdapter, Protocol):
     def get_target_layers(self) -> list[nn.Module]:
-        ...
+        raise NotImplementedError
 
     def get_model(self) -> nn.Module:
         pass
