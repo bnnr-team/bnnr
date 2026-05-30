@@ -147,6 +147,7 @@ See [docs/analyze.md](docs/analyze.md) for the full workflow.
 | LinkedIn | [BNNR on LinkedIn](https://www.linkedin.com/company/bnnr/) |
 | Documentation | [docs/README.md](docs/README.md) |
 | Examples | [docs/examples.md](docs/examples.md) |
+| Roadmap (Q2–Q3 2026) | [docs/roadmap.md](docs/roadmap.md) |
 | Colab (classification) | [Open in Colab](https://colab.research.google.com/github/bnnr-team/bnnr/blob/main/examples/classification/bnnr_classification_demo.ipynb) |
 | API reference | [docs/api_reference.md](docs/api_reference.md) |
 | Model analysis (`bnnr analyze`) | [docs/analyze.md](docs/analyze.md) |
