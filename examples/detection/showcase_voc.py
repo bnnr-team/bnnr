@@ -43,7 +43,7 @@ import tarfile
 import urllib.request
 from collections.abc import Sized
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import torch
 import torch.nn as nn
