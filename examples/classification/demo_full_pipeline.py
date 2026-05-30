@@ -36,7 +36,6 @@ from torch.utils.data import DataLoader, Dataset, TensorDataset
 from bnnr import BNNRConfig, BNNRTrainer, SimpleTorchAdapter
 from bnnr.albumentations_aug import AlbumentationsAugmentation, albumentations_available
 from bnnr.augmentations import (
-    AugmentationRegistry,
     BasicAugmentation,
     ChurchNoise,
     DifPresets,
