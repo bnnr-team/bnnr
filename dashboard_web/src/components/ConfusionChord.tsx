@@ -144,7 +144,6 @@ export function ConfusionChord({ matrix, classNames }: Props) {
         const tFraction = jIncoming > 0 ? flow[i][j] / jIncoming : 0;
         // We need a separate consumed tracker for target side
         // Simplify: allocate from end of arc backwards for targets
-        const tSpan = tFraction * arcJSpan;
         // For simplicity, we'll just place target ribbons sequentially
         // This is an approximation but looks good visually
         result.push({
