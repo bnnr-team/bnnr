@@ -19,7 +19,7 @@ class ModelAdapter(Protocol):
         ...
 
     def state_dict(self) -> dict[str, Any]:
-        ...
+        pass
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
         pass
