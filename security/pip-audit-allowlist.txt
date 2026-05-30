@@ -1,8 +1,8 @@
 # One CVE ID per line. Review quarterly; prefer fixing via dependency bumps.
-# Torch 2.9+ not yet in our pin range — tracked with dependency-review on PRs.
-PYSEC-2025-203
-PYSEC-2025-204
-PYSEC-2025-206
-PYSEC-2026-139
+# Tracked with dependency-review on PRs.
+PYSEC-2025-203  # torch; fixed in torch 2.9+
+PYSEC-2025-204  # torch; fixed in torch 2.9+
+PYSEC-2025-206  # torch; fixed in torch 2.9+
+PYSEC-2026-139  # torch; fixed in torch 2.9+
 # starlette via fastapi[dashboard] — bump when upstream pins fixed release
 PYSEC-2026-161
