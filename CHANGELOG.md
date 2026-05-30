@@ -267,7 +267,7 @@
 
 ## [0.1.0.post2] — 2026-04-01
 
-Post-release: nowe artefakty na PyPI (`bnnr-0.1.0.post2-*`) — unika konfliktu z już wgranymi plikami `0.1.0`. Zawartość funkcjonalna jak 0.1.0.
+Post-release: new artifacts on PyPI (`bnnr-0.1.0.post2-*`) — avoids conflict with already uploaded `0.1.0` files. Functional content is the same as 0.1.0.
 
 ## [0.1.0] — 2026-04-01
 
