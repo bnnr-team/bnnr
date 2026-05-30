@@ -119,6 +119,7 @@ Real metrics from a BNNR training run — branch tree, charts, XAI previews, and
 | LinkedIn | [BNNR on LinkedIn](https://www.linkedin.com/company/bnnr/) |
 | Documentation | [docs/README.md](https://github.com/bnnr-team/bnnr/blob/main/docs/README.md) |
 | Examples | [docs/examples.md](https://github.com/bnnr-team/bnnr/blob/main/docs/examples.md) |
+| Roadmap (Q2–Q3 2026) | [docs/roadmap.md](https://github.com/bnnr-team/bnnr/blob/main/docs/roadmap.md) |
 | Colab (classification) | [Open in Colab](https://colab.research.google.com/github/bnnr-team/bnnr/blob/main/examples/classification/bnnr_classification_demo.ipynb) |
 | API reference | [docs/api_reference.md](https://github.com/bnnr-team/bnnr/blob/main/docs/api_reference.md) |
 | Model analysis (`bnnr analyze`) | [docs/analyze.md](https://github.com/bnnr-team/bnnr/blob/main/docs/analyze.md) |
