@@ -20,7 +20,6 @@ compatible with ``BNNRTrainer``'s detection path.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import cv2
@@ -33,8 +32,6 @@ from bnnr.detection_augmentations import (
     _ensure_numpy_labels,
     _restore_target_types,
 )
-
-logger = logging.getLogger(__name__)
 
 _VALID_FILL_STRATEGIES = frozenset(
     {"gaussian_blur", "local_mean", "global_mean", "noise", "solid"}
