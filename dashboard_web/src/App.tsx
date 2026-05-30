@@ -62,8 +62,6 @@ export function App() {
     const branchCount = Object.keys(state.branches).length;
     const decisionCount = decisions.length;
 
-    const ml = runTask === "multilabel";
-
     const primaryMetric = (r: typeof last) => primaryMetricValue(r, runTask);
     const secondaryMetric = (r: typeof last) => secondaryMetricValue(r, runTask);
 
