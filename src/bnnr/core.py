@@ -14,9 +14,6 @@ from bnnr.adapter import (  # noqa: F401 — re-exported for backward compat
 from bnnr.config_model import BNNRConfig  # noqa: F401 — re-exported for backward compat
 from bnnr.trainer import BNNRTrainer
 from bnnr.training.checkpoint import (  # noqa: F401 — re-exported for backward compat
-    _is_ultralytics_tasks_backbone,
-    _RuntimeState,
-    _TrainerState,
     clone_state_dict,
     copy_state_dict_inplace,
 )
