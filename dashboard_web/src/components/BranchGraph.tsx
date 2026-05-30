@@ -10,7 +10,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import dagre from "dagre";
 import type { BranchEdge, BranchNode, DecisionRecord, StatePayload } from "../types";
-import { useChartColors, useTheme } from "../ThemeContext";
+import { useTheme } from "../ThemeContext";
 import { NodeTooltip } from "./NodeTooltip";
 import { NodeDetailPanel } from "./NodeDetailPanel";
 
@@ -54,7 +54,6 @@ interface Props {
 
 export function BranchGraph({ state, activeRun, offline }: Props) {
   const { theme } = useTheme();
-  const cc = useChartColors();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
