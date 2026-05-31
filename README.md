@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/bnnr-team/bnnr/main/docs/assets/logo.png" alt="BNNR Logo" width="180">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/bnnr-team/bnnr/main/docs/assets/logo-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/bnnr-team/bnnr/main/docs/assets/logo-light.png" />
+    <img alt="BNNR Logo" src="https://raw.githubusercontent.com/bnnr-team/bnnr/main/docs/assets/logo-dark.png" width="180" />
+  </picture>
 </p>
 
 <p align="center">
