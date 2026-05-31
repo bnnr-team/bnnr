@@ -664,6 +664,19 @@ def test_grouped_findings() -> None:
         assert finding_types.count(ft) == 1, f"Finding type {ft} appears more than once (not grouped)"
 
 
+def test_cross_validation_predicted_class_not_in_labels() -> None:
+    """CV must not fail when preds include a class absent from ground-truth labels."""
+    import numpy as np
+
+    from bnnr.analysis.cross_validation import run_cross_validation_from_predictions
+
+    labels = np.array([1, 2, 2, 2, 1, 2, 1, 2, 2, 2, 1, 1])
+    preds = np.zeros_like(labels)
+    cv = run_cross_validation_from_predictions(preds, labels, n_folds=3)
+    assert cv.n_folds == 3
+    assert "mean_accuracy" in cv.global_metrics
+
+
 def test_cross_validation_all_metrics() -> None:
     """Cross-validation includes precision, recall, f1, and Cohen's Kappa."""
     import numpy as np

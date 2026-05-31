@@ -3,7 +3,7 @@
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/bnnr?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/bnnr)
 
 ## What you will find here
-All configuration fields currently implemented in `src/bnnr/core.py`, grouped by responsibility, with defaults and validation notes.
+All configuration fields currently implemented in `src/bnnr/config_model.py` (re-exported as `bnnr.BNNRConfig`), grouped by responsibility, with defaults and validation notes.
 
 ## When to use this page
 Use this when creating or reviewing YAML config files for CLI or Python API runs.
@@ -132,6 +132,7 @@ trainer = BNNRTrainer(
 - `xai_selection_weight` (default: `0.0`, validated to `[0,1]`)
 - `xai_pruning_threshold` (default: `0.0`, validated to `[0,1]`)
 - `adaptive_icd_threshold` (default: `false`)
+- `duplicate_hamming_threshold` (default: `10`, validated `>=0`) — Hamming distance threshold for duplicate-sample detection in XAI cache
 
 ## Candidate pruning fields
 
@@ -189,7 +190,7 @@ Additional detection fields for advanced use:
 - `detection_nms_threshold` — NMS IoU threshold
 - `detection_min_box_area` — minimum box area to keep
 - `detection_max_truncation` — maximum box truncation ratio
-- `detection_xai_method` — XAI method for detection (`saliency`, `occlusion`)
+- `detection_xai_method` (default: `activation`) — XAI method for detection: `activation` (backbone activation heatmap) or `occlusion`
 - `detection_xai_grid_size` — grid resolution for occlusion XAI
 - `detection_xai_max_gt_boxes` — max ground-truth boxes rendered in XAI panels
 - `detection_xai_max_pred_boxes` — max prediction boxes rendered in XAI panels

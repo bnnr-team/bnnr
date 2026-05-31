@@ -19,6 +19,7 @@ from pathlib import Path
 USER_NOTEBOOKS: list[str] = [
     "examples/bnnr_augmentations_guide.ipynb",
     "examples/classification/bnnr_classification_demo.ipynb",
+    "examples/classification/bnnr_cooking_round1_butterfly.ipynb",
     "examples/multilabel/bnnr_multilabel_demo.ipynb",
     "examples/bnnr_custom_data.ipynb",
     "examples/detection/bnnr_detection_demo.ipynb",
