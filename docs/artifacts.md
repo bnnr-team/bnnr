@@ -35,7 +35,7 @@ Checkpoints are saved in `checkpoint_dir`.
 
 When you run `bnnr analyze --model ... --data ... --output DIR`, the following are written under `DIR`:
 
-- `analysis_report.json` — full analysis payload (metrics, per_class_accuracy, confusion, XAI, data_quality, worst_predictions, failure_patterns, recommendations, extended v0.2 fields).
+- `analysis_report.json` — full analysis payload (metrics, per_class_accuracy, confusion, XAI, data_quality, failure_patterns, recommendations, extended fields; see keys below).
 - `report.html` — **self-contained** HTML report: XAI/confusion overlay PNGs embedded as base64 when written by `bnnr analyze` or `report.to_html(..., artifact_root=output_dir)`. Safe to share without sibling files.
 - `artifacts/confusion_pairs/` (optional) — saliency overlays for top confused class pairs.
 - `artifacts/class_examples/` (optional) — best/worst per-class XAI overlays.
@@ -49,9 +49,10 @@ Structure of `analysis_report.json` (top-level keys, v0.2):
 - `per_class_accuracy` — per-class counts and accuracy.
 - `confusion` — confusion matrix (format depends on task).
 - `xai_insights`, `xai_diagnoses`, `xai_quality_summary` — present when XAI was run.
-- `data_quality` — result of `run_data_quality_analysis` (warnings, duplicate_groups, summary).
-- `worst_predictions` — list of `{index, true_label, pred_label, confidence, loss, ...}`.
+- `data_quality` — result of data quality analysis (warnings, duplicate_groups, summary).
 - `failure_patterns` — e.g. confused pairs, low XAI quality classes.
+- `confusion_pair_xai`, `best_worst_examples` — optional XAI overlay metadata (classification; written when XAI is enabled).
+- `calibration_summary`, `analysis_scope`, `cv_results` — optional sections depending on task and flags.
 - `recommendations` — list of text recommendations.
 - `executive_summary` — health status/score, key findings, top actions, critical classes.
 - `findings` — structured findings with evidence and interpretation.
@@ -87,7 +88,7 @@ Common top-level keys:
 
 ## `events.jsonl`
 
-Written when `event_log_enabled=true`.
+Written when `event_log_enabled=true` (default). Each line is a JSON object with `schema_version` (`"2.1"`, from `bnnr.events.EVENT_SCHEMA_VERSION`).
 Used by replay and export in `src/bnnr/events.py` and `src/bnnr/dashboard/backend.py`.
 
 Common event types emitted by current code:

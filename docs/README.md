@@ -9,7 +9,7 @@ A code-verified documentation index for installation, configuration, CLI/API usa
 Use this as the starting point when you need the shortest path to the page relevant to your task.
 
 - `getting_started.md` — first run from a clean machine
-- `configuration.md` — all `BNNRConfig` fields and defaults from `src/bnnr/core.py`
+- `configuration.md` — all `BNNRConfig` fields and defaults from `src/bnnr/config_model.py`
 - `cli.md` — CLI commands and option reference from `src/bnnr/cli.py`
 - `dashboard.md` — live/replay/mobile/QR dashboard workflow
 - `api_reference.md` — public Python API usage (classification helpers and a short Detection / Ultralytics subsection)
