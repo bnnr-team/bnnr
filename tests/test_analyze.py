@@ -600,9 +600,10 @@ def test_recommendations_build() -> None:
     from bnnr.analysis.schema import Finding
 
     class MockReport:
-        metrics = {"accuracy": 0.7}
-        xai_quality_summary = {}
-        class_diagnostics = []
+        def __init__(self) -> None:
+            self.metrics = {"accuracy": 0.7}
+            self.xai_quality_summary = {}
+            self.class_diagnostics = []
 
     findings = [
         Finding(
