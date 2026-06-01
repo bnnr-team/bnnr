@@ -1,0 +1,24 @@
+# BNNR minimal smoke preset for CIFAR-10 (1 epoch, no XAI)
+# Usage: python -m bnnr train -c examples/configs/classification/cifar10_quick_smoke.yaml --dataset cifar10
+# Use this for a quick sanity check; see cifar10_example.yaml for a full training run with XAI.
+
+m_epochs: 1
+max_iterations: 2
+
+metrics:
+  - accuracy
+  - loss
+selection_metric: accuracy
+selection_mode: max
+
+checkpoint_dir: checkpoints
+report_dir: reports
+
+xai_enabled: false
+device: auto
+seed: 42
+
+save_checkpoints: false
+verbose: true
+
+event_log_enabled: true
