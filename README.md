@@ -31,17 +31,41 @@
 
 # BNNR (Bulletproof Neural Network Recipe)
 
-<p align="center"><strong>Train → Explain → Improve → Prove</strong></p>
+**An HTML failure report for any PyTorch vision checkpoint — see _where_ your model looks when it's wrong, then fix it with saliency-guided augmentation.** MIT licensed. No retraining required for diagnostics.
 
-**BNNR automatically improves your PyTorch vision models using XAI** — find what your model gets wrong, fix it with intelligent augmentation, and prove the result with structured reports and a live dashboard.
+Run `bnnr analyze` on a trained model and you get a self-contained HTML report: confusion matrix, top confused pairs, OptiCAM saliency overlays on the worst failures, and plain-language recommendations.
 
-Supported tasks (**v0.4.11**): single-label classification, multi-label classification, and object detection (COCO-mini / YOLO). See [Documentation](docs/README.md) ([detection](docs/detection.md) · [analyze](docs/analyze.md) · [benchmarks](docs/benchmarks.md)).
+**Try it without installing:** [sample analyze HTML report](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) (MNIST, real run — confusion pairs, XAI heatmaps, recommendations).
 
-**Try without installing:** [sample analyze HTML report](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) (MNIST, real run — confusion pairs, XAI heatmaps, recommendations).
+### When do I reach for BNNR?
+
+- **I have a trained checkpoint and validation looks fine — but I don't fully trust it.** → `bnnr analyze` gives an XAI failure report in under 5 minutes, no retraining. See *where* the model actually looks on its worst errors.
+- **My augmentations are guesswork.** → ICD/AICD condition augmentation on saliency maps, then a branch search keeps only the augmentations that measurably improve your validation metric.
+- **I need to prove model quality to stakeholders or compliance.** → A portable `report.html` plus a structured JSON audit artifact you can attach to a review.
+
+<sub>BNNR also ships a training pipeline (`bnnr train`), a live dashboard, multi-label support, and object detection (YOLO / COCO-mini). Single-label classification is the focus for `analyze`. Supported tasks in **v0.4.11**: single-label classification, multi-label classification, object detection. Full docs: [docs/README.md](docs/README.md) ([analyze](docs/analyze.md) · [detection](docs/detection.md) · [benchmarks](docs/benchmarks.md)).</sub>
 
 ---
 
-## Quickstart
+## Analyze an existing model (start here)
+
+If you already have a trained checkpoint, run diagnostics without retraining:
+
+```bash
+pip install bnnr
+python3 -m bnnr analyze --model checkpoints/best.pt --data cifar10 --output ./analysis_out
+open ./analysis_out/report.html
+```
+
+You get a self-contained `report.html` (metrics, confusion matrix, top confused pairs, OptiCAM saliency overlays on failures, recommendations) plus an `analysis_report.json` audit artifact.
+
+**No checkpoint yet?** Open the [sample HTML report](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) from a real MNIST run — no install required.
+
+See [docs/analyze.md](docs/analyze.md) for the full workflow (custom datasets, torchvision models, multi-label).
+
+---
+
+## Quickstart (train with BNNR)
 
 ```bash
 pip install "bnnr[dashboard]"
@@ -92,6 +116,8 @@ BNNR uses saliency maps to guide augmentation — not random flips and crops.
 
 Median validation accuracy, 3 seeds (42–44), demo CNN on CIFAR-10. Baselines: 5 epochs fixed; BNNR: full branch-search pipeline (more compute). Not SOTA — illustrative comparison. Details: [`benchmarks/README.md`](benchmarks/README.md) · reproduce: [`benchmarks/run.py`](benchmarks/run.py) → [`benchmarks/summarize.py`](benchmarks/summarize.py).
 
+> A larger **ResNet50 / CIFAR-100** benchmark (5 seeds, RandAugment + TrivialAugment baselines) is in progress, with a one-command reproduce script. See [`benchmarks/README.md`](benchmarks/README.md).
+
 ### Where the model looks (OptiCAM)
 
 Same CIFAR-10 validation image (test index **127**, seed 44): **original input** plus OptiCAM overlays after three training setups. With crop+flip only, attention scatters toward **image edges**; RandAugment is more centered but diffuse. After BNNR branch search (ICD + AICD + ChurchNoise), heatmaps concentrate on the **vehicle body**.
@@ -117,21 +143,6 @@ Real metrics from a BNNR training run — branch tree, charts, XAI previews, and
 | Samples & XAI | Analysis | Dataset Insight |
 |:---:|:---:|:---:|
 | ![Samples and XAI](docs/assets/dashboard-samples.png) | ![Analysis](docs/assets/dashboard-analysis.png) | ![Dataset Insight](docs/assets/dashboard-insight.png) |
-
----
-
-## Analyze an existing model
-
-If you already have a trained checkpoint, run diagnostics without retraining:
-
-```bash
-pip install bnnr
-python3 -m bnnr analyze --model checkpoints/best.pt --data cifar10 --output ./analysis_out
-```
-
-**No checkpoint yet?** Open the [sample HTML report](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) from a MNIST run (metrics, confused pairs, saliency on failures).
-
-See [docs/analyze.md](docs/analyze.md) for the full workflow.
 
 ---
 
