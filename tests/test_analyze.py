@@ -157,7 +157,7 @@ def test_analyze_sample_report_is_self_contained() -> None:
 
     sample = Path(__file__).resolve().parents[1] / "docs" / "assets" / "analyze-report-sample.html"
     if not sample.exists():
-        return
+        pytest.skip("Missing docs/assets/analyze-report-sample.html")
     html = sample.read_text(encoding="utf-8")
     assert 'src="artifacts/' not in html
     assert "data:image/png;base64," in html
