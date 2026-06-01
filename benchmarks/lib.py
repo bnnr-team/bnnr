@@ -24,7 +24,7 @@ DEFAULT_CONFIG = BENCHMARKS_DIR / "config.yaml"
 if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
-Strategy = Literal["plain_training", "randaugment", "bnnr_branch_search"]
+Strategy = Literal["plain_training", "randaugment", "trivialaugment", "bnnr_branch_search"]
 
 
 @dataclass(frozen=True)
@@ -402,6 +402,7 @@ def _run_plain_epochs(
     run_dir: Path,
     bench: dict[str, Any],
     extra_meta: dict[str, Any] | None = None,
+    export_xai: bool = True,
 ) -> dict[str, Any]:
     from bnnr.core import BNNRTrainer
     from bnnr.training.loop import evaluate, train_epoch
@@ -446,15 +447,18 @@ def _run_plain_epochs(
         trainer.model.load_state_dict(best_state)
 
     elapsed_s = time.perf_counter() - t0
-    xai_indices = list(bench.get("xai_val_indices") or [0, 127, 255, 512])
-    xai_method = str(bench.get("xai_method") or cfg.xai_method or "opticam")
-    xai_meta = export_attention_maps(
-        adapter,
-        val_loader,
-        sample_indices=xai_indices,
-        output_dir=run_dir / "xai",
-        xai_method=xai_method,
-    )
+    if export_xai:
+        xai_indices = list(bench.get("xai_val_indices") or [0, 127, 255, 512])
+        xai_method = str(bench.get("xai_method") or cfg.xai_method or "opticam")
+        xai_meta = export_attention_maps(
+            adapter,
+            val_loader,
+            sample_indices=xai_indices,
+            output_dir=run_dir / "xai",
+            xai_method=xai_method,
+        )
+    else:
+        xai_meta = {"xai_dir": None, "overlay_paths": [], "aggregate_stats": {}}
 
     summary_path = run_dir / "run_summary.json"
     payload = {
