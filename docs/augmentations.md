@@ -12,12 +12,14 @@ Use this when selecting augmentation candidates for classification or multi-labe
 
 Available names:
 
-- `auto`
+- `auto` — virtual; hardware-aware selection via `auto_select_augmentations`
 - `light`
 - `standard`
 - `aggressive`
 - `gpu`
-- `screening` (API-level helper that maps to aggressive with uniform probability)
+- `demo` — ICD + ChurchNoise (used by `python -m bnnr demo`; also valid for `get_preset("demo")`)
+- `screening` — virtual; maps to aggressive with uniform probability (`get_preset` / API only)
+- `none` — no augmentations (`python -m bnnr train --preset none` only; not a named entry in `list_presets`)
 
 Examples:
 
@@ -28,7 +30,7 @@ augs_auto = auto_select_augmentations(random_state=42)
 augs_std = get_preset("standard", random_state=42)
 ```
 
-CLI `--preset` supports: `auto`, `light`, `standard`, `aggressive`, `gpu`.
+CLI `--preset` / `--augmentation-preset` on `train` supports: `auto`, `light`, `standard`, `aggressive`, `gpu`, `none` (unknown names fall back to `auto` with a warning). The `demo` command always uses preset `demo`.
 
 ## Built-in classification augmentations
 

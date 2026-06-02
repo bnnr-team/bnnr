@@ -1,4 +1,13 @@
-# CIFAR-10 benchmarks
+# Benchmarks
+
+Two reproducible augmentation comparisons:
+
+1. **CIFAR-10 / demo CNN** (below) — fast, illustrative, runs on CPU.
+2. **ResNet50 / CIFAR-100** ([jump](#resnet50--cifar-100-benchmark)) — a real architecture and a harder dataset, with RandAugment **and** TrivialAugment baselines over 5 seeds. Infrastructure is in place; numbers land in the table after a GPU run.
+
+---
+
+## CIFAR-10 / demo CNN
 
 Reproducible comparison of **three training setups** on the same demo CNN, dataset split, and epoch budget:
 
@@ -94,3 +103,60 @@ python scripts/build_benchmark_xai_readme_asset.py
 ```
 
 Output: `docs/assets/benchmark-xai-comparison.png` (used in root README).
+
+---
+
+## ResNet50 / CIFAR-100 benchmark
+
+A larger, more convincing benchmark than the demo-CNN / CIFAR-10 table above: a real **ResNet50** backbone (ImageNet-pretrained by default) on **CIFAR-100** (100 classes), comparing the BNNR branch search against **two** strong external baselines.
+
+| Condition | What it is |
+|-----------|------------|
+| `no_bnnr` | Resize + RandomCrop + RandomHorizontalFlip — no BNNR augmentations |
+| `randaugment` | + **torchvision RandAugment** (external baseline) |
+| `trivialaugment` | + **torchvision TrivialAugmentWide** (parameter-free external baseline) |
+| `bnnr_branch_search` | Full **BNNR branch search** over **ICD**, **AICD**, and ChurchNoise |
+
+### Design
+
+- **ResNet50** from `torchvision.models`, ImageNet weights. The classifier head is replaced for 100 classes.
+- **In-model normalization:** ImageNet mean/std are applied *inside* the model (registered buffers), so every condition feeds plain `ToTensor()` tensors in `[0, 1]`. Pretrained weights stay valid and BNNR's uint8-range ICD/AICD augmentations remain compatible.
+- **Same** backbone, optimizer (SGD, momentum 0.9, weight decay 5e-4), cosine schedule, epochs, and seeds across all conditions — only the augmentation strategy varies.
+- **OptiCAM** overlays on fixed CIFAR-100 test indices, exported per run (`runs_resnet50/*/xai/`).
+
+### Run
+
+```bash
+# Fast sanity check (CPU-friendly, no pretrained download, tiny subset)
+python benchmarks/run_resnet50.py --smoke
+
+# Full benchmark — 5 seeds, GPU (this is the publication run)
+bash benchmarks/reproduce_resnet50.sh
+# or:
+python benchmarks/run_resnet50.py --seeds 42,43,44,45,46 --device cuda
+
+# Summarize
+python benchmarks/summarize.py --results benchmarks/results_resnet50.json --markdown
+```
+
+`run_resnet50.py` checkpoints `results_resnet50.json` after every (condition, seed) run, so the matrix is resume-safe — a crash or interruption keeps completed runs.
+
+### Layout
+
+```
+benchmarks/
+  run_resnet50.py            # CLI (resume-safe matrix runner)
+  reproduce_resnet50.sh      # one-command full run (5 seeds)
+  results_resnet50.json      # aggregated results (commit after review)
+  runs_resnet50/             # per-run logs + xai/ overlays (gitignored)
+```
+
+### Protocol caveats (read before quoting numbers)
+
+- **Unequal compute by design.** `bnnr_branch_search` runs a baseline phase plus branch search (more epochs of compute than the fixed-epoch baselines). Compare as *"full BNNR product vs fixed-epoch baselines"*, not equal-budget ablation.
+- **Not an ImageNet-SOTA claim.** This is a CIFAR-100 transfer setup for comparing augmentation *strategies*, not a leaderboard entry.
+- **CIFAR-100 upscaled to 224px** to use the pretrained ResNet50 features. `--img-size` and `--no-pretrained` are available for other regimes.
+
+### Results
+
+_Pending a GPU run._ Run `reproduce_resnet50.sh`, review `results_resnet50.json`, then paste the `summarize.py --markdown` table here and into the root `README.md`. Do not hand-write numbers.
