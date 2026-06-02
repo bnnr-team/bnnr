@@ -595,8 +595,17 @@ def main() -> None:
     data["git_head"] = git_head()
     data["generated_at"] = datetime.now(timezone.utc).isoformat()
 
+    done = {
+        (r["condition"], r["seed"])
+        for r in data["runs"]
+        if "val_metric" in r and "error" not in r
+    }
+
     for seed in seeds:
         for cid in conds:
+            if (cid, seed) in done:
+                print(f"SKIP {cid} seed={seed} (already in {args.results})")
+                continue
             print(f"\n>>> condition={cid} seed={seed}")
             try:
                 entry = run_condition(
