@@ -1,0 +1,48 @@
+name: Integration request
+description: Request BNNR support for a framework, library, or platform
+title: "[Integration]: "
+labels: ["enhancement", "integration"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us prioritize integrations. We're tracking community demand for HuggingFace Hub, Weights & Biases, Lightning AI, timm, fastai, and others. See the [roadmap](https://github.com/bnnr-team/bnnr/blob/main/plans/ROADMAP-2026.md) for what's already planned.
+  - type: input
+    id: target
+    attributes:
+      label: Target framework / library
+      placeholder: e.g. HuggingFace Hub, W&B, Lightning AI, timm, fastai
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which BNNR surface?
+      options:
+        - bnnr analyze (failure / XAI report)
+        - ICD / AICD augmentation
+        - bnnr train pipeline
+        - All of the above
+    validations:
+      required: true
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Your use case
+      description: How would you use BNNR with this framework today? What's blocking you?
+    validations:
+      required: true
+  - type: input
+    id: example
+    attributes:
+      label: Example checkpoint / model URL (optional)
+      placeholder: e.g. hf://microsoft/resnet-50
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Can you help?
+      options:
+        - label: I can test a prototype
+        - label: I can contribute code
+        - label: I can write docs / example
+        - label: Just requesting — track demand
