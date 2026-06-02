@@ -23,6 +23,14 @@ Use this with:
 
 ### Classification
 
+- `configs/classification/cifar10_quick_smoke.yaml` — minimal 1-epoch smoke preset (`xai_enabled: false`); use for a quick sanity check before a full run. Requires `--dataset cifar10` (downloads on first use).
+
+```bash
+python -m bnnr train -c examples/configs/classification/cifar10_quick_smoke.yaml --dataset cifar10 --without-dashboard
+```
+
+Use `configs/classification/cifar10_example.yaml` for a full training run with XAI.
+
 - `classification/showcase_stl10.py`
 
 ```bash
