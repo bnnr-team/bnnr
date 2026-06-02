@@ -55,6 +55,7 @@ Omit `--config` to use built-in quickstart defaults (`m_epochs=3`, `max_iteratio
 - `mnist`
 - `fashion_mnist`
 - `cifar10`
+- `stl10`
 - `imagefolder`
 
 **Object detection (requires `task: detection` in your YAML and a matching config; see [detection.md](detection.md)):**
@@ -64,7 +65,7 @@ Omit `--config` to use built-in quickstart defaults (`m_epochs=3`, `max_iteratio
 
 ### Multi-label classification
 
-`bnnr train` with **mnist**, **fashion_mnist**, **cifar10**, or **imagefolder** always builds **single-label** pipelines (`CrossEntropyLoss`, one class index per sample). Setting `task: multilabel` in your config YAML **does not** change that behavior. For multi-label, use the Python API ([golden_path.md](golden_path.md)) or the scripts under `examples/multilabel/` ([examples.md](examples.md)).
+`bnnr train` with **mnist**, **fashion_mnist**, **cifar10**, **stl10**, or **imagefolder** always builds **single-label** pipelines (`CrossEntropyLoss`, one class index per sample). Setting `task: multilabel` in your config YAML **does not** change that behavior. For multi-label, use the Python API ([golden_path.md](golden_path.md)) or the scripts under `examples/multilabel/` ([examples.md](examples.md)).
 
 ### Main options
 

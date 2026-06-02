@@ -219,13 +219,13 @@ report.to_html("./analysis_out/report.html")
 
 For full API details, see `api_reference.md`.
 
-## Limitations (v0.2.x)
+## Limitations (current code)
 
-- **Detection**: Not supported by `bnnr analyze` or `analyze_model`; use classification or multi-label only.
-- **Compare**: No built-in comparison of two models (e.g. pre vs post fine-tuning); planned for a later release.
+- **Detection**: Not supported by `bnnr analyze` or `analyze_model`; supported tasks are `classification` and `multilabel` only.
+- **Compare**: `compare_runs` compares training `report.json` files; there is no built-in side-by-side compare of two `analyze` HTML reports in the CLI.
 - **Events**: Analyze does not emit events to `events.jsonl`; it produces standalone artifacts only.
-- **ROC/PR curves**: Analyze currently focuses on point metrics and diagnostics; ROC-AUC / PR curves are not rendered in `report.html` yet.
-- **Advanced concept XAI (e.g. CRAFT/NMF)**: Current analyze uses saliency/CAM-style methods; concept-level methods are roadmap candidates, not part of v0.2.x.
+- **ROC/PR curves**: Analyze focuses on point metrics and diagnostics; ROC-AUC / PR curves are not rendered in `report.html`.
+- **Advanced concept XAI (e.g. CRAFT/NMF)**: `analyze_model` uses saliency/CAM-style methods (`xai_method`, default `opticam`); CRAFT/NMF are available in training/XAI modules but not wired into the analyze pipeline.
 
 ## See also
 

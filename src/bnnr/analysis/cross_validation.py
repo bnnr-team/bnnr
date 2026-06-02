@@ -104,7 +104,7 @@ def run_cross_validation_from_predictions(
     f1s: list[float] = []
     kappas: list[float] = []
 
-    classes = np.unique(labels)
+    classes = np.union1d(labels, preds)
     class_to_idx = {int(c): i for i, c in enumerate(classes)}
     k = len(classes)
 

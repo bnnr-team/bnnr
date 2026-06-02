@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="../docs/assets/logo.png" alt="BNNR Logo" width="160">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../docs/assets/logo-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="../docs/assets/logo-light.png" />
+    <img alt="BNNR Logo" src="../docs/assets/logo-dark.png" width="160" />
+  </picture>
 </p>
 
 <p align="center">

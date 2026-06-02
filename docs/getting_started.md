@@ -127,9 +127,9 @@ xai_enabled: false
 YAML
 ```
 
-**Multi-label classification:** `python -m bnnr train` with built-in datasets (`cifar10`, `mnist`, `imagefolder`, …) always uses single-label heads and `CrossEntropyLoss`. Putting `task: multilabel` in YAML **does not** switch the CLI to multi-label. Use the Python API (`task="multilabel"`, `SimpleTorchAdapter(multilabel=True)`, `BCEWithLogitsLoss`) or `examples/multilabel/multilabel_demo.py` — see [configuration.md](configuration.md), [golden_path.md](golden_path.md), [cli.md](cli.md), and [examples.md](examples.md).
+**Multi-label classification:** `python -m bnnr train` with built-in datasets (`mnist`, `fashion_mnist`, `cifar10`, `stl10`, `imagefolder`, …) always uses single-label heads and `CrossEntropyLoss`. Putting `task: multilabel` in YAML **does not** switch the CLI to multi-label. Use the Python API (`task="multilabel"`, `SimpleTorchAdapter(multilabel=True)`, `BCEWithLogitsLoss`) or `examples/multilabel/multilabel_demo.py` — see [configuration.md](configuration.md), [golden_path.md](golden_path.md), [cli.md](cli.md), and [examples.md](examples.md).
 
-**Object detection:** BNNR v0.2+ supports object detection with `task="detection"`. Use `DetectionAdapter` (torchvision) or `UltralyticsDetectionAdapter` (YOLOv8) as your model adapter, with bbox-aware augmentations and mAP metrics. Detection requires the Python API — see [detection.md](detection.md) for the full guide and [examples.md](examples.md) for ready-to-run scripts.
+**Object detection:** BNNR supports object detection with `task="detection"`. Use `DetectionAdapter` (torchvision) or `UltralyticsDetectionAdapter` (YOLOv8) as your model adapter, with bbox-aware augmentations and mAP metrics. Detection requires the Python API — see [detection.md](detection.md) for the full guide and [examples.md](examples.md) for ready-to-run scripts.
 
 ## 7) First run in live dashboard mode (recommended)
 

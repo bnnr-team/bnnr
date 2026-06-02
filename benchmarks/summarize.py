@@ -17,6 +17,7 @@ DEFAULT_RESULTS = BENCHMARKS_DIR / "results.json"
 DISPLAY = {
     "no_bnnr": "Without BNNR (crop + flip)",
     "randaugment": "RandAugment (torchvision)",
+    "trivialaugment": "TrivialAugmentWide (torchvision)",
     "bnnr_branch_search": "BNNR branch search (ICD + AICD)",
 }
 

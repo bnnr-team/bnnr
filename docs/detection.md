@@ -169,6 +169,13 @@ config = BNNRConfig(
 | `detection_score_threshold` | `0.5` | Confidence threshold for evaluation |
 | `detection_targets_mode` | `"auto"` | Augmentation target mode: `auto`, `image_only`, `bbox_aware` |
 | `detection_class_names` | `None` | Optional list of class names for reports |
+| `detection_nms_threshold` | `0.5` | NMS IoU threshold |
+| `detection_min_box_area` | `16.0` | Minimum box area to keep |
+| `detection_max_truncation` | `0.7` | Maximum box truncation ratio |
+| `detection_xai_method` | `"activation"` | `activation` (backbone heatmap) or `occlusion` |
+| `detection_xai_grid_size` | `3` | Grid size for occlusion XAI |
+| `detection_xai_max_gt_boxes` | `1` | Max GT boxes in XAI panels |
+| `detection_xai_max_pred_boxes` | `1` | Max prediction boxes in XAI panels |
 
 ### Detection metrics
 
