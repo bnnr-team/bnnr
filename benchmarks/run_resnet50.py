@@ -555,12 +555,27 @@ def main() -> None:
     parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument(
+        "--drive-base-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Convenience for Colab/Drive: a single directory under which both "
+            "results_resnet50.json and runs_resnet50/ are written. Overrides "
+            "--results and --output-root."
+        ),
+    )
+    parser.add_argument(
         "--smoke",
         action="store_true",
         help="Fast sanity run: 1 epoch, 256/128 subset, img-size 64, no pretrained download",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print plan and exit")
     args = parser.parse_args()
+
+    if args.drive_base_dir is not None:
+        args.drive_base_dir.mkdir(parents=True, exist_ok=True)
+        args.results = args.drive_base_dir / "results_resnet50.json"
+        args.output_root = args.drive_base_dir / "runs_resnet50"
 
     if args.smoke:
         args.epochs = 1
@@ -595,8 +610,17 @@ def main() -> None:
     data["git_head"] = git_head()
     data["generated_at"] = datetime.now(timezone.utc).isoformat()
 
+    done = {
+        (r["condition"], r["seed"])
+        for r in data["runs"]
+        if "val_metric" in r and "error" not in r
+    }
+
     for seed in seeds:
         for cid in conds:
+            if (cid, seed) in done:
+                print(f"SKIP {cid} seed={seed} (already in {args.results})")
+                continue
             print(f"\n>>> condition={cid} seed={seed}")
             try:
                 entry = run_condition(
