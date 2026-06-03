@@ -25,6 +25,12 @@ Use this on a fresh machine or first setup.
 
 Open the [sample analyze HTML report](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html) in your browser — no install required. It shows validation metrics, top confused class pairs, and XAI heatmaps on failure cases from a real MNIST run.
 
+Want to generate one yourself in ~3 minutes, no local setup? Open the analyze quickstart in Colab:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/bnnr-team/bnnr/blob/main/examples/analyze_colab_quickstart.ipynb)
+
+It produces a portable HTML failure + XAI report and shows how to point `analyze` at your own checkpoint.
+
 After you install BNNR (below), run `python -m bnnr demo` for a quick training showcase, then see [analyze.md](analyze.md) for `bnnr analyze` on your own checkpoint.
 
 ## 2) Install BNNR
