@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -515,7 +516,10 @@ def run_condition(
     spec = CONDITIONS[condition_id]
     if spec.strategy == "bnnr_branch_search":
         return _run_bnnr_condition(
-            condition=spec, seed=seed, args=args, output_root=output_root
+            condition=replace(spec, max_iterations=args.max_iterations),
+            seed=seed,
+            args=args,
+            output_root=output_root,
         )
     return _run_plain_condition(
         condition=spec,
