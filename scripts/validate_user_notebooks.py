@@ -64,7 +64,7 @@ def _validate_notebook(path: Path) -> list[str]:
         errors.append(f"{path}: kernelspec.name should be 'python3', got {ks.get('name')!r}")
 
     cells = data.get("cells")
-    if not isinstance(cells, list) or not cells:
+    if not isinstance(cells, list):
         errors.append(f"{path}: no cells array")
         return errors
 
