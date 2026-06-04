@@ -54,6 +54,39 @@ Fix:
 - use a parent folder containing `run_*` directories, or
 - point directly at a run directory that has `events.jsonl`.
 
+## 5) `error: externally-managed-environment` on system Python (Ubuntu / Debian)
+
+**Symptom:** running `pip install bnnr` on the system Python returns:
+
+```
+error: externally-managed-environment
+```
+
+This is enforced by PEP 668 on Ubuntu 23.04+, Debian 12+, and most modern Linux distros to prevent pip from modifying system packages.
+
+**Fix:** create and activate a virtual environment first, then install inside it:
+
+```bash
+python3 -m venv /tmp/bnnr-venv
+source /tmp/bnnr-venv/bin/activate
+pip install "bnnr[dashboard]"
+```
+
+See [getting_started.md](getting_started.md) § Install for the full setup flow.
+
+---
+
+**Symptom:** `python3 -m venv /tmp/bnnr-venv` fails with `ensurepip is not available`.
+
+**Fix:** install the OS venv package first (adjust the version to match your Python):
+
+```bash
+sudo apt install python3.12-venv   # replace 3.12 with your Python version
+python3 -m venv /tmp/bnnr-venv
+source /tmp/bnnr-venv/bin/activate
+pip install "bnnr[dashboard]"
+```
+
 ## 6) (Historical) Python 3.9 and union types in CLI/FastAPI
 
 **Supported releases (0.1.1+)** require **Python >=3.10**; this scenario does not apply to current wheels.

@@ -194,6 +194,7 @@ def _cifar100_loaders(
     policy: str,
     max_train: int | None,
     max_val: int | None,
+    data_dir: Path | None = None,
 ) -> tuple[Any, Any]:
     """Return ``(train_loader, val_loader)`` for the requested augmentation policy.
 
@@ -223,7 +224,7 @@ def _cifar100_loaders(
         [transforms.Resize((img_size, img_size)), transforms.ToTensor()]
     )
 
-    data_root = str(REPO_ROOT / "data")
+    data_root = str(data_dir if data_dir is not None else REPO_ROOT / "data")
     train_ds = datasets.CIFAR100(data_root, train=True, download=True, transform=train_tf)
     val_ds = datasets.CIFAR100(data_root, train=False, download=True, transform=val_tf)
     train_ds = _maybe_subset(train_ds, max_train)
@@ -330,6 +331,7 @@ def _run_plain_condition(
         policy=policy,
         max_train=args.max_train_samples,
         max_val=args.max_val_samples,
+        data_dir=getattr(args, "data_dir", None),
     )
     bench = {"xai_val_indices": _XAI_VAL_INDICES, "xai_method": "opticam"}
     extra = {"augmentation_policy": policy} if policy != "base" else None
@@ -383,6 +385,7 @@ def _run_bnnr_condition(
         policy="base",
         max_train=args.max_train_samples,
         max_val=args.max_val_samples,
+        data_dir=getattr(args, "data_dir", None),
     )
     augmentations = build_bnnr_candidate_augmentations(
         adapter.get_model(), adapter.get_target_layers(), seed
@@ -559,10 +562,17 @@ def main() -> None:
         type=Path,
         default=None,
         help=(
-            "Convenience for Colab/Drive: a single directory under which both "
-            "results_resnet50.json and runs_resnet50/ are written. Overrides "
-            "--results and --output-root."
+            "Convenience for Colab/Drive: a single directory under which "
+            "results_resnet50.json, runs_resnet50/, and cifar100 data/ are written. "
+            "Overrides --results, --output-root, and --data-dir."
         ),
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Directory where CIFAR-100 data is cached (default: <repo>/data). "
+             "Set to a Drive path to survive Colab session restarts.",
     )
     parser.add_argument(
         "--smoke",
@@ -576,6 +586,8 @@ def main() -> None:
         args.drive_base_dir.mkdir(parents=True, exist_ok=True)
         args.results = args.drive_base_dir / "results_resnet50.json"
         args.output_root = args.drive_base_dir / "runs_resnet50"
+        if args.data_dir is None:
+            args.data_dir = args.drive_base_dir / "data"
 
     if args.smoke:
         args.epochs = 1

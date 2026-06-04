@@ -9,6 +9,7 @@ This guide covers all user notebooks in `examples/` and how to run them in a way
 
 | Notebook | Goal | Dashboard usage | Typical runtime |
 |---|---|---|---|
+| `examples/analyze_colab_quickstart.ipynb` | One-click `analyze` quickstart: pip install → HTML failure + XAI report (analyze-first, bring your own checkpoint) | Not used (analyze-only) | Short (~3 min) |
 | `examples/bnnr_augmentations_guide.ipynb` | Visualize all built-in augmentations and ICD/AICD behavior | Optional (focus is augmentation visuals) | Short |
 | `examples/classification/bnnr_classification_demo.ipynb` | End-to-end STL-10 classification with XAI and branch selection | Required (live tracking) | Medium |
 | `examples/classification/bnnr_cooking_round1_butterfly.ipynb` | Student-oriented butterfly mini-project: training + augmentation search + XAI + report + dashboard | Required (live tracking) | Medium |
@@ -17,6 +18,9 @@ This guide covers all user notebooks in `examples/` and how to run them in a way
 | `examples/detection/bnnr_detection_demo.ipynb` | Object detection training with bbox augmentations, mAP metrics, and XAI | Required (live tracking) | Medium |
 
 ## Recommended order
+
+New to BNNR? Start with `analyze_colab_quickstart.ipynb` — it shows the analyze-first workflow (report from a checkpoint, no training) in ~3 minutes. Then, to learn the training/augmentation-search loop:
+
 1. `bnnr_augmentations_guide.ipynb`
 2. `classification/bnnr_classification_demo.ipynb`
 3. `classification/bnnr_cooking_round1_butterfly.ipynb`

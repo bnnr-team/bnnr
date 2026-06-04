@@ -2,3 +2,5 @@ runs/
 runs_resnet50/
 __pycache__/
 *.pyc
+results.json
+results_resnet50.json

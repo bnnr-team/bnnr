@@ -17,6 +17,7 @@ from pathlib import Path
 
 # Keep in sync with docs/notebooks.md — Notebook Catalog table.
 USER_NOTEBOOKS: list[str] = [
+    "examples/analyze_colab_quickstart.ipynb",
     "examples/bnnr_augmentations_guide.ipynb",
     "examples/classification/bnnr_classification_demo.ipynb",
     "examples/classification/bnnr_cooking_round1_butterfly.ipynb",
