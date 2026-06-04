@@ -21,6 +21,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BENCHMARKS_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG = BENCHMARKS_DIR / "config.yaml"
 
+
+def _rel(p: Path) -> str:
+    """Return path relative to REPO_ROOT when possible, otherwise absolute."""
+    try:
+        return str(p.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(p)
+
 if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
@@ -384,8 +392,8 @@ def export_attention_maps(
     )
 
     return {
-        "xai_dir": str(output_dir.relative_to(REPO_ROOT)),
-        "overlay_paths": [str(p.relative_to(REPO_ROOT)) for p in paths],
+        "xai_dir": _rel(output_dir),
+        "overlay_paths": [_rel(p) for p in paths],
         "sample_indices": used_indices,
         "aggregate_stats": aggregate,
     }
@@ -417,14 +425,18 @@ def _run_plain_epochs(
     best_state: dict[str, Any] | None = None
     sel = cfg.selection_metric
 
-    print(
+    run_dir.mkdir(parents=True, exist_ok=True)
+    log_path = run_dir / "train.log"
+
+    header = (
         f"\n{'='*60}\n"
         f"  {condition.id.upper()}\n"
         f"  batch_augs={[a.name for a in augmentations] if augmentations else '(none)'}\n"
         f"  m_epochs={cfg.m_epochs}  seed={cfg.seed}  device={cfg.device}\n"
-        f"{'='*60}",
-        flush=True,
+        f"{'='*60}"
     )
+    print(header, flush=True)
+    log_path.write_text(header + "\n", encoding="utf-8")
 
     for epoch in range(1, cfg.m_epochs + 1):
         train_epoch(trainer, train_loader, augmentations=augmentations)
@@ -433,11 +445,13 @@ def _run_plain_epochs(
         if callable(epoch_end_fn):
             epoch_end_fn()
         score = float(val_metrics.get(sel, 0.0))
-        print(
+        line = (
             f"  epoch {epoch}/{cfg.m_epochs} — {sel}={score:.4f}  "
-            f"loss={val_metrics.get('loss', 0):.4f}",
-            flush=True,
+            f"loss={val_metrics.get('loss', 0):.4f}"
         )
+        print(line, flush=True)
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
         if not best_val or score >= best_val.get(sel, -1.0):
             best_val = copy.deepcopy(val_metrics)
             best_epoch = epoch
@@ -525,8 +539,8 @@ def _result_entry(
         "xai_dir": xai_meta.get("xai_dir"),
         "xai_overlays": xai_meta.get("overlay_paths") or [],
         "wall_clock_s": round(elapsed_s, 1),
-        "report_json": str(report_path.relative_to(REPO_ROOT)),
-        "run_dir": str(run_dir.relative_to(REPO_ROOT)),
+        "report_json": _rel(report_path),
+        "run_dir": _rel(run_dir),
         **(extra or {}),
     }
 

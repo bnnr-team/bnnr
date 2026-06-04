@@ -124,7 +124,15 @@ A larger, more convincing benchmark than the demo-CNN / CIFAR-10 table above: a 
 - **Same** backbone, optimizer (SGD, momentum 0.9, weight decay 5e-4), cosine schedule, epochs, and seeds across all conditions — only the augmentation strategy varies.
 - **OptiCAM** overlays on fixed CIFAR-100 test indices, exported per run (`runs_resnet50/*/xai/`).
 
-### Run
+### Run in Colab (recommended)
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/bnnr-team/bnnr/blob/main/benchmarks/colab_resnet50_cifar100.ipynb)
+
+Mount Google Drive, run all cells. Everything (metrics, XAI overlays, ZIP backup) lands on your Drive at `MyDrive/bnnr_benchmarks/`. Resume-safe — if the Colab session dies, re-run the full-benchmark cell and completed (condition, seed) pairs are skipped.
+
+ETA: ~2h on T4, ~30 min on A100.
+
+### Run locally
 
 ```bash
 # Fast sanity check (CPU-friendly, no pretrained download, tiny subset)
@@ -134,6 +142,10 @@ python benchmarks/run_resnet50.py --smoke
 bash benchmarks/reproduce_resnet50.sh
 # or:
 python benchmarks/run_resnet50.py --seeds 42,43,44,45,46 --device cuda
+
+# Write results + XAI overlays into a single directory (e.g. Drive / shared volume)
+python benchmarks/run_resnet50.py --seeds 42,43,44,45,46 --device cuda \
+  --drive-base-dir /path/to/output
 
 # Summarize
 python benchmarks/summarize.py --results benchmarks/results_resnet50.json --markdown
