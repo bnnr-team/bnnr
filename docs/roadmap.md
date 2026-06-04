@@ -27,7 +27,7 @@ BNNR is a PyTorch vision toolkit focused on **model diagnostics first** (`bnnr a
 | Planned | Description |
 |---------|-------------|
 | **Analyze-first docs** | README and [getting_started.md](getting_started.md): try analyze before train; githack sample links |
-| **ResNet50 benchmark** | CIFAR-100 (or equivalent): 5 seeds; baselines RandAugment + TrivialAugment; reproducible script `benchmarks/reproduce_resnet50.sh` |
+| **Augmentation benchmark** | ResNet18 / Imagewoof (fine-grained, low-data, from-scratch): 5 seeds; baselines RandAugment + TrivialAugment; reproducible script `benchmarks/reproduce_imagewoof.sh` (free-T4 friendly) |
 | **Torchvision → analyze** | Prominent golden path: pretrained classifier → HTML report; runnable example in README |
 | **Repo discoverability** | GitHub description, website link, topics (maintainer ops) |
 | **Contributor templates** | Issue forms: benchmark proposal, “Who uses BNNR” showcase |

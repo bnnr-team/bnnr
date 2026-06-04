@@ -1,41 +1,42 @@
 #!/usr/bin/env python3
-"""ResNet50 / CIFAR-100 augmentation benchmark.
+"""ResNet18 / Imagewoof augmentation benchmark (low-data, from-scratch).
 
-Compares four training conditions on a *real* architecture (ResNet50) and a
-harder dataset (CIFAR-100, 100 classes) than the demo-CNN / CIFAR-10 table in
-``benchmarks/run.py``:
+Why this design (and not CIFAR-100 upscaled):
+  * **Fine-grained** task (10 dog breeds, real ImageNet images) where models
+    latch onto shortcuts (background, pose) — so saliency-guided augmentation
+    (ICD/AICD) has something meaningful to act on. 32px CIFAR upscaled to 224
+    gives saliency maps almost nothing to work with.
+  * **Low-data, from-scratch** regime: a small balanced train subset trained
+    from random init. This is exactly where augmentation matters most, so the
+    deltas between conditions are large and *significant* — instead of the tiny
+    gaps you get fine-tuning a pretrained net on an easy dataset.
+  * **Cheap on a free Colab T4**: ResNet18 (11M params), 128px, ~1k train
+    images, resume-safe. No cross-validation — one fixed train/val split with
+    5 seeds for training-variance error bars.
 
-    no_bnnr         RandomCrop + RandomHorizontalFlip (standard baseline)
+Conditions (only the augmentation strategy varies; same backbone / optimizer /
+scheduler / epochs / seeds):
+
+    no_aug          RandomResizedCrop + RandomHorizontalFlip (standard baseline)
     randaugment     + torchvision RandAugment
     trivialaugment  + torchvision TrivialAugmentWide
     bnnr_branch_search   full BNNR loop (ICD + AICD + ChurchNoise, branch search)
 
-Protocol honesty (mirrors ``docs/benchmarks.md``):
-  * Same backbone, optimizer, scheduler, epochs, and seeds across conditions.
-  * The augmentation strategy is the *only* thing that varies per condition.
-  * BNNR branch search spends more compute (baseline phase + branch search);
-    this is disclosed in the results JSON and the README table.
-
-The ResNet50 wrapper normalizes inputs *inside* the model (ImageNet mean/std as
-registered buffers) so every condition can feed plain ``ToTensor()`` tensors in
-``[0, 1]``. This keeps pretrained weights happy while remaining compatible with
-BNNR's ICD/AICD augmentations, which operate on uint8-range tensors.
-
-This script builds the runnable infrastructure. Numbers land in the README only
-after a real GPU run (see ``benchmarks/reproduce_resnet50.sh``).
+Dataset: Imagewoof2 (160px) from fast.ai (Apache-2.0-style redistribution),
+downloaded + extracted on first run, loaded with ``ImageFolder``.
 
 Examples
 --------
-    # Quick smoke test (CPU-friendly, no pretrained download, tiny subset)
-    python benchmarks/run_resnet50.py --smoke
+    # Quick smoke test (CPU-friendly, tiny subset, no full download path assumed)
+    python benchmarks/run_imagewoof.py --smoke
 
     # Full benchmark, 5 seeds, GPU
-    python benchmarks/run_resnet50.py --seeds 42,43,44,45,46 --device cuda
+    python benchmarks/run_imagewoof.py --seeds 42,43,44,45,46 --device cuda
 
     # Single condition / single seed
-    python benchmarks/run_resnet50.py --conditions no_bnnr --seeds 42 --device cuda
+    python benchmarks/run_imagewoof.py --conditions no_aug --seeds 42 --device cuda
 
-    python benchmarks/summarize.py --results benchmarks/results_resnet50.json --markdown
+    python benchmarks/summarize.py --results benchmarks/results_imagewoof.json --markdown
 """
 
 from __future__ import annotations
@@ -69,25 +70,32 @@ from lib import (  # noqa: E402
     torch_info,
 )
 
-DEFAULT_RESULTS = BENCHMARKS_DIR / "results_resnet50.json"
-DEFAULT_OUTPUT = BENCHMARKS_DIR / "runs_resnet50"
+DEFAULT_RESULTS = BENCHMARKS_DIR / "results_imagewoof.json"
+DEFAULT_OUTPUT = BENCHMARKS_DIR / "runs_imagewoof"
 
-# ImageNet normalization, applied inside the model (see _NormalizedResNet).
+# ImageNet normalization, applied inside the model (fixed normalizer; works for
+# from-scratch training too — it only standardizes inputs).
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)
 _IMAGENET_STD = (0.229, 0.224, 0.225)
 
-# OptiCAM overlay indices into the CIFAR-100 test split (10k images).
-_XAI_VAL_INDICES = [0, 127, 255, 512]
+NUM_CLASSES = 10
+
+# Imagewoof2, 160px edition (~88 MB). Mirror of the fast.ai imageclas bucket.
+_IMAGEWOOF_URL = "https://s3.amazonaws.com/fast-ai-imageclas/imagewoof2-160.tgz"
+_IMAGEWOOF_DIRNAME = "imagewoof2-160"
+
+# OptiCAM overlay indices into the (fixed) Imagewoof val split.
+_XAI_VAL_INDICES = [0, 400, 800, 1200, 1600, 2000]
 
 
 CONDITIONS: dict[str, ConditionSpec] = {
-    "no_bnnr": ConditionSpec(
-        id="no_bnnr",
+    "no_aug": ConditionSpec(
+        id="no_aug",
         label="Without BNNR (crop + flip only)",
         strategy="plain_training",
         description=(
-            "Standard CIFAR-100 training: RandomCrop + RandomHorizontalFlip. "
-            "No BNNR batch augmentations and no branch search."
+            "Standard from-scratch training: RandomResizedCrop + "
+            "RandomHorizontalFlip. No extra augmentation, no branch search."
         ),
         augmentation_names=(),
         max_iterations=0,
@@ -97,9 +105,8 @@ CONDITIONS: dict[str, ConditionSpec] = {
         label="RandAugment (torchvision)",
         strategy="randaugment",
         description=(
-            "External baseline: RandomCrop + RandomHorizontalFlip + "
-            "torchvision RandAugment. Policy-based random augmentation, "
-            "no saliency guidance."
+            "External baseline: RandomResizedCrop + flip + torchvision "
+            "RandAugment. Policy-based random augmentation, no saliency guidance."
         ),
         augmentation_names=("RandAugment",),
         max_iterations=0,
@@ -109,9 +116,9 @@ CONDITIONS: dict[str, ConditionSpec] = {
         label="TrivialAugmentWide (torchvision)",
         strategy="trivialaugment",
         description=(
-            "External baseline: RandomCrop + RandomHorizontalFlip + "
-            "torchvision TrivialAugmentWide. Parameter-free SOTA-ish random "
-            "augmentation, no saliency guidance."
+            "External baseline: RandomResizedCrop + flip + torchvision "
+            "TrivialAugmentWide. Parameter-free random augmentation, no saliency "
+            "guidance."
         ),
         augmentation_names=("TrivialAugmentWide",),
         max_iterations=0,
@@ -126,13 +133,8 @@ CONDITIONS: dict[str, ConditionSpec] = {
             "ChurchNoise. Keeps branches that improve validation accuracy."
         ),
         augmentation_names=("ICD", "AICD", "augmentation_1"),
-        max_iterations=3,
+        max_iterations=2,
     ),
-}
-
-_ARCH_TARGET_HINT = {
-    "resnet50": "backbone.layer4[-1]",
-    "resnet18": "backbone.layer4[-1]",
 }
 
 
@@ -145,21 +147,21 @@ def _build_resnet(arch: str, num_classes: int, pretrained: bool) -> Any:
     """torchvision ResNet adapted to ``num_classes`` with normalization baked in.
 
     Inputs are expected in ``[0, 1]`` (plain ``ToTensor()``); the model
-    normalizes with ImageNet statistics internally so pretrained weights work
-    and BNNR's uint8-range augmentations stay compatible upstream.
+    normalizes with ImageNet statistics internally so BNNR's uint8-range
+    augmentations stay compatible upstream.
     """
     import torch
     from torch import nn
     from torchvision import models
 
-    if arch == "resnet50":
-        weights = models.ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
-        backbone = models.resnet50(weights=weights)
-    elif arch == "resnet18":
+    if arch == "resnet18":
         weights = models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None
         backbone = models.resnet18(weights=weights)
+    elif arch == "resnet50":
+        weights = models.ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
+        backbone = models.resnet50(weights=weights)
     else:
-        raise ValueError(f"Unsupported arch {arch!r} (use resnet50 or resnet18)")
+        raise ValueError(f"Unsupported arch {arch!r} (use resnet18 or resnet50)")
 
     backbone.fc = nn.Linear(backbone.fc.in_features, num_classes)
 
@@ -182,33 +184,79 @@ def _target_layers(model: Any) -> list[Any]:
 
 
 # ---------------------------------------------------------------------------
-# Data: CIFAR-100 loaders (one builder per augmentation policy)
+# Data: Imagewoof loaders (one builder per augmentation policy)
 # ---------------------------------------------------------------------------
 
 
-def _cifar100_loaders(
+def _download_imagewoof(data_root: Path) -> Path:
+    """Download + extract Imagewoof2 (160px) once; return the dataset root."""
+    from torchvision.datasets.utils import download_and_extract_archive
+
+    target = data_root / _IMAGEWOOF_DIRNAME
+    if (target / "train").is_dir() and (target / "val").is_dir():
+        return target
+    data_root.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading Imagewoof2 (160px) -> {data_root} ...", flush=True)
+    download_and_extract_archive(_IMAGEWOOF_URL, download_root=str(data_root))
+    if not (target / "train").is_dir():
+        raise FileNotFoundError(
+            f"Expected {target}/train after extraction; got {list(data_root.iterdir())}"
+        )
+    return target
+
+
+def _balanced_subset(dataset: Any, n_per_class: int | None, seed: int) -> Any:
+    """Return a class-balanced ``Subset`` with ``n_per_class`` samples each.
+
+    ImageFolder orders samples by class, so a naive first-N truncation would be
+    wildly unbalanced. This picks a seeded random ``n_per_class`` from each class.
+    """
+    if n_per_class is None:
+        return dataset
+    import random
+
+    from torch.utils.data import Subset
+
+    by_class: dict[int, list[int]] = {}
+    for idx, target in enumerate(dataset.targets):
+        by_class.setdefault(int(target), []).append(idx)
+
+    rng = random.Random(seed)
+    chosen: list[int] = []
+    for _cls, idxs in sorted(by_class.items()):
+        pool = idxs[:]
+        rng.shuffle(pool)
+        chosen.extend(pool[:n_per_class])
+    chosen.sort()
+    return Subset(dataset, chosen)
+
+
+def _imagewoof_loaders(
     *,
     img_size: int,
     batch_size: int,
     seed: int,
     policy: str,
-    max_train: int | None,
+    n_per_class_train: int | None,
     max_val: int | None,
     data_dir: Path | None = None,
 ) -> tuple[Any, Any]:
     """Return ``(train_loader, val_loader)`` for the requested augmentation policy.
 
     ``policy`` is one of ``base`` | ``randaugment`` | ``trivialaugment``. The val
-    transform is identical across policies (resize + ToTensor).
+    transform is identical across policies (resize + center crop + ToTensor).
     """
+    import torch
     from torch.utils.data import DataLoader
-    from torchvision import datasets, transforms
+    from torchvision import transforms
+    from torchvision.datasets import ImageFolder
 
     from bnnr.pipelines import _IndexedDataset, _maybe_subset
 
+    root = _download_imagewoof(data_dir if data_dir is not None else REPO_ROOT / "data")
+
     base_train = [
-        transforms.Resize((img_size, img_size)),
-        transforms.RandomCrop(img_size, padding=img_size // 8),
+        transforms.RandomResizedCrop(img_size, scale=(0.5, 1.0)),
         transforms.RandomHorizontalFlip(),
     ]
     if policy == "randaugment":
@@ -221,16 +269,17 @@ def _cifar100_loaders(
 
     train_tf = transforms.Compose(base_train)
     val_tf = transforms.Compose(
-        [transforms.Resize((img_size, img_size)), transforms.ToTensor()]
+        [
+            transforms.Resize(int(img_size * 1.14)),
+            transforms.CenterCrop(img_size),
+            transforms.ToTensor(),
+        ]
     )
 
-    data_root = str(data_dir if data_dir is not None else REPO_ROOT / "data")
-    train_ds = datasets.CIFAR100(data_root, train=True, download=True, transform=train_tf)
-    val_ds = datasets.CIFAR100(data_root, train=False, download=True, transform=val_tf)
-    train_ds = _maybe_subset(train_ds, max_train)
+    train_ds = ImageFolder(str(root / "train"), transform=train_tf)
+    val_ds = ImageFolder(str(root / "val"), transform=val_tf)
+    train_ds = _balanced_subset(train_ds, n_per_class_train, seed)
     val_ds = _maybe_subset(val_ds, max_val)
-
-    import torch
 
     generator = torch.Generator()
     generator.manual_seed(seed)
@@ -292,12 +341,15 @@ def _base_config(*, epochs: int, device: str) -> Any:
         selection_metric="accuracy",
         metrics=["accuracy", "f1_macro", "loss"],
         xai_method="opticam",
+        candidate_pruning_enabled=True,
+        candidate_pruning_relative_threshold=0.8,
+        candidate_pruning_warmup_epochs=2,
     )
 
 
 def _stamp(entry: dict[str, Any], *, arch: str, img_size: int, pretrained: bool) -> dict[str, Any]:
     """Override the cifar10 defaults baked into lib._result_entry."""
-    entry["dataset"] = "cifar100"
+    entry["dataset"] = "imagewoof"
     entry["model"] = arch
     entry["img_size"] = img_size
     entry["pretrained"] = pretrained
@@ -318,18 +370,18 @@ def _run_plain_condition(
 
     adapter = _build_adapter(
         arch=args.arch,
-        num_classes=100,
+        num_classes=NUM_CLASSES,
         pretrained=args.pretrained,
         lr=args.lr,
         device=cfg.device,
         epochs=args.epochs,
     )
-    train_loader, val_loader = _cifar100_loaders(
+    train_loader, val_loader = _imagewoof_loaders(
         img_size=args.img_size,
         batch_size=args.batch_size,
         seed=seed,
         policy=policy,
-        max_train=args.max_train_samples,
+        n_per_class_train=args.train_per_class,
         max_val=args.max_val_samples,
         data_dir=getattr(args, "data_dir", None),
     )
@@ -372,18 +424,18 @@ def _run_bnnr_condition(
 
     adapter = _build_adapter(
         arch=args.arch,
-        num_classes=100,
+        num_classes=NUM_CLASSES,
         pretrained=args.pretrained,
         lr=args.lr,
         device=cfg.device,
         epochs=args.epochs,
     )
-    train_loader, val_loader = _cifar100_loaders(
+    train_loader, val_loader = _imagewoof_loaders(
         img_size=args.img_size,
         batch_size=args.batch_size,
         seed=seed,
         policy="base",
-        max_train=args.max_train_samples,
+        n_per_class_train=args.train_per_class,
         max_val=args.max_val_samples,
         data_dir=getattr(args, "data_dir", None),
     )
@@ -393,7 +445,7 @@ def _run_bnnr_condition(
 
     print(
         f"\n{'='*60}\n"
-        f"  BNNR BRANCH SEARCH ({args.arch} / cifar100)\n"
+        f"  BNNR BRANCH SEARCH ({args.arch} / imagewoof)\n"
         f"  candidates={[a.name for a in augmentations]}\n"
         f"  max_iterations={condition.max_iterations}  m_epochs={cfg.m_epochs}\n"
         f"  seed={seed}  device={cfg.device}\n"
@@ -447,7 +499,7 @@ def _run_bnnr_condition(
 
 
 _POLICY_BY_CONDITION = {
-    "no_bnnr": "base",
+    "no_aug": "base",
     "randaugment": "randaugment",
     "trivialaugment": "trivialaugment",
 }
@@ -481,9 +533,12 @@ def run_condition(
 
 def _benchmark_document(args: argparse.Namespace) -> dict[str, Any]:
     return {
-        "benchmark_id": "cifar100_resnet50_augmentation_comparison",
+        "benchmark_id": "imagewoof_resnet18_augmentation_comparison",
         "model": f"{args.arch} (torchvision, pretrained={args.pretrained})",
-        "dataset": "cifar100 (torchvision, full train/test split)",
+        "dataset": (
+            f"imagewoof2-160 (fast.ai); balanced {args.train_per_class}/class train, "
+            "full val as fixed test"
+        ),
         "img_size": args.img_size,
         "batch_size": args.batch_size,
         "optimizer": f"SGD(lr={args.lr}, momentum=0.9, wd=5e-4)",
@@ -491,8 +546,12 @@ def _benchmark_document(args: argparse.Namespace) -> dict[str, Any]:
         "epochs_per_phase": args.epochs,
         "primary_metric": "validation accuracy (best epoch)",
         "normalization": "ImageNet mean/std applied inside the model",
-        "attention_method": "OptiCAM overlays on fixed CIFAR-100 test indices",
-        "target_layer": _ARCH_TARGET_HINT.get(args.arch, "backbone.layer4[-1]"),
+        "attention_method": "OptiCAM overlays on fixed Imagewoof val indices",
+        "target_layer": "backbone.layer4[-1]",
+        "regime": (
+            "low-data, from-scratch (random init) — the regime where augmentation "
+            "drives large, significant deltas; no cross-validation, 5 seeds for variance"
+        ),
         "conditions": {
             cid: {
                 "label": spec.label,
@@ -508,7 +567,7 @@ def _benchmark_document(args: argparse.Namespace) -> dict[str, Any]:
             "(baseline phase + branch search). This is by design and disclosed here.",
             "Same backbone, optimizer, scheduler, epochs and seeds across conditions; "
             "only the augmentation strategy varies.",
-            "Not an ImageNet-SOTA claim. CIFAR-100 transfer benchmark for "
+            "Not an ImageNet-SOTA claim. Low-data fine-grained transfer benchmark for "
             "augmentation-strategy comparison.",
         ],
     }
@@ -516,20 +575,20 @@ def _benchmark_document(args: argparse.Namespace) -> dict[str, Any]:
 
 def _estimate(args: argparse.Namespace, n_seeds: int, conds: list[str]) -> str:
     per_cond_min = {
-        "no_bnnr": args.epochs * 1.0,
+        "no_aug": args.epochs * 1.0,
         "randaugment": args.epochs * 1.1,
         "trivialaugment": args.epochs * 1.1,
         "bnnr_branch_search": args.epochs * (args.max_iterations + 1) * 1.2,
     }
     total = sum(per_cond_min.get(c, args.epochs) for c in conds) * n_seeds
     if args.device != "cpu":
-        total *= 0.2
+        total *= 0.15
     return f"~{total/60:.1f}h wall-clock estimate ({len(conds)} conditions x {n_seeds} seeds, {args.device})"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="ResNet50 / CIFAR-100 augmentation benchmark",
+        description="ResNet18 / Imagewoof augmentation benchmark (low-data, from-scratch)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -539,62 +598,67 @@ def main() -> None:
         default=",".join(CONDITIONS),
         help=f"Comma-separated conditions ({', '.join(CONDITIONS)})",
     )
-    parser.add_argument("--arch", default="resnet50", choices=["resnet50", "resnet18"])
+    parser.add_argument("--arch", default="resnet18", choices=["resnet18", "resnet50"])
     parser.add_argument("--device", default="auto", help="auto | cuda | cpu")
-    parser.add_argument("--epochs", type=int, default=15, help="Epochs per training phase")
+    parser.add_argument("--epochs", type=int, default=25, help="Epochs per training phase")
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--img-size", type=int, default=224, help="Resize target (224 uses pretrained features)")
-    parser.add_argument("--lr", type=float, default=0.01)
-    parser.add_argument("--max-iterations", type=int, default=3, help="BNNR branch-search iterations")
+    parser.add_argument("--img-size", type=int, default=128, help="Square resize/crop target")
+    parser.add_argument("--lr", type=float, default=0.05)
+    parser.add_argument("--max-iterations", type=int, default=2, help="BNNR branch-search iterations")
     parser.add_argument(
         "--pretrained",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Use ImageNet-pretrained backbone (--no-pretrained to train from scratch)",
+        default=False,
+        help="Use ImageNet-pretrained backbone (default: from scratch). Imagewoof "
+        "classes overlap ImageNet, so from-scratch is the honest default.",
     )
-    parser.add_argument("--max-train-samples", type=int, default=None)
-    parser.add_argument("--max-val-samples", type=int, default=None)
+    parser.add_argument(
+        "--train-per-class",
+        type=int,
+        default=100,
+        help="Balanced train images per class (low-data regime). None = full train.",
+    )
+    parser.add_argument("--max-val-samples", type=int, default=None, help="Cap val (test) size")
     parser.add_argument("--no-xai", action="store_true", help="Skip OptiCAM overlay export (faster; no cv2 dependency)")
     parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Directory where Imagewoof2 is downloaded/cached (default: <repo>/data). "
+        "Set to a Drive path to survive Colab session restarts (avoids re-downloading).",
+    )
     parser.add_argument(
         "--drive-base-dir",
         type=Path,
         default=None,
         help=(
             "Convenience for Colab/Drive: a single directory under which "
-            "results_resnet50.json, runs_resnet50/, and cifar100 data/ are written. "
-            "Overrides --results, --output-root, and --data-dir."
+            "results_imagewoof.json, runs_imagewoof/, and the cached dataset are "
+            "written. Overrides --results, --output-root, and --data-dir."
         ),
-    )
-    parser.add_argument(
-        "--data-dir",
-        type=Path,
-        default=None,
-        help="Directory where CIFAR-100 data is cached (default: <repo>/data). "
-             "Set to a Drive path to survive Colab session restarts.",
     )
     parser.add_argument(
         "--smoke",
         action="store_true",
-        help="Fast sanity run: 1 epoch, 256/128 subset, img-size 64, no pretrained download",
+        help="Fast sanity run: 1 epoch, 5/class train, tiny val, img-size 64",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print plan and exit")
     args = parser.parse_args()
 
     if args.drive_base_dir is not None:
         args.drive_base_dir.mkdir(parents=True, exist_ok=True)
-        args.results = args.drive_base_dir / "results_resnet50.json"
-        args.output_root = args.drive_base_dir / "runs_resnet50"
+        args.results = args.drive_base_dir / "results_imagewoof.json"
+        args.output_root = args.drive_base_dir / "runs_imagewoof"
         if args.data_dir is None:
             args.data_dir = args.drive_base_dir / "data"
 
     if args.smoke:
         args.epochs = 1
         args.img_size = 64
-        args.pretrained = False
-        args.max_train_samples = 256
-        args.max_val_samples = 128
+        args.train_per_class = 5
+        args.max_val_samples = 50
         args.max_iterations = 1
         if args.seeds == "42,43,44,45,46":
             args.seeds = "42"
@@ -605,9 +669,10 @@ def main() -> None:
         if c not in CONDITIONS:
             parser.error(f"Unknown condition {c!r}. Choose from: {', '.join(CONDITIONS)}")
 
-    print("ResNet50 / CIFAR-100 augmentation benchmark")
+    print("ResNet18 / Imagewoof augmentation benchmark (low-data, from-scratch)")
     print(f"  arch={args.arch} pretrained={args.pretrained} img_size={args.img_size}")
-    print(f"  seeds={seeds}  conditions={conds}  epochs={args.epochs}  device={args.device}")
+    print(f"  train_per_class={args.train_per_class}  seeds={seeds}  conditions={conds}")
+    print(f"  epochs={args.epochs}  device={args.device}")
     print(f"  {_estimate(args, len(seeds), conds)}")
     print(f"  results -> {args.results}")
     if args.dry_run:
@@ -643,7 +708,7 @@ def main() -> None:
                 entry = {
                     "condition": cid,
                     "seed": seed,
-                    "dataset": "cifar100",
+                    "dataset": "imagewoof",
                     "model": args.arch,
                     "error": str(exc),
                 }

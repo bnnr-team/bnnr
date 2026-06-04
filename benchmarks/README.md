@@ -3,7 +3,7 @@
 Two reproducible augmentation comparisons:
 
 1. **CIFAR-10 / demo CNN** (below) — fast, illustrative, runs on CPU.
-2. **ResNet50 / CIFAR-100** ([jump](#resnet50--cifar-100-benchmark)) — a real architecture and a harder dataset, with RandAugment **and** TrivialAugment baselines over 5 seeds. Infrastructure is in place; numbers land in the table after a GPU run.
+2. **ResNet18 / Imagewoof** ([jump](#resnet18--imagewoof-benchmark)) — a fine-grained, low-data, from-scratch regime (where augmentation actually matters), with RandAugment **and** TrivialAugment baselines over 5 seeds. Cheap enough for a free Colab T4. Numbers land in the table after a GPU run.
 
 ---
 
@@ -106,69 +106,71 @@ Output: `docs/assets/benchmark-xai-comparison.png` (used in root README).
 
 ---
 
-## ResNet50 / CIFAR-100 benchmark
+## ResNet18 / Imagewoof benchmark
 
-A larger, more convincing benchmark than the demo-CNN / CIFAR-10 table above: a real **ResNet50** backbone (ImageNet-pretrained by default) on **CIFAR-100** (100 classes), comparing the BNNR branch search against **two** strong external baselines.
+A more convincing benchmark than the demo-CNN / CIFAR-10 table above: a **fine-grained** task (10 dog breeds from real ImageNet images) trained **from scratch** in a **low-data** regime — the setting where augmentation actually drives large, significant deltas, and where saliency-guided ICD/AICD have real spatial structure to act on (unlike 32px CIFAR).
 
 | Condition | What it is |
 |-----------|------------|
-| `no_bnnr` | Resize + RandomCrop + RandomHorizontalFlip — no BNNR augmentations |
+| `no_aug` | RandomResizedCrop + RandomHorizontalFlip — no extra augmentation |
 | `randaugment` | + **torchvision RandAugment** (external baseline) |
 | `trivialaugment` | + **torchvision TrivialAugmentWide** (parameter-free external baseline) |
 | `bnnr_branch_search` | Full **BNNR branch search** over **ICD**, **AICD**, and ChurchNoise |
 
 ### Design
 
-- **ResNet50** from `torchvision.models`, ImageNet weights. The classifier head is replaced for 100 classes.
-- **In-model normalization:** ImageNet mean/std are applied *inside* the model (registered buffers), so every condition feeds plain `ToTensor()` tensors in `[0, 1]`. Pretrained weights stay valid and BNNR's uint8-range ICD/AICD augmentations remain compatible.
+- **Dataset:** Imagewoof2-160 (fast.ai) — auto-downloaded. A **balanced 100 images/class** train subset, the **full val split as a fixed test set**. No cross-validation; **5 seeds** capture training variance.
+- **Model:** ResNet18 from `torchvision.models`, **random init (from scratch)**. Imagewoof classes overlap ImageNet, so from-scratch is the honest default (`--pretrained` and `--arch resnet50` are available).
+- **In-model normalization:** ImageNet mean/std are applied *inside* the model (registered buffers), so every condition feeds plain `ToTensor()` tensors in `[0, 1]` and BNNR's uint8-range ICD/AICD augmentations remain compatible.
 - **Same** backbone, optimizer (SGD, momentum 0.9, weight decay 5e-4), cosine schedule, epochs, and seeds across all conditions — only the augmentation strategy varies.
-- **OptiCAM** overlays on fixed CIFAR-100 test indices, exported per run (`runs_resnet50/*/xai/`).
+- **OptiCAM** overlays on fixed Imagewoof val indices, exported per run (`runs_imagewoof/*/xai/`).
 
 ### Run in Colab (recommended)
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/bnnr-team/bnnr/blob/main/benchmarks/colab_resnet50_cifar100.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/bnnr-team/bnnr/blob/main/benchmarks/colab_imagewoof.ipynb)
 
-Mount Google Drive, run all cells. Everything (metrics, XAI overlays, ZIP backup) lands on your Drive at `MyDrive/bnnr_benchmarks/`. Resume-safe — if the Colab session dies, re-run the full-benchmark cell and completed (condition, seed) pairs are skipped.
+Mount Google Drive, run all cells. Everything (metrics, XAI overlays, ZIP backup) lands on your Drive at `MyDrive/bnnr_benchmarks/`. Resume-safe — if the Colab session dies, re-run the full-benchmark cell and completed (condition, seed) pairs are skipped. The dataset is cached on Drive too, so it isn't re-downloaded after a restart.
 
-ETA: ~2h on T4, ~30 min on A100.
+ETA: **~1.5–2h on a free T4**, ~20 min on A100.
 
 ### Run locally
 
 ```bash
-# Fast sanity check (CPU-friendly, no pretrained download, tiny subset)
-python benchmarks/run_resnet50.py --smoke
+# Fast sanity check (CPU-friendly, tiny subset, img-size 64)
+python benchmarks/run_imagewoof.py --smoke
 
 # Full benchmark — 5 seeds, GPU (this is the publication run)
-bash benchmarks/reproduce_resnet50.sh
+bash benchmarks/reproduce_imagewoof.sh
 # or:
-python benchmarks/run_resnet50.py --seeds 42,43,44,45,46 --device cuda
+python benchmarks/run_imagewoof.py --seeds 42,43,44,45,46 --device cuda
 
 # Write results + XAI overlays into a single directory (e.g. Drive / shared volume)
-python benchmarks/run_resnet50.py --seeds 42,43,44,45,46 --device cuda \
+python benchmarks/run_imagewoof.py --seeds 42,43,44,45,46 --device cuda \
   --drive-base-dir /path/to/output
 
 # Summarize
-python benchmarks/summarize.py --results benchmarks/results_resnet50.json --markdown
+python benchmarks/summarize.py --results benchmarks/results_imagewoof.json --markdown
 ```
 
-`run_resnet50.py` checkpoints `results_resnet50.json` after every (condition, seed) run, so the matrix is resume-safe — a crash or interruption keeps completed runs.
+`run_imagewoof.py` checkpoints `results_imagewoof.json` after every (condition, seed) run, so the matrix is resume-safe — a crash or interruption keeps completed runs.
 
 ### Layout
 
 ```
 benchmarks/
-  run_resnet50.py            # CLI (resume-safe matrix runner)
-  reproduce_resnet50.sh      # one-command full run (5 seeds)
-  results_resnet50.json      # aggregated results (commit after review)
-  runs_resnet50/             # per-run logs + xai/ overlays (gitignored)
+  run_imagewoof.py           # CLI (resume-safe matrix runner)
+  reproduce_imagewoof.sh     # one-command full run (5 seeds)
+  colab_imagewoof.ipynb      # one-click Colab (free T4)
+  results_imagewoof.json     # aggregated results (commit after review)
+  runs_imagewoof/            # per-run logs + xai/ overlays (gitignored)
 ```
 
 ### Protocol caveats (read before quoting numbers)
 
 - **Unequal compute by design.** `bnnr_branch_search` runs a baseline phase plus branch search (more epochs of compute than the fixed-epoch baselines). Compare as *"full BNNR product vs fixed-epoch baselines"*, not equal-budget ablation.
-- **Not an ImageNet-SOTA claim.** This is a CIFAR-100 transfer setup for comparing augmentation *strategies*, not a leaderboard entry.
-- **CIFAR-100 upscaled to 224px** to use the pretrained ResNet50 features. `--img-size` and `--no-pretrained` are available for other regimes.
+- **Not an ImageNet-SOTA claim.** This is a low-data fine-grained transfer setup for comparing augmentation *strategies*, not a leaderboard entry.
+- **Low-data, from-scratch by design.** A small balanced train subset trained from random init is what surfaces augmentation effects; `--train-per-class`, `--pretrained`, `--epochs`, and `--img-size` tune the regime.
 
 ### Results
 
-_Pending a GPU run._ Run `reproduce_resnet50.sh`, review `results_resnet50.json`, then paste the `summarize.py --markdown` table here and into the root `README.md`. Do not hand-write numbers.
+_Pending a GPU run._ Run `reproduce_imagewoof.sh`, review `results_imagewoof.json`, then paste the `summarize.py --markdown` table here and into the root `README.md`. Do not hand-write numbers.

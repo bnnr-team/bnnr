@@ -1,6 +1,8 @@
 runs/
 runs_resnet50/
+runs_imagewoof/
 __pycache__/
 *.pyc
 results.json
 results_resnet50.json
+results_imagewoof.json

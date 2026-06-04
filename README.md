@@ -116,7 +116,7 @@ BNNR uses saliency maps to guide augmentation — not random flips and crops.
 
 Median validation accuracy, 3 seeds (42–44), demo CNN on CIFAR-10. Baselines: 5 epochs fixed; BNNR: full branch-search pipeline (more compute). Not SOTA — illustrative comparison. Details: [`benchmarks/README.md`](benchmarks/README.md) · reproduce: [`benchmarks/run.py`](benchmarks/run.py) → [`benchmarks/summarize.py`](benchmarks/summarize.py).
 
-> A larger **ResNet50 / CIFAR-100** benchmark (5 seeds, RandAugment + TrivialAugment baselines) is in progress, with a one-command reproduce script. See [`benchmarks/README.md`](benchmarks/README.md).
+> A fine-grained **ResNet18 / Imagewoof** benchmark (low-data, from-scratch; 5 seeds, RandAugment + TrivialAugment baselines) is in progress — cheap enough for a free Colab T4, with a one-command reproduce script. See [`benchmarks/README.md`](benchmarks/README.md).
 
 ### Where the model looks (OptiCAM)
 
