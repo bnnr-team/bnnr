@@ -32,11 +32,11 @@ from bnnr.augmentations import BaseAugmentation
 
 _ALBUMENTATIONS_AVAILABLE = False
 try:
-    import albumentations as A  # noqa: N812
+    import albumentations  # noqa: F401 — optional dependency probe
 
     _ALBUMENTATIONS_AVAILABLE = True
 except ImportError:
-    A = None  # type: ignore[assignment]
+    pass
 
 
 def albumentations_available() -> bool:
