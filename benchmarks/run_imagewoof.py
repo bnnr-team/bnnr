@@ -669,7 +669,7 @@ def main() -> None:
         if c not in CONDITIONS:
             parser.error(f"Unknown condition {c!r}. Choose from: {', '.join(CONDITIONS)}")
 
-    print("ResNet18 / Imagewoof augmentation benchmark (low-data, from-scratch)")
+    print(f"{args.arch} / Imagewoof augmentation benchmark (low-data, from-scratch)")
     print(f"  arch={args.arch} pretrained={args.pretrained} img_size={args.img_size}")
     print(f"  train_per_class={args.train_per_class}  seeds={seeds}  conditions={conds}")
     print(f"  epochs={args.epochs}  device={args.device}")
