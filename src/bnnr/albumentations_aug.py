@@ -24,19 +24,15 @@ Example::
 
 from __future__ import annotations
 
+import importlib.util
 from typing import Any
 
 import numpy as np
 
 from bnnr.augmentations import BaseAugmentation
 
-_ALBUMENTATIONS_AVAILABLE = False
-try:
-    import albumentations as A  # noqa: N812
-
-    _ALBUMENTATIONS_AVAILABLE = True
-except ImportError:
-    A = None  # type: ignore[assignment]
+# Optional dependency: detect without importing (avoids a dead probe import).
+_ALBUMENTATIONS_AVAILABLE = importlib.util.find_spec("albumentations") is not None
 
 
 def albumentations_available() -> bool:
