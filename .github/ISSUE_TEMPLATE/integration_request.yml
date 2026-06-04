@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Help us prioritize integrations. We're tracking community demand for HuggingFace Hub, Weights & Biases, Lightning AI, timm, fastai, and others. See the [roadmap](https://github.com/bnnr-team/bnnr/blob/main/plans/ROADMAP-2026.md) for what's already planned.
+        Help us prioritize integrations. We're tracking community demand for HuggingFace Hub, Weights & Biases, Lightning AI, timm, fastai, and others. See the [roadmap](https://github.com/bnnr-team/bnnr/blob/main/docs/roadmap.md) for what's already planned.
   - type: input
     id: target
     attributes:
