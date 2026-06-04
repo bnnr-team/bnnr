@@ -27,7 +27,6 @@ from bnnr.training import loop as _loop
 from bnnr.training import metrics as _metrics
 from bnnr.training import probe as _probe
 from bnnr.training.checkpoint import (  # noqa: F401 — re-exported for backward compat
-    clone_state_dict,
     copy_state_dict_inplace,
 )
 from bnnr.utils import setup_logging
