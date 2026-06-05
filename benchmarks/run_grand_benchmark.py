@@ -636,6 +636,239 @@ def _run_plain_condition(
 
 
 # ---------------------------------------------------------------------------
+# XAI single-augmentation condition (icd_only / aicd_only / icd_aicd_fixed)
+# ---------------------------------------------------------------------------
+
+
+def _run_xai_aug_warmup_condition(
+    *,
+    condition: ConditionSpec,
+    aug_type: str,  # "icd" | "aicd" | "icd_aicd"
+    seed: int,
+    args: argparse.Namespace,
+    output_root: Path,
+    num_classes: int,
+) -> dict[str, Any]:
+    """Single XAI augmentation with warmup — correct equal-compute design.
+
+    Phase 0 (B//(1+N) epochs): train without augmentation → XAI cache from
+    this model. Phase 1 (remaining epochs): continue training with ICD/AICD
+    using cached saliency from the warmup model. Total = B epochs.
+
+    This mirrors what bnnr_xai does internally (baseline phase → XAI-guided
+    augmentation phase) so the comparison is methodologically fair: both use
+    saliency from a model trained for B//(1+N) epochs, not random weights.
+    """
+    import json as _json
+
+    from bnnr.augmentations import ChurchNoise  # noqa: F401 (import check)
+    from bnnr.icd import AICD, ICD
+    from bnnr.utils import set_seed
+    from bnnr.xai_cache import XAICache
+
+    from dataset_loaders import get_loaders
+
+    run_dir = _make_run_dir(output_root, condition.id, seed)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    budget = args.budget
+    warmup_epochs = budget // (1 + N_CANDIDATES)
+    aug_epochs = budget - warmup_epochs  # remaining budget for augmented training
+    if warmup_epochs < 1:
+        warmup_epochs = 1
+    if aug_epochs < 1:
+        aug_epochs = 1
+
+    cfg_warmup = _base_config(epochs=warmup_epochs, device=args.device)
+    cfg_warmup = _run_config(cfg_warmup, seed=seed, device=args.device,
+                             run_dir=run_dir, xai=False)
+
+    set_seed(seed)
+    num_workers = 0 if args.smoke else 2
+    train_loader, _sel_loader, held_out_test_loader = get_loaders(
+        args.dataset,
+        img_size=args.img_size,
+        batch_size=args.batch_size,
+        seed=seed,
+        policy="base",
+        n_per_class_train=args.train_per_class,
+        data_dir=args.data_dir,
+        num_workers=num_workers,
+    )
+
+    adapter = _build_adapter(
+        arch=args.arch,
+        num_classes=num_classes,
+        pretrained=args.pretrained,
+        lr=args.lr,
+        device=cfg_warmup.device,
+        epochs=warmup_epochs,
+    )
+
+    header = (
+        f"\n{'='*60}\n"
+        f"  {condition.id.upper()} (grand benchmark, warmup+aug)\n"
+        f"  dataset={args.dataset}  aug_type={aug_type}\n"
+        f"  warmup_epochs={warmup_epochs}  aug_epochs={aug_epochs}\n"
+        f"  total_gpu_epochs={warmup_epochs + aug_epochs}\n"
+        f"  seed={seed}  device={cfg_warmup.device}\n"
+        f"{'='*60}"
+    )
+    print(header, flush=True)
+
+    t0 = time.perf_counter()
+
+    # ---- Phase 0: warmup (no augmentation) ----
+    print(f"  [Phase 0/warmup] {warmup_epochs} epochs...", flush=True)
+    warmup_val, warmup_best_epoch, _ = _run_epochs_on_loader(
+        adapter=adapter,
+        train_loader=train_loader,
+        eval_loader=held_out_test_loader,
+        augmentations=[],
+        epochs=warmup_epochs,
+        selection_metric="accuracy",
+        log_prefix="[warmup] ",
+    )
+    warmup_score = float(warmup_val.get("accuracy", 0.0))
+    warmup_state = copy.deepcopy(adapter.state_dict())
+    print(f"  [Phase 0] warmup held_out accuracy={warmup_score:.4f}", flush=True)
+
+    # ---- Pre-compute XAI cache from warmup model ----
+    xai_cache_dir = run_dir / "xai_cache"
+    xai_cache = XAICache(xai_cache_dir)
+    if not args.no_xai:
+        print("  [XAI cache] Pre-computing saliency maps from warmup model...", flush=True)
+        n_cached = xai_cache.precompute_cache(
+            adapter.get_model(),
+            train_loader,
+            adapter.get_target_layers(),
+            method="opticam",
+            show_progress=True,
+        )
+        print(f"  [XAI cache] {n_cached} maps cached", flush=True)
+
+    # ---- Phase 1: augmented training, continuing from warmup weights ----
+    aug_adapter = _build_adapter(
+        arch=args.arch,
+        num_classes=num_classes,
+        pretrained=args.pretrained,
+        lr=args.lr,
+        device=cfg_warmup.device,
+        epochs=aug_epochs,
+    )
+    aug_adapter.model.load_state_dict(warmup_state["model"])
+
+    _model = aug_adapter.get_model()
+    _layers = aug_adapter.get_target_layers()
+    _cache = xai_cache if not args.no_xai else None
+
+    if aug_type == "icd":
+        augmentations = [ICD(model=_model, target_layers=_layers,
+                             threshold_percentile=75.0, probability=0.5,
+                             random_state=seed, cache=_cache)]
+    elif aug_type == "aicd":
+        augmentations = [AICD(model=_model, target_layers=_layers,
+                              threshold_percentile=75.0, probability=0.5,
+                              random_state=seed + 1, cache=_cache)]
+    elif aug_type == "icd_aicd":
+        augmentations = [
+            ICD(model=_model, target_layers=_layers,
+                threshold_percentile=75.0, probability=0.5,
+                random_state=seed, cache=_cache),
+            AICD(model=_model, target_layers=_layers,
+                 threshold_percentile=75.0, probability=0.5,
+                 random_state=seed + 1, cache=_cache),
+        ]
+    else:
+        raise ValueError(f"Unknown aug_type {aug_type!r}")
+
+    print(f"  [Phase 1/aug] {aug_epochs} epochs with {aug_type}...", flush=True)
+    best_val, best_epoch, _ = _run_epochs_on_loader(
+        adapter=aug_adapter,
+        train_loader=train_loader,
+        eval_loader=held_out_test_loader,
+        augmentations=augmentations,
+        epochs=aug_epochs,
+        selection_metric="accuracy",
+        log_prefix=f"[{aug_type}] ",
+    )
+    elapsed_s = time.perf_counter() - t0
+
+    total_gpu_epochs = warmup_epochs + aug_epochs
+    print(
+        f"    {condition.id} seed={seed}: val_metric(held_out)="
+        f"{best_val.get('accuracy', 0.0):.4f}",
+        flush=True,
+    )
+
+    if not args.no_xai:
+        xai_meta = export_attention_maps(
+            aug_adapter,
+            held_out_test_loader,
+            sample_indices=_XAI_SAMPLE_INDICES,
+            output_dir=run_dir / "xai",
+            xai_method="opticam",
+        )
+    else:
+        xai_meta = {"xai_dir": None, "overlay_paths": [], "aggregate_stats": {}}
+
+    extended = _compute_extended_metrics(
+        aug_adapter, held_out_test_loader, num_classes, cfg_warmup.device, args.no_xai
+    )
+
+    summary = {
+        "condition": condition.id,
+        "aug_type": aug_type,
+        "warmup_epochs": warmup_epochs,
+        "aug_epochs": aug_epochs,
+        "warmup_score": warmup_score,
+        "held_out_test_metric": float(best_val.get("accuracy", 0.0)),
+        "total_gpu_epochs": total_gpu_epochs,
+        "xai": xai_meta,
+    }
+    summary_path = run_dir / "run_summary.json"
+    summary_path.write_text(_json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+
+    extra: dict[str, Any] = {
+        "total_gpu_epochs": total_gpu_epochs,
+        "epochs_per_phase": warmup_epochs,
+        "selection_mode": "warmup_fixed",
+        "selected_candidate": aug_type,
+        "selection_val_metric": warmup_score,
+        "held_out_test_metric": float(best_val.get("accuracy", 0.0)),
+        "warmup_epochs": warmup_epochs,
+        "aug_epochs": aug_epochs,
+        "git_head": git_head(),
+        "hardware": torch_info(),
+        **extended,
+    }
+
+    cfg_report = _base_config(epochs=aug_epochs, device=args.device)
+    cfg_report = _run_config(cfg_report, seed=seed, device=args.device,
+                             run_dir=run_dir, xai=False)
+    entry = _result_entry(
+        condition=condition,
+        cfg=cfg_report,
+        best_val=best_val,
+        best_epoch=best_epoch,
+        elapsed_s=elapsed_s,
+        run_dir=run_dir,
+        report_path=summary_path,
+        best_path=f"warmup+{aug_type}",
+        xai_meta=xai_meta,
+        extra=extra,
+    )
+    return _stamp(
+        entry,
+        dataset=args.dataset,
+        arch=args.arch,
+        img_size=args.img_size,
+        pretrained=args.pretrained,
+        regime=args.regime,
+    )
+
+
+# ---------------------------------------------------------------------------
 # XAI cache pre-computation helper
 # ---------------------------------------------------------------------------
 
@@ -975,51 +1208,35 @@ def run_condition(
             output_root=output_root, selection_mode="random", num_classes=num_classes,
         )
 
+    # ICD/AICD conditions use warmup+aug design so saliency comes from a
+    # trained (not random-weight) model — methodologically equivalent to
+    # bnnr_xai's baseline phase.
+    if condition_id == "icd_only":
+        return _run_xai_aug_warmup_condition(
+            condition=spec, aug_type="icd", seed=seed, args=args,
+            output_root=output_root, num_classes=num_classes,
+        )
+    if condition_id == "aicd_only":
+        return _run_xai_aug_warmup_condition(
+            condition=spec, aug_type="aicd", seed=seed, args=args,
+            output_root=output_root, num_classes=num_classes,
+        )
+    if condition_id == "icd_aicd_fixed":
+        return _run_xai_aug_warmup_condition(
+            condition=spec, aug_type="icd_aicd", seed=seed, args=args,
+            output_root=output_root, num_classes=num_classes,
+        )
+
     policy = _POLICY_BY_CONDITION[condition_id]
 
-    # Build extra batch augmentations
+    # ChurchNoise does not need XAI — plain condition
     extra_batch_augmentations: list[Any] = []
-    if condition_id in ("churchnoise_only", "icd_only", "aicd_only", "icd_aicd_fixed"):
+    if condition_id == "churchnoise_only":
         from bnnr.augmentations import ChurchNoise
-        from bnnr.icd import AICD, ICD
-
-        # We need a temporary adapter to get model/layers for ICD/AICD
-        # The actual model weights will be built fresh in _run_plain_condition;
-        # here we just build placeholders for the augmentation constructors.
-        # _run_plain_condition will handle cache injection if needed.
-        tmp_adapter = _build_adapter(
-            arch=args.arch,
-            num_classes=num_classes,
-            pretrained=args.pretrained,
-            lr=args.lr,
-            device=args.device,
-            epochs=args.budget,
-        )
-        _model = tmp_adapter.get_model()
-        _layers = tmp_adapter.get_target_layers()
-
-        if condition_id == "churchnoise_only":
-            extra_batch_augmentations = [
-                ChurchNoise(probability=0.5, intensity=0.5,
-                            noise_strength_range=(3.0, 8.0), random_state=seed)
-            ]
-        elif condition_id == "icd_only":
-            extra_batch_augmentations = [
-                ICD(model=_model, target_layers=_layers,
-                    threshold_percentile=75.0, probability=0.5, random_state=seed)
-            ]
-        elif condition_id == "aicd_only":
-            extra_batch_augmentations = [
-                AICD(model=_model, target_layers=_layers,
-                     threshold_percentile=75.0, probability=0.5, random_state=seed + 1)
-            ]
-        elif condition_id == "icd_aicd_fixed":
-            extra_batch_augmentations = [
-                ICD(model=_model, target_layers=_layers,
-                    threshold_percentile=75.0, probability=0.5, random_state=seed),
-                AICD(model=_model, target_layers=_layers,
-                     threshold_percentile=75.0, probability=0.5, random_state=seed + 1),
-            ]
+        extra_batch_augmentations = [
+            ChurchNoise(probability=0.5, intensity=0.5,
+                        noise_strength_range=(3.0, 8.0), random_state=seed)
+        ]
 
     return _run_plain_condition(
         condition=spec,
