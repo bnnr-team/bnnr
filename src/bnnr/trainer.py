@@ -27,7 +27,6 @@ from bnnr.training import loop as _loop
 from bnnr.training import metrics as _metrics
 from bnnr.training import probe as _probe
 from bnnr.training.checkpoint import (  # noqa: F401 — re-exported for backward compat
-    _is_ultralytics_tasks_backbone,
     _RuntimeState,
     _TrainerState,
     clone_state_dict,
