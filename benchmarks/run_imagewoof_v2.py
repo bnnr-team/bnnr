@@ -712,22 +712,29 @@ def _run_bnnr_equal_compute(
     baseline_state = copy.deepcopy(baseline_adapter.state_dict())
     print(f"  [Phase 0] baseline selection_val accuracy={baseline_score:.4f}", flush=True)
 
-    # ---- Build candidate augmentations ----
-    # Candidates share the model reference (target_layers point into the live model)
-    # so we must rebuild them for each phase. We just pass the baseline adapter's model.
-    all_candidates_raw = build_bnnr_candidate_augmentations(
+    # ---- Pre-compute XAI cache (one-shot, shared across all candidate phases) ----
+    # Without this, ICD/AICD recompute saliency maps online for every training
+    # batch — ~100x slower than necessary. Cache once from the baseline model.
+    from bnnr.xai_cache import XAICache
+
+    xai_cache_dir = run_dir / "xai_cache"
+    xai_cache = XAICache(xai_cache_dir)
+    print("  [XAI cache] Pre-computing saliency maps...", flush=True)
+    n_cached = xai_cache.precompute_cache(
         baseline_adapter.get_model(),
+        train_loader,
         baseline_adapter.get_target_layers(),
-        seed,
+        method="opticam",
+        show_progress=True,
     )
-    # all_candidates_raw = [ICD, AICD, ChurchNoise] — len = N_CANDIDATES
+    print(f"  [XAI cache] {n_cached} maps cached to {xai_cache_dir}", flush=True)
 
     # ---- Phases 1..N_CANDIDATES: evaluate each candidate ----
     candidate_scores: list[float] = []
     candidate_states: list[dict[str, Any]] = []
     candidate_val_metrics: list[dict[str, float]] = []
 
-    for i, cand_aug in enumerate(all_candidates_raw):
+    for i in range(N_CANDIDATES):
         cand_name = _CANDIDATE_NAMES[i]
         print(f"  [Phase {i+1}/{N_CANDIDATES} — {cand_name}] {epochs_per_phase} epochs...", flush=True)
 
@@ -742,13 +749,24 @@ def _run_bnnr_equal_compute(
         )
         cand_adapter.load_state_dict(baseline_state)
 
-        # Rebuild augmentation with the fresh model so ICD/AICD saliency refers
-        # to the correct model instance
-        phase_candidates = build_bnnr_candidate_augmentations(
-            cand_adapter.get_model(),
-            cand_adapter.get_target_layers(),
-            seed,
-        )
+        # Build augmentation with the fresh model + shared XAI cache.
+        # Passing xai_cache to ICD/AICD avoids recomputing saliency maps
+        # online for every training batch (would be ~100x slower otherwise).
+        from bnnr.augmentations import ChurchNoise
+        from bnnr.icd import AICD, ICD
+
+        _cand_model = cand_adapter.get_model()
+        _cand_layers = cand_adapter.get_target_layers()
+        phase_candidates = [
+            ICD(model=_cand_model, target_layers=_cand_layers,
+                threshold_percentile=75.0, probability=0.5,
+                random_state=seed, cache=xai_cache),
+            AICD(model=_cand_model, target_layers=_cand_layers,
+                 threshold_percentile=75.0, probability=0.5,
+                 random_state=seed + 1, cache=xai_cache),
+            ChurchNoise(probability=0.5, intensity=0.5,
+                        noise_strength_range=(3.0, 8.0), random_state=seed + 2),
+        ]
         aug = phase_candidates[i]
 
         val_metrics, _, state = _run_epochs_on_loader(
