@@ -82,7 +82,9 @@ NUM_CLASSES = 10
 _IMAGEWOOF_URL = "https://s3.amazonaws.com/fast-ai-imageclas/imagewoof2-160.tgz"
 _IMAGEWOOF_DIRNAME = "imagewoof2-160"
 
-_XAI_VAL_INDICES = [0, 400, 800, 1200, 1600, 2000]
+# Indices into held_out_test (a ~50% split of Imagewoof val, ~1964 items).
+# Must be < min held_out size. Imagewoof val has ~3929 images; 50% = ~1964.
+_XAI_VAL_INDICES = [0, 300, 600, 900, 1200, 1500]
 
 # Number of BNNR candidate augmentations (ICD, AICD, ChurchNoise)
 N_CANDIDATES = 3
@@ -747,7 +749,13 @@ def _run_bnnr_equal_compute(
             device=cfg.device,
             epochs=epochs_per_phase,
         )
-        cand_adapter.load_state_dict(baseline_state)
+        # Restore only model weights from baseline — not optimizer or scheduler.
+        # Restoring the full state would leave CosineAnnealingLR at
+        # last_epoch = epochs_per_phase (LR ≈ eta_min), making all candidate
+        # phases train at near-zero LR and score identically (meaningless
+        # selection). Each candidate gets a fresh optimizer + fresh scheduler
+        # so it starts at LR = lr_max, comparable to baseline Phase 0.
+        cand_adapter.model.load_state_dict(baseline_state["model"])
 
         # Build augmentation with the fresh model + shared XAI cache.
         # Passing xai_cache to ICD/AICD avoids recomputing saliency maps
