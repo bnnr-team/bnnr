@@ -174,3 +174,87 @@ benchmarks/
 ### Results
 
 _Pending a GPU run._ Run `reproduce_imagewoof.sh`, review `results_imagewoof.json`, then paste the `summarize.py --markdown` table here and into the root `README.md`. Do not hand-write numbers.
+
+---
+
+## Benchmark v2 (paper-quality)
+
+An upgraded version of the Imagewoof benchmark that fixes four protocol issues that made v1 results difficult to publish:
+
+| Issue | v1 | v2 fix |
+|-------|----|----|
+| Unequal compute | BNNR used ~6× more GPU-epochs | Equal total budget B for all conditions |
+| No XAI ablation | No way to isolate value of XAI guidance | `bnnr_random`: same pool, random selection |
+| Selection leakage | Same val set used for selection and final metric | 50/50 held-out split per class (deterministic) |
+| Too few seeds | 5 seeds, t-test only | 10 seeds, Wilcoxon + bootstrap CI + Holm correction |
+
+### Conditions (6)
+
+| Condition | What it is |
+|-----------|------------|
+| `no_aug` | RandomResizedCrop + flip, B epochs |
+| `randaugment` | + torchvision RandAugment, B epochs |
+| `trivialaugment` | + torchvision TrivialAugmentWide, B epochs |
+| `churchnoise_only` | ChurchNoise as always-on batch aug, B epochs (non-XAI ablation) |
+| `bnnr_xai` | BNNR branch search, XAI-guided selection, equal compute B total |
+| `bnnr_random` | Same as `bnnr_xai` but candidate chosen uniformly at random (seed-controlled) |
+
+### Equal-compute design
+
+Budget B epochs (default 40). With 3 candidates (ICD, AICD, ChurchNoise):
+
+- Baselines: B epochs straight
+- BNNR: B//(1+3) = 10 epochs × 4 phases = 40 total GPU-epochs
+
+The `bnnr_xai` vs `bnnr_random` comparison directly isolates the contribution of XAI-guided selection, with identical compute and augmentation pool.
+
+### Held-out test split
+
+The Imagewoof val set is split **50/50 per class** (deterministic: indices sorted by class, first half → `selection_val`, second half → `held_out_test`). BNNR candidate selection uses `selection_val` only. All reported final metrics are on `held_out_test`.
+
+### Statistics
+
+`summarize_v2.py` computes:
+- **Wilcoxon signed-rank test** (paired per seed, two-sided) — `scipy` if available, exact otherwise
+- **Bootstrap 95% CI** for median difference (10 000 resamplings, numpy-only)
+- **Effect size** r = rank-biserial correlation = 1 − 2W / (n(n+1))
+- **Holm-Bonferroni correction** over 4 simultaneous tests (bnnr_xai vs {no_aug, randaugment, trivialaugment, bnnr_random})
+
+### Run
+
+```bash
+# Smoke test (CPU-friendly, 2 seeds, 5/class, budget=4 → 1 epoch/phase)
+python benchmarks/run_imagewoof_v2.py --smoke
+
+# Full paper-quality run (10 seeds, GPU, ~4h on free T4)
+python benchmarks/run_imagewoof_v2.py \
+    --seeds 42,43,44,45,46,47,48,49,50,51 --device cuda
+
+# Write everything into a single Drive directory (Colab)
+python benchmarks/run_imagewoof_v2.py \
+    --seeds 42,43,44,45,46,47,48,49,50,51 --device cuda \
+    --drive-base-dir /content/drive/MyDrive/bnnr_benchmarks_v2
+
+# Single condition / single seed
+python benchmarks/run_imagewoof_v2.py --conditions bnnr_xai --seeds 42 --device cuda
+
+# Summarize
+python benchmarks/summarize_v2.py \
+    --results benchmarks/results_imagewoof_v2.json --markdown
+```
+
+Resume-safe: `results_imagewoof_v2.json` is checkpointed after every `(condition, seed, regime)` run.
+
+### Layout
+
+```
+benchmarks/
+  run_imagewoof_v2.py          # CLI (resume-safe matrix runner, equal-compute)
+  summarize_v2.py              # stats: Wilcoxon, bootstrap CI, Holm correction
+  results_imagewoof_v2.json    # aggregated results (commit after review)
+  runs_imagewoof_v2/           # per-run logs + xai/ overlays (gitignored)
+```
+
+### Results
+
+_Pending a GPU run._ Run `run_imagewoof_v2.py`, then paste the `summarize_v2.py --markdown` table here. Do not hand-write numbers.
