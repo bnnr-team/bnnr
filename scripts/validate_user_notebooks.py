@@ -55,7 +55,7 @@ def _validate_notebook(path: Path) -> list[str]:
     if data.get("nbformat") != 4:
         errors.append(f"{path}: expected nbformat 4, got {data.get('nbformat')!r}")
     nb_minor = data.get("nbformat_minor")
-    if not isinstance(nb_minor, int):
+    if type(nb_minor) is not int:
         errors.append(f"{path}: expected integer nbformat_minor, got {nb_minor!r}")
 
     meta = data.get("metadata") or {}
@@ -64,8 +64,11 @@ def _validate_notebook(path: Path) -> list[str]:
         errors.append(f"{path}: kernelspec.name should be 'python3', got {ks.get('name')!r}")
 
     cells = data.get("cells")
-    if not isinstance(cells, list) or not cells:
+    if not isinstance(cells, list):
         errors.append(f"{path}: no cells array")
+        return errors
+    if not cells:
+        errors.append(f"{path}: notebook has no cells")
         return errors
 
     for idx, cell in enumerate(cells):

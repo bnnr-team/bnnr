@@ -56,7 +56,7 @@ class BNNREvent:
 
 class EventSink(Protocol):
     def emit(self, event_type: EventType, payload: dict[str, Any], *, force: bool = False) -> None:
-        ...
+        pass
 
     def close(self) -> None:
         pass
