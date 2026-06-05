@@ -31,6 +31,17 @@ Want to generate one yourself in ~3 minutes, no local setup? Open the analyze qu
 
 It produces a portable HTML failure + XAI report and shows how to point `analyze` at your own checkpoint.
 
+**Already have a torchvision model (e.g. ResNet-18)?** Run analyze locally with the Python API — no CLI required:
+
+```bash
+git clone https://github.com/bnnr-team/bnnr.git && cd bnnr
+pip install bnnr
+PYTHONPATH=src python3 examples/classification/torchvision_analyze_cifar10.py --quick
+# opens torchvision_analyze_out/report.html
+```
+
+Pass `--checkpoint path/to/weights.pt` to skip training and run directly on your own checkpoint. Full Python API guide: [analyze.md](analyze.md).
+
 After you install BNNR (below), run `python -m bnnr demo` for a quick training showcase, then see [analyze.md](analyze.md) for `bnnr analyze` on your own checkpoint.
 
 ## 2) Install BNNR
@@ -278,6 +289,7 @@ See [troubleshooting.md](troubleshooting.md) section 13 for details on checkpoin
 
 ## 15) Next pages
 
+- `analyze.md` — full `bnnr analyze` guide (Python API, custom datasets, torchvision models, multi-label)
 - `dashboard.md`
 - `detection.md`
 - `examples.md`
