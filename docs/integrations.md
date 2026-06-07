@@ -40,8 +40,8 @@ BNNR is **MIT**. The [Ultralytics](https://github.com/ultralytics/ultralytics) r
 
 | You use | Cite |
 |---------|------|
-| BNNR (any feature) | [BNNR](citation.md#bnnr) |
-| ICD/AICD with `gradcam` saliency | [BNNR](citation.md#bnnr) and [pytorch-grad-cam](citation.md#bnnr-with-pytorch-grad-cam-icd-gradcam-saliency) |
-| `UltralyticsDetectionAdapter` | [BNNR](citation.md#bnnr) and [Ultralytics](citation.md#bnnr-with-ultralytics-yolo) per their license |
+| BNNR (any feature) | [BNNR software](citation.md#bnnr-software) |
+| ICD/AICD with `gradcam` saliency | [ICD/AICD method paper](citation.md#icd-aicd-method-paper), [BNNR software](citation.md#bnnr-software), and [pytorch-grad-cam](citation.md#bnnr-with-pytorch-grad-cam-icd-gradcam-saliency) |
+| `UltralyticsDetectionAdapter` | [BNNR software](citation.md#bnnr-software) and [Ultralytics](citation.md#bnnr-with-ultralytics-yolo) per their license |
 
 BibTeX and plain-text formats: [citation.md](citation.md). GitHub also exposes this via `CITATION.cff` at the repository root.
