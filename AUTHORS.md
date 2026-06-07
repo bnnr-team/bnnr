@@ -20,4 +20,4 @@ Approximate share of intellectual contribution to the project (internal estimate
 | Dominika Zydorczyk | 5% |
 | Zuzanna Saczuk | 5% |
 
-Formal citations ([`CITATION.cff`](CITATION.cff), [BibTeX in `docs/citation.md`](docs/citation.md)) list **all four authors equally**. That is standard for software papers and repository metadata; percentage splits belong here or in grant/team docs, not in BibTeX.
+Formal software citations ([`CITATION.cff`](CITATION.cff), [BibTeX in `docs/citation.md`](docs/citation.md#bnnr-software)) list **all four authors equally** and use the BNNR software DOI (`10.5281/zenodo.20581372`). The ICD/AICD method paper ([`bnnr-research`](https://github.com/bnnr-team/bnnr-research), DOI `10.5281/zenodo.20581077`) is authored by Mateusz Walo only. Percentage splits belong here or in grant/team docs, not in BibTeX.

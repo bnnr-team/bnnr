@@ -22,4 +22,4 @@ PYTHONPATH=src:examples/integrations python examples/integrations/ultralytics_yo
 
 ## Citation
 
-If you use these examples in a paper or upstream docs, cite BNNR ([BibTeX](../../docs/citation.md)). With grad-cam saliency or Ultralytics, cite those projects as well ([details](../../docs/citation.md)).
+If you use ICD/AICD examples in a paper or upstream docs, cite the [ICD/AICD method paper](https://doi.org/10.5281/zenodo.20581077) and [BNNR software](../../docs/citation.md#bnnr-software). With grad-cam saliency or Ultralytics, cite those projects as well ([details](../../docs/citation.md)).

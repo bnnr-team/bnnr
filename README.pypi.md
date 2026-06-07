@@ -202,7 +202,10 @@ python3 -m bnnr dashboard export --run-dir reports/run_YYYYMMDD_HHMMSS --out exp
 
 ## Citation
 
-If you use BNNR in academic work, cite the repository: [docs/citation.md](https://github.com/bnnr-team/bnnr/blob/main/docs/citation.md) (BibTeX). GitHub: **Cite this repository** via `CITATION.cff`.
+- **BNNR software**: [software entry](https://github.com/bnnr-team/bnnr/blob/main/docs/citation.md#bnnr-software) — DOI [10.5281/zenodo.20581372](https://doi.org/10.5281/zenodo.20581372)
+- **ICD or AICD**: [method paper](https://github.com/bnnr-team/bnnr/blob/main/docs/citation.md#icd-aicd-method-paper) — DOI [10.5281/zenodo.20581077](https://doi.org/10.5281/zenodo.20581077)
+
+Full BibTeX: [docs/citation.md](https://github.com/bnnr-team/bnnr/blob/main/docs/citation.md). GitHub: **Cite this repository** via `CITATION.cff`.
 
 ---
 
