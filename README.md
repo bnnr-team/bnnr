@@ -13,6 +13,7 @@
   <a href="https://pepy.tech/projects/bnnr"><img src="https://static.pepy.tech/personalized-badge/bnnr?period=total&amp;units=INTERNATIONAL_SYSTEM&amp;left_color=BLACK&amp;right_color=GREEN&amp;left_text=downloads" alt="PyPI downloads"></a>
   <a href="https://github.com/bnnr-team/bnnr/blob/main/LICENSE"><img src="https://img.shields.io/github/license/bnnr-team/bnnr?style=flat-square" alt="License"></a>
   <a href="https://github.com/bnnr-team/bnnr/actions/workflows/ci.yml"><img src="https://github.com/bnnr-team/bnnr/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://doi.org/10.5281/zenodo.20581372"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.20581372.svg" alt="DOI"></a>
 </p>
 
 <p align="center">
@@ -247,7 +248,10 @@ python3 -m bnnr dashboard export --run-dir reports/run_YYYYMMDD_HHMMSS --out exp
 
 ## Citation
 
-If you use BNNR in academic work or publish an integration that builds on it, cite the repository (all authors: Walo, Morzhak, Zydorczyk, Saczuk). BibTeX: [docs/citation.md](docs/citation.md). Authors and roles: [AUTHORS.md](AUTHORS.md). GitHub: **Cite this repository** (`CITATION.cff`).
+- **BNNR software** (any feature): cite the [software entry](docs/citation.md#bnnr-software) (DOI [10.5281/zenodo.20581372](https://doi.org/10.5281/zenodo.20581372); authors: Walo, Morzhak, Zydorczyk, Saczuk).
+- **ICD or AICD**: also cite the [method paper](docs/citation.md#icd-aicd-method-paper) (DOI [10.5281/zenodo.20581077](https://doi.org/10.5281/zenodo.20581077)).
+
+Full BibTeX: [docs/citation.md](docs/citation.md). Authors and roles: [AUTHORS.md](AUTHORS.md). GitHub: **Cite this repository** (`CITATION.cff`).
 
 ---
 

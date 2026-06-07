@@ -97,6 +97,8 @@ Detection augmentations are bbox-aware — they transform both images and boundi
 
 Both accept `threshold_percentile`, `tile_size`, `fill_strategy`, and `probability`.
 
+Method description and citation: [ICD/AICD method paper](citation.md#icd-aicd-method-paper) (DOI [10.5281/zenodo.20581077](https://doi.org/10.5281/zenodo.20581077)). Plug-in guide: [plugin_icd.md](plugin_icd.md).
+
 ### Detection presets
 
 ```python

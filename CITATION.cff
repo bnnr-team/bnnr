@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 title: "BNNR (Bulletproof Neural Network Recipe)"
-message: "If you use this software, please cite it as below."
+message: "If you use the BNNR software library, cite the software entry below. If you use ICD or AICD, also cite the method paper — see docs/citation.md."
 type: software
 authors:
   - family-names: Walo
@@ -14,8 +14,9 @@ authors:
 repository-code: "https://github.com/bnnr-team/bnnr"
 url: "https://github.com/bnnr-team/bnnr"
 license: MIT
-version: 0.4.11
-date-released: 2026-05-29
+version: 0.4.12
+date-released: 2026-06-07
+doi: 10.5281/zenodo.20581372
 
 preferred-citation:
   type: software
@@ -31,4 +32,15 @@ preferred-citation:
   title: "BNNR (Bulletproof Neural Network Recipe)"
   year: 2026
   url: "https://github.com/bnnr-team/bnnr"
-  version: 0.4.11
+  version: 0.4.12
+  doi: 10.5281/zenodo.20581372
+
+references:
+  - type: article
+    authors:
+      - family-names: Walo
+        given-names: Mateusz
+    title: "Intelligent Coarse Dropout and Anti-ICD: Saliency-Guided Masking Augmentation for Visual Classifiers"
+    year: 2026
+    doi: 10.5281/zenodo.20581077
+    url: "https://doi.org/10.5281/zenodo.20581077"

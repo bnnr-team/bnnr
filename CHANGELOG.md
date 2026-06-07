@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.4.12] — 2026-06-07
+
+### Added
+
+- `examples/integrations/gradcam_to_saliency_augmentation.ipynb` — tutorial from a Grad-CAM heatmap to the ICD/AICD saliency-guided augmentations.
+- `docs/getting_started.md`: torchvision analyze golden path promoted with a copy-paste run block.
+
+### Changed
+
+- Benchmark suite: ResNet18 / Imagewoof low-data, from-scratch harness replaces the ResNet50 / CIFAR-100 setup; RandAugment and TrivialAugment baselines.
+
 ## [0.4.11] — 2026-05-30
 
 ### Added
