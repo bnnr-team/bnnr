@@ -9,7 +9,7 @@ Run:
 Quick:
     PYTHONPATH=src python examples/classification/icd_plugin_minimal.py --epochs 1 --device cpu
 
-Citation: docs/citation.md in the bnnr repo (BNNR + pytorch-grad-cam when using gradcam).
+Citation: ICD/AICD paper https://doi.org/10.5281/zenodo.20581077 + BNNR software + pytorch-grad-cam — see docs/citation.md.
 """
 
 from __future__ import annotations

@@ -10,7 +10,7 @@ Outputs:
     gradcam_icd_out/gradcam_overlay.png
     gradcam_icd_out/icd_augmented.png
 
-Citation: cite BNNR and pytorch-grad-cam — see docs/citation.md in the bnnr repo.
+Citation: ICD/AICD paper https://doi.org/10.5281/zenodo.20581077 + BNNR software + pytorch-grad-cam — see docs/citation.md.
 """
 
 from __future__ import annotations

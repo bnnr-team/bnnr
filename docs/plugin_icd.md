@@ -1,6 +1,6 @@
 # ICD plug-in — saliency-guided augmentation in your own training loop
 
-Use **ICD** (Intelligence Coarse Dropout) and **AICD** (Anti-ICD) inside a standard PyTorch loop — without `BNNRTrainer`, branch search, or the full BNNR dashboard.
+Use **ICD** (Intelligent Coarse Dropout) and **AICD** (Anti-ICD) inside a standard PyTorch loop — without `BNNRTrainer`, branch search, or the full BNNR dashboard.
 
 ## When to use this
 
@@ -67,7 +67,19 @@ BNNR uses [pytorch-grad-cam](https://github.com/jacobgil/pytorch-grad-cam) for s
 
 ## Citation
 
-If you use ICD/AICD from BNNR in research, cite **BNNR** and **pytorch-grad-cam** (saliency). Full BibTeX blocks: [citation.md](citation.md).
+If you use ICD/AICD from BNNR in research, cite the **method paper**, **BNNR software**, and **pytorch-grad-cam** (saliency). Full BibTeX blocks: [citation.md](citation.md).
+
+```bibtex
+@article{walo2026icd,
+  author  = {Walo, Mateusz},
+  title   = {Intelligent Coarse Dropout and Anti-ICD: Saliency-Guided Masking Augmentation for Visual Classifiers},
+  year    = {2026},
+  doi     = {10.5281/zenodo.20581077},
+  url     = {https://doi.org/10.5281/zenodo.20581077},
+  note    = {Preprint},
+  publisher = {Zenodo}
+}
+```
 
 ```bibtex
 @software{walo2026bnnr,
@@ -75,7 +87,8 @@ If you use ICD/AICD from BNNR in research, cite **BNNR** and **pytorch-grad-cam*
   title = {{BNNR}: Bulletproof Neural Network Recipe},
   year = {2026},
   url = {https://github.com/bnnr-team/bnnr},
-  version = {0.4.11},
+  version = {0.4.12},
+  doi = {10.5281/zenodo.20581372},
   license = {MIT}
 }
 ```
