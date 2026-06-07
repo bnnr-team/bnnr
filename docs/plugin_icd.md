@@ -1,6 +1,6 @@
 # ICD plug-in — saliency-guided augmentation in your own training loop
 
-Use **ICD** (Intelligence Coarse Dropout) and **AICD** (Anti-ICD) inside a standard PyTorch loop — without `BNNRTrainer`, branch search, or the full BNNR dashboard.
+Use **ICD** (Intelligent Coarse Dropout) and **AICD** (Anti-ICD) inside a standard PyTorch loop — without `BNNRTrainer`, branch search, or the full BNNR dashboard.
 
 ## When to use this
 
