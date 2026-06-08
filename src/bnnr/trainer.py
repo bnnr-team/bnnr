@@ -164,7 +164,7 @@ class BNNRTrainer:
         Pause.  This method is called at epoch boundaries so training
         can be suspended without altering the core training logic.
         """
-        from bnnr.dashboard.backend import PAUSE_SIGNAL_FILENAME
+        from bnnr.dashboard.constants import PAUSE_SIGNAL_FILENAME
 
         pause_file = self.reporter.run_dir / PAUSE_SIGNAL_FILENAME
         if not pause_file.exists():
