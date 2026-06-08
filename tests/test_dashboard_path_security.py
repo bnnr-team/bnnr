@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 
 import pytest
-from fastapi import HTTPException
 
-from bnnr.dashboard.backend import _resolve_run_dir, _safe_artifact_path
-from bnnr.dashboard.exporter import export_dashboard_snapshot
-from bnnr.events import load_events
+pytest.importorskip("fastapi")
+
+from fastapi import HTTPException  # noqa: E402
+
+from bnnr.dashboard.backend import _resolve_run_dir, _safe_artifact_path  # noqa: E402
+from bnnr.dashboard.exporter import export_dashboard_snapshot  # noqa: E402
+from bnnr.events import load_events  # noqa: E402
 from bnnr.path_security import child_path, validate_run_id
 
 
