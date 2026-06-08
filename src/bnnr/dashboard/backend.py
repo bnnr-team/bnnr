@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel as _PydanticBaseModel
 
+from bnnr.dashboard.constants import PAUSE_SIGNAL_FILENAME
 from bnnr.dashboard.exporter import export_dashboard_snapshot
 from bnnr.events import IncrementalReplayState, load_events, load_events_from_offset
 from bnnr.path_security import child_path, validate_run_id
@@ -44,9 +45,6 @@ _TRIM_FIELDS = ("epochs", "samples", "sample_predictions", "xai")
 
 # Max confusion entries to keep (most recent)
 _MAX_CONFUSION_ENTRIES = 30
-
-# Signal file name used for pause/resume
-PAUSE_SIGNAL_FILENAME = ".bnnr_pause"
 
 
 class ControlAction(_PydanticBaseModel):
