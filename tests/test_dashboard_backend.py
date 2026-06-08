@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from bnnr.dashboard.backend import (
+import pytest
+
+pytest.importorskip("fastapi")
+
+from bnnr.dashboard.backend import (  # noqa: E402
     _normalize_run_root,
     _trim_state_for_api,
     list_runs,
