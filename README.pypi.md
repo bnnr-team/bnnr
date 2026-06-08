@@ -34,7 +34,7 @@
 
 **BNNR automatically improves your PyTorch vision models using XAI** — find what your model gets wrong, fix it with intelligent augmentation, and prove the result with structured reports and a live dashboard.
 
-Supported tasks (**v0.4.11**): single-label classification, multi-label classification, and object detection (COCO-mini / YOLO). See [Documentation](https://github.com/bnnr-team/bnnr/blob/main/docs/README.md).
+Supported tasks (**v0.4.12**): single-label classification, multi-label classification, and object detection (COCO-mini / YOLO). See [Documentation](https://github.com/bnnr-team/bnnr/blob/main/docs/README.md).
 
 **Sample analyze report (no install):** [live HTML preview](https://raw.githack.com/bnnr-team/bnnr/refs/heads/main/docs/assets/analyze-report-sample.html)
 
