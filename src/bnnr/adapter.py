@@ -47,7 +47,7 @@ class SimpleTorchAdapter:
         criterion: nn.Module,
         optimizer: torch.optim.Optimizer,
         target_layers: list[nn.Module] | None = None,
-        device: str = "cuda",
+        device: str = "auto",
         eval_metrics: list[str] | None = None,
         scheduler: Any | None = None,
         use_amp: bool = False,

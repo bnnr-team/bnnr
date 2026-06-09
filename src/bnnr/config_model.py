@@ -31,7 +31,7 @@ class BNNRConfig(BaseModel):
     xai_enabled: bool = True
     xai_samples: int = 4
     xai_method: str = "opticam"
-    device: str = "cuda"
+    device: str = "auto"
     seed: int = 42
     save_checkpoints: bool = True
     verbose: bool = True

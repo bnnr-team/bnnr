@@ -145,7 +145,7 @@ class DetectionAdapter:
         model: nn.Module,
         optimizer: torch.optim.Optimizer,
         target_layers: list[nn.Module] | None = None,
-        device: str = "cuda",
+        device: str = "auto",
         scheduler: Any | None = None,
         use_amp: bool = False,
         score_threshold: float = 0.05,
@@ -339,7 +339,7 @@ class UltralyticsDetectionAdapter:
     def __init__(
         self,
         model_name: str = "yolov8n.pt",
-        device: str = "cuda",
+        device: str = "auto",
         score_threshold: float = 0.05,
         num_classes: int | None = None,
         lr: float = 1e-3,
