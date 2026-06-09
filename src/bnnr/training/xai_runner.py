@@ -654,7 +654,11 @@ def precompute_xai_cache(trainer) -> XAICache | None:
     if not needs_cache:
         return None
 
-    cache_dir = trainer.config.xai_cache_dir or (trainer.config.checkpoint_dir / "xai_cache")
+    # Default the cache under the (timestamped) run directory so saliency maps are
+    # never silently reused across runs. An explicit config.xai_cache_dir still wins.
+    run_dir = getattr(trainer.reporter, "run_dir", None)
+    default_cache_dir = (run_dir / "xai_cache") if run_dir is not None else (trainer.config.checkpoint_dir / "xai_cache")
+    cache_dir = trainer.config.xai_cache_dir or default_cache_dir
     cache = XAICache(cache_dir)
 
     # Resolve n_samples: 0 means "cache all", capped by xai_cache_max_samples

@@ -288,13 +288,6 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         log_dataset_profile(dataset_profile)
     trainer._emit_pipeline_phase("dataset_profiling", "completed")
 
-    trainer._emit_pipeline_phase("xai_cache", "started", "Precomputing XAI cache...")
-    xai_cache = _xai.precompute_xai_cache(trainer)
-    if xai_cache is None:
-        trainer._emit_pipeline_phase("xai_cache", "skipped")
-    else:
-        trainer._emit_pipeline_phase("xai_cache", "completed")
-
     baseline_metrics: dict[str, float]
     best_metrics: dict[str, float]
     if trainer.current_iteration > 0:
@@ -415,6 +408,17 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
     current_branch_id = "root:baseline"
     start_iteration = max(1, trainer.current_iteration or 1)
     resume_iteration = trainer.current_iteration if trainer.current_iteration > 0 else None
+
+    # XAI cache is precomputed AFTER the baseline phase so saliency maps reflect the
+    # trained baseline model rather than random initial weights. It is stored under the
+    # run directory (never reused across runs) and computed once for all iterations,
+    # matching the equal-compute benchmark protocol.
+    trainer._emit_pipeline_phase("xai_cache", "started", "Precomputing XAI cache...")
+    xai_cache = _xai.precompute_xai_cache(trainer)
+    if xai_cache is None:
+        trainer._emit_pipeline_phase("xai_cache", "skipped")
+    else:
+        trainer._emit_pipeline_phase("xai_cache", "completed")
 
     for iteration in tqdm(
         range(start_iteration, trainer.config.max_iterations + 1),

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- XAI cache for `ICD`/`AICD` is now precomputed **after** the baseline phase (on the trained baseline model) instead of before it (on random initial weights), so saliency-guided masks are no longer driven by an untrained network in from-scratch runs.
+- The cache now defaults to a per-run directory (`<report_dir>/run_<timestamp>/xai_cache`) and carries a `manifest.json` (XAI method, dataset size, image shape); stale maps are dropped on a mismatch. This stops a different model from silently reusing another run's cached saliency under a shared `checkpoint_dir`.
+
 ## [0.4.13] — 2026-06-09
 
 ### Changed
