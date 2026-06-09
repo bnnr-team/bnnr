@@ -171,7 +171,7 @@ def get_preset(
         return get_preset("aggressive", random_state=random_state, prob_override=0.5)
 
     if name not in _PRESETS:
-        available = ", ".join(sorted(list(_PRESETS.keys()) + ["auto", "screening", "demo"]))
+        available = ", ".join(sorted(list(_PRESETS) + ["auto", "screening", "demo"]))
         raise ValueError(f"Unknown preset '{name}'. Available: {available}")
 
     preset = _PRESETS[name]
