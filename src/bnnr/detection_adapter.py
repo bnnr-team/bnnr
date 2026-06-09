@@ -357,6 +357,7 @@ class UltralyticsDetectionAdapter:
 
         self.device = str(get_device(device))
         self._yolo = YOLO(model_name)
+        self._yolo.to(self.device)
         self._model_name = model_name
         self.score_threshold = score_threshold
         self._num_classes = num_classes
@@ -439,7 +440,9 @@ class UltralyticsDetectionAdapter:
         cls_parts: list[Tensor] = []
         bbox_parts: list[Tensor] = []
         bi_parts: list[Tensor] = []
-        min_wh_n = 1.0 / max(float(img_h), float(img_w))
+        # Minimum box side length in pixels before normalization; avoids degenerate/near-zero targets.
+        MIN_BOX_SIDE_PX = 1.0
+        min_wh_n = MIN_BOX_SIDE_PX / max(float(img_h), float(img_w))
         for i, t in enumerate(targets):
             boxes = t["boxes"]  # xyxy in pixel coords on resized image
             labels = t["labels"]
@@ -545,7 +548,7 @@ class UltralyticsDetectionAdapter:
             return {"loss": 0.0, "loss_non_finite": 1.0}
 
         total_loss.backward()
-        torch.nn.utils.clip_grad_norm_(yolo_model.parameters(), max_norm=10.0)
+        torch.nn.utils.clip_grad_norm_(yolo_model.parameters(), max_norm=self.grad_clip_max_norm)
         self.optimizer.step()
 
         return {"loss": float(total_loss.item())}
