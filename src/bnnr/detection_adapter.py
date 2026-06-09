@@ -545,7 +545,7 @@ class UltralyticsDetectionAdapter:
             return {"loss": 0.0, "loss_non_finite": 1.0}
 
         total_loss.backward()
-        torch.nn.utils.clip_grad_norm_(yolo_model.parameters(), max_norm=10.0)
+        torch.nn.utils.clip_grad_norm_(yolo_model.parameters(), max_norm=self.grad_clip_max_norm)
         self.optimizer.step()
 
         return {"loss": float(total_loss.item())}
