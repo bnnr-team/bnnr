@@ -439,7 +439,9 @@ class UltralyticsDetectionAdapter:
         cls_parts: list[Tensor] = []
         bbox_parts: list[Tensor] = []
         bi_parts: list[Tensor] = []
-        min_wh_n = 1.0 / max(float(img_h), float(img_w))
+        # Minimum box side length in pixels before normalization; avoids degenerate/near-zero targets.
+        MIN_BOX_SIDE_PX = 1.0
+        min_wh_n = MIN_BOX_SIDE_PX / max(float(img_h), float(img_w))
         for i, t in enumerate(targets):
             boxes = t["boxes"]  # xyxy in pixel coords on resized image
             labels = t["labels"]
