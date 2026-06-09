@@ -21,6 +21,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+DIVISION_EPSILON = 1e-9
+
 _LOGO_B64_CACHE: str | None = None
 
 _BNNR_LOGO_SVG_FALLBACK = (
@@ -510,7 +512,7 @@ def _section_close() -> str:
 
 
 def _color_for_value(value: float, low: float = 0.0, high: float = 1.0) -> str:
-    t = max(0.0, min(1.0, (value - low) / max(high - low, 1e-9)))
+    t = max(0.0, min(1.0, (value - low) / max(high - low, DIVISION_EPSILON)))
     if t < 0.5:
         r, g = 239, int(68 + (250 - 68) * (t * 2))
         b = 68
