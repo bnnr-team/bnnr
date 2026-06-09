@@ -215,7 +215,13 @@ def _p_label(p: float | None) -> str:
 
 
 def _spearman_r(x: list[float], y: list[float]) -> float | None:
-    """Spearman rank correlation."""
+    """Spearman rank correlation.
+
+    We require at least 3 paired samples before reporting rho. With only 1-2
+    points, the rank-based correlation is either undefined or trivially
+    extreme/unstable, which is not informative for the benchmark summary.
+    Returning ``None`` marks the result as insufficient data.
+    """
     if len(x) < 3:
         return None
     xa = np.array(x, dtype=float)
