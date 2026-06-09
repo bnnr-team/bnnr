@@ -136,8 +136,9 @@ def get_preset(
     ----------
     name:
         Preset name. One of: ``auto``, ``light``, ``standard``, ``aggressive``,
-        ``gpu``, ``screening``.
+        ``gpu``, ``demo``, ``screening``.
         If ``auto``, calls :func:`auto_select_augmentations`.
+        If ``demo``, requires ``model`` and ``target_layers`` (XAI-guided ICD).
         If ``screening``, returns the ``aggressive`` preset with uniform ``p=0.5``
         — useful for the subset-proxy screening phase where uniform probability
         isolates augmentation *type* from *dosage*.
