@@ -160,7 +160,7 @@ def get_preset(
         return augs
 
     if name == "demo":
-        if model is None or not target_layers:
+        if model is None or target_layers is None or not target_layers:
             raise ValueError(
                 "Preset 'demo' requires model= and target_layers= (XAI-guided ICD). "
                 "Use build_demo_augmentations(model, target_layers) or pass them to get_preset."
