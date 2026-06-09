@@ -55,7 +55,7 @@ _PRESETS: dict[str, dict[str, Any]] = {
     "standard": {
         "description": "Balanced augmentation set for general-purpose training.",
         "augmentations": [
-            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5}},
+            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5, "noise_strength_range": (3.0, 8.0)}},
             {"cls": BasicAugmentation, "kwargs": {"probability": 0.5, "intensity": 0.5}},
             {"cls": ProCAM, "kwargs": {"probability": 0.5}},
             {"cls": DifPresets, "kwargs": {"probability": 0.5, "intensity": 0.7}},
@@ -64,7 +64,7 @@ _PRESETS: dict[str, dict[str, Any]] = {
     "aggressive": {
         "description": "Heavy augmentations for robust model training. May slow down convergence.",
         "augmentations": [
-            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5}},
+            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5, "noise_strength_range": (3.0, 8.0)}},
             {"cls": BasicAugmentation, "kwargs": {"probability": 0.5, "intensity": 0.5}},
             {"cls": DifPresets, "kwargs": {"probability": 0.5, "intensity": 0.7}},
             {"cls": Drust, "kwargs": {"probability": 0.5, "intensity": 0.5}},
@@ -77,7 +77,7 @@ _PRESETS: dict[str, dict[str, Any]] = {
     "gpu": {
         "description": "GPU-native augmentations only. Fastest throughput, requires CUDA.",
         "augmentations": [
-            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5}},
+            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5, "noise_strength_range": (3.0, 8.0)}},
             {"cls": ProCAM, "kwargs": {"probability": 0.5}},
             {"cls": DifPresets, "kwargs": {"probability": 0.5, "intensity": 0.7}},
         ],
@@ -160,7 +160,7 @@ def get_preset(
         return augs
 
     if name == "demo":
-        if model is None or not target_layers:
+        if model is None or target_layers is None or not target_layers:
             raise ValueError(
                 "Preset 'demo' requires model= and target_layers= (XAI-guided ICD). "
                 "Use build_demo_augmentations(model, target_layers) or pass them to get_preset."
@@ -171,7 +171,7 @@ def get_preset(
         return get_preset("aggressive", random_state=random_state, prob_override=0.5)
 
     if name not in _PRESETS:
-        available = ", ".join(sorted(list(_PRESETS.keys()) + ["auto", "screening", "demo"]))
+        available = ", ".join(sorted(list(_PRESETS) + ["auto", "screening", "demo"]))
         raise ValueError(f"Unknown preset '{name}'. Available: {available}")
 
     preset = _PRESETS[name]
