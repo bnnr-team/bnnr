@@ -236,17 +236,24 @@ def build_recommendations(
         unique_classes = list(dict.fromkeys(all_classes))
 
         metric_details: list[str] = []
+
+        def _to_float_or_none(value: Any) -> float | None:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
         for cid in unique_classes[:4]:
             d = diag_by_id.get(cid, {})
-            rec_val = d.get("recall")
-            prec_val = d.get("precision")
-            f1_val = d.get("f1")
-            if rec_val is not None:
-                metric_details.append(f"label {cid} recall={float(rec_val):.0%}")
-            elif prec_val is not None:
-                metric_details.append(f"label {cid} precision={float(prec_val):.0%}")
-            elif f1_val is not None:
-                metric_details.append(f"label {cid} f1={float(f1_val):.2f}")
+            rec_num = _to_float_or_none(d.get("recall"))
+            prec_num = _to_float_or_none(d.get("precision"))
+            f1_num = _to_float_or_none(d.get("f1"))
+            if rec_num is not None:
+                metric_details.append(f"label {cid} recall={rec_num:.0%}")
+            elif prec_num is not None:
+                metric_details.append(f"label {cid} precision={prec_num:.0%}")
+            elif f1_num is not None:
+                metric_details.append(f"label {cid} f1={f1_num:.2f}")
 
         if unique_classes:
             scope = ", ".join(unique_classes[:6])
