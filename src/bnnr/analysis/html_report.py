@@ -1047,7 +1047,7 @@ def _xai_examples_block(
     shown = 0
     max_visible = 12
     for cls_id, examples in examples_per_class.items():
-        if not examples or shown >= 12:
+        if not examples or shown >= max_visible:
             break
         visible_count = min(len(examples), max_visible)
         h += (f'<div style="margin:18px 0 10px;display:flex;align-items:center;gap:8px;">'
