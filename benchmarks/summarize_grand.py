@@ -174,6 +174,13 @@ def _bootstrap_median_diff_ci(
     ci: float = 0.95,
     rng_seed: int = 0,
 ) -> tuple[float, float]:
+    """Return a bootstrap CI for the median difference (median(x) - median(y)).
+
+    Computational cost scales linearly with ``n_boot`` resamples. The default
+    (10,000 iterations) favors stability, but can be expensive when many
+    dataset/condition comparisons are evaluated. Callers can lower ``n_boot``
+    to speed up large benchmark runs.
+    """
     rng = np.random.default_rng(rng_seed)
     n = len(x)
     xa = np.array(x)
