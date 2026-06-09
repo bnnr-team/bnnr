@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.4.13] — 2026-06-09
+
+### Changed
+
+- CLI flags are now consistent across commands: `bnnr analyze -d` maps to `--device` (previously `--data`); `bnnr train` uses `--token` (previously `--dashboard-token`); `bnnr dashboard export` uses `--output`/`-o` (previously `--out`).
+- `bnnr report` and `bnnr analyze` return clean error messages instead of tracebacks for a missing path, an unsupported `--format`, or a mixed-case `--task`.
+- Default `device` is now `auto` (was `cuda`) for `BNNRConfig`, `SimpleTorchAdapter`, `DetectionAdapter`, and `UltralyticsDetectionAdapter`, so constructing them on a machine without a GPU no longer raises.
+- `bnnr list-presets` lists exactly the presets accepted by `train --preset` (`auto`, `light`, `standard`, `aggressive`, `gpu`, `none`); the `demo` preset is no longer shown there (still available via `bnnr demo`).
+
+### Removed
+
+- `Recommendation.example_command` field from the analyze report schema; it duplicated `literature_note`, which now drives the HTML report citation.
+
 ## [0.4.12] — 2026-06-07
 
 ### Added

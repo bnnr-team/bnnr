@@ -14,8 +14,8 @@ authors:
 repository-code: "https://github.com/bnnr-team/bnnr"
 url: "https://github.com/bnnr-team/bnnr"
 license: MIT
-version: 0.4.12
-date-released: 2026-06-07
+version: 0.4.13
+date-released: 2026-06-09
 doi: 10.5281/zenodo.20581372
 
 preferred-citation:
@@ -32,7 +32,7 @@ preferred-citation:
   title: "BNNR (Bulletproof Neural Network Recipe)"
   year: 2026
   url: "https://github.com/bnnr-team/bnnr"
-  version: 0.4.12
+  version: 0.4.13
   doi: 10.5281/zenodo.20581372
 
 references:

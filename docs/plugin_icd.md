@@ -87,7 +87,7 @@ If you use ICD/AICD from BNNR in research, cite the **method paper**, **BNNR sof
   title = {{BNNR}: Bulletproof Neural Network Recipe},
   year = {2026},
   url = {https://github.com/bnnr-team/bnnr},
-  version = {0.4.12},
+  version = {0.4.13},
   doi = {10.5281/zenodo.20581372},
   license = {MIT}
 }
