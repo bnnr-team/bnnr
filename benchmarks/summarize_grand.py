@@ -231,7 +231,7 @@ def _spearman_r(x: list[float], y: list[float]) -> float | None:
     ry = _rank(ya)
     rx_m = rx - rx.mean()
     ry_m = ry - ry.mean()
-    denom = math.sqrt((rx_m ** 2).sum() * (ry_m ** 2).sum())
+    denom = math.sqrt((rx_m * rx_m).sum() * (ry_m * ry_m).sum())
     if denom < 1e-12:
         return 0.0
     return float((rx_m * ry_m).sum() / denom)
