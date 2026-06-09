@@ -492,8 +492,23 @@ def report_command(
     output: Optional[Path] = typer.Option(None, "--output", "-o"),
 ) -> None:
     """View or export a BNNR training report."""
-    report = load_report(report_path)
+    if not report_path.exists():
+        typer.echo(f"Error: Report path does not exist: {report_path}", err=True)
+        raise typer.Exit(code=1)
+
     fmt = format.lower()
+    if fmt == "html":
+        typer.echo(
+            "Error: Legacy HTML report was removed. "
+            "Use: bnnr dashboard export --run-dir <run_dir> --output <dir>",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    if fmt not in ("summary", "json"):
+        typer.echo("Error: Invalid format. Use one of: summary, json.", err=True)
+        raise typer.Exit(code=1)
+
+    report = load_report(report_path)
     rendered: str
 
     if fmt == "summary":
@@ -505,7 +520,7 @@ def report_command(
                 f"Total checkpoints: {len(report.checkpoints)}",
             ]
         )
-    elif fmt == "json":
+    else:
         payload = {
             "best_path": report.best_path,
             "best_metrics": report.best_metrics,
@@ -513,16 +528,6 @@ def report_command(
             "total_time": report.total_time,
         }
         rendered = json.dumps(payload, indent=2)
-    elif fmt == "html":
-        typer.echo(
-            "Error: Legacy HTML report was removed. "
-            "Use: bnnr dashboard export --run-dir <run_dir> --output <dir>",
-            err=True,
-        )
-        raise typer.Exit(code=1)
-    else:
-        typer.echo("Error: Invalid format. Use one of: summary, json, html.", err=True)
-        raise typer.Exit(code=1)
 
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -604,8 +609,8 @@ def analyze_command(
         typer.echo(f"Error: Model path does not exist: {model}", err=True)
         raise typer.Exit(code=1)
 
-    task_norm = task.strip().lower()
-    if task_norm not in ("classification", "multilabel"):
+    task = task.strip()
+    if task not in ("classification", "multilabel"):
         typer.echo(
             "Error: bnnr analyze supports only --task classification or multilabel. "
             f"Got {task!r}. Detection is not supported until the main stack ships it.",
