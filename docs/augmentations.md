@@ -17,9 +17,9 @@ Available names:
 - `standard`
 - `aggressive`
 - `gpu`
-- `demo` — ICD + ChurchNoise (used by `python -m bnnr demo`; also valid for `get_preset("demo")`)
+- `demo` — ICD + ChurchNoise (used by `python -m bnnr demo` and `get_preset("demo")`; not shown by `bnnr list-presets`)
 - `screening` — virtual; maps to aggressive with uniform probability (`get_preset` / API only)
-- `none` — no augmentations (`python -m bnnr train --preset none` only; not a named entry in `list_presets`)
+- `none` — no augmentations (`python -m bnnr train --preset none`; shown by `bnnr list-presets`)
 
 Examples:
 

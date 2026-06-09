@@ -876,14 +876,19 @@ def list_augmentations(verbose: bool = typer.Option(False, "--verbose", "-v")) -
 
 @app.command("list-presets")
 def list_presets_command() -> None:
-    """List available augmentation presets."""
+    """List augmentation presets accepted by `bnnr train --preset`."""
     from bnnr.presets import list_presets
 
     presets = list_presets()
     typer.echo("Available augmentation presets:")
     typer.echo(f"  {'auto':<15} Auto-select best augmentations for current hardware")
     for name, desc in presets.items():
+        # `demo` needs a model and target_layers, so it is not usable as a plain
+        # `train --preset`; it is served by `bnnr demo` and get_preset("demo").
+        if name == "demo":
+            continue
         typer.echo(f"  {name:<15} {desc}")
+    typer.echo(f"  {'none':<15} No augmentations (train on raw data)")
 
 
 @app.command("list-datasets")
