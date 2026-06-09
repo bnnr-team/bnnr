@@ -59,7 +59,6 @@ class Recommendation:
     confidence: str = "medium"
     priority: int = 0  # lower = higher priority
     linked_finding_ids: list[str] = field(default_factory=list)
-    example_command: str = ""
     evidence_from_run: list[str] = field(default_factory=list)
     literature_note: str = ""
 
