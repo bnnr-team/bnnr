@@ -174,3 +174,75 @@ benchmarks/
 ### Results
 
 _Pending a GPU run._ Run `reproduce_imagewoof.sh`, review `results_imagewoof.json`, then paste the `summarize.py --markdown` table here and into the root `README.md`. Do not hand-write numbers.
+
+---
+
+## Grand benchmark (paper-quality, equal-compute)
+
+The Imagewoof benchmark above compares the **full BNNR product** against fixed-epoch baselines (unequal compute, single dataset). The grand benchmark is the stricter, publication-grade version designed to survive peer review: **equal total GPU-epoch budget across every condition**, a **held-out test split never used for model selection**, an explicit **XAI-ablation condition** (`bnnr_random`), and **cross-dataset generalization**.
+
+### What it isolates
+
+| Claim | Comparison |
+|-------|-----------|
+| XAI-guided selection beats random selection | `bnnr_xai` vs `bnnr_random` (the headline claim) |
+| ICD / AICD each help on their own | `icd_only` / `aicd_only` vs `no_aug` |
+| Branch search beats the best single augmentation | `bnnr_xai` vs best `*_only` |
+| BNNR beats strong external baselines | vs RandAugment, TrivialAugment, AutoAugment |
+| ICD reduces shortcut learning | XAI metrics: edge ratio, gini, coverage |
+| Results generalize across domains | 6 datasets |
+
+### Conditions (10)
+
+`no_aug`, `randaugment`, `trivialaugment`, `autoaugment`, `churchnoise_only`, `icd_only`, `aicd_only`, `icd_aicd_fixed`, `bnnr_random`, `bnnr_xai`.
+
+### Datasets
+
+| Dataset | Classes | Train/class | Res | Domain |
+|---------|---------|-------------|-----|--------|
+| Imagewoof | 10 | 100 | 128px | Fine-grained animals |
+| Oxford Pets | 37 | 100 | 224px | Fine-grained animals |
+| Flowers102 | 102 | 10 | 224px | Flowers (extreme low-data) |
+| DTD | 47 | 120 | 224px | Textures |
+| FGVC-Aircraft | 100 | 33 | 224px | Aircraft |
+| EuroSAT | 10 | 100 | 64px | Satellite |
+
+### Protocol caveats (read before quoting numbers)
+
+- **Equal total compute, not equal per-model epochs.** Every condition spends the same total GPU-epoch budget `B`. The `bnnr_xai` / `bnnr_random` *final* model is trained for 2 phases (baseline + chosen candidate), while single-aug and baseline conditions pour all `B` epochs into one model. Compute is matched; the per-model epoch count is not. This is **conservative** for the "branch search > best single aug" claim.
+- **Held-out test is reserved for final reporting only.** Every condition selects its best epoch on `selection_val`; the held-out test split is evaluated exactly once. No condition early-stops on the test set.
+- **`bnnr_random` is the XAI ablation.** Identical compute and augmentation pool as `bnnr_xai`, but the candidate is chosen at random (seed-controlled). `bnnr_xai` vs `bnnr_random` isolates the contribution of XAI-guided selection from the augmentation pool itself.
+- **From-scratch, low-data by design:** the regime where augmentation strategy actually moves the needle, not a leaderboard entry.
+
+### Run
+
+```bash
+# Sanity check (CPU, tiny subset): exercises every code path
+python benchmarks/run_grand_benchmark.py --dataset imagewoof --smoke
+
+# Primary run: Imagewoof, 10 conditions x 10 seeds (GPU)
+python benchmarks/run_grand_benchmark.py --dataset imagewoof --device cuda
+
+# Generalization datasets (6 conditions x 7 seeds each)
+python benchmarks/run_grand_benchmark.py --dataset pets --device cuda
+
+# Summarize: Wilcoxon signed-rank + bootstrap CI + Holm-Bonferroni
+python benchmarks/summarize_grand.py --results-dir benchmarks/ --markdown
+```
+
+Resume-safe: `results_{dataset}_{regime}.json` is checkpointed after every `(condition, seed)` run. Use `--drive-base-dir` to land results, run logs, and dataset cache under one directory (Colab/Drive).
+
+### Layout
+
+```
+benchmarks/
+  run_grand_benchmark.py   # CLI (resume-safe, equal-compute, held-out test)
+  dataset_loaders.py       # 6-dataset registry, 3-way train/selection_val/held_out_test split
+  metrics_extended.py      # F1-macro, Top-5, Cohen's kappa, ECE, XAI metrics
+  summarize_grand.py       # Wilcoxon + bootstrap CI + Holm-Bonferroni table
+  runs_grand/              # per-run logs + xai/ overlays (gitignored)
+```
+
+### Results
+
+_Pending a GPU run._ Run the primary Imagewoof matrix first, review the JSON, then paste the `summarize_grand.py --markdown` table here. Do not hand-write numbers.
