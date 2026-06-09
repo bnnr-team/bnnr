@@ -24,7 +24,7 @@ import math
 import statistics
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -70,9 +70,15 @@ COMPARISON_CONDITIONS = [
 # ---------------------------------------------------------------------------
 
 
+class WilcoxonResult(NamedTuple):
+    W_statistic: float
+    p_value: float
+    rank_biserial_r: float
+
+
 def _wilcoxon_signed_rank(
     x: list[float], y: list[float]
-) -> tuple[float, float, float] | None:
+) -> WilcoxonResult | None:
     """Paired Wilcoxon signed-rank test (two-sided).
 
     Returns (W_statistic, p_value, rank_biserial_r) or None if n < 2.
@@ -89,13 +95,13 @@ def _wilcoxon_signed_rank(
 
         nonzero = [d for d in diffs if d != 0.0]
         if len(nonzero) == 0:
-            return 0.0, 1.0, 0.0
+            return WilcoxonResult(0.0, 1.0, 0.0)
         result = _scipy_wilcoxon(nonzero, alternative="two-sided")
         W = float(result.statistic)
         p = float(result.pvalue)
         n = len(nonzero)
         r = 1.0 - 2.0 * W / (n * (n + 1)) if n > 0 else 0.0
-        return W, p, r
+        return WilcoxonResult(W, p, r)
     except ImportError:
         pass
 
@@ -174,6 +180,13 @@ def _bootstrap_median_diff_ci(
     ci: float = 0.95,
     rng_seed: int = 0,
 ) -> tuple[float, float]:
+    """Return a bootstrap CI for the median difference (median(x) - median(y)).
+
+    Computational cost scales linearly with ``n_boot`` resamples. The default
+    (10,000 iterations) favors stability, but can be expensive when many
+    dataset/condition comparisons are evaluated. Callers can lower ``n_boot``
+    to speed up large benchmark runs.
+    """
     rng = np.random.default_rng(rng_seed)
     n = len(x)
     xa = np.array(x)
@@ -215,7 +228,13 @@ def _p_label(p: float | None) -> str:
 
 
 def _spearman_r(x: list[float], y: list[float]) -> float | None:
-    """Spearman rank correlation."""
+    """Spearman rank correlation.
+
+    We require at least 3 paired samples before reporting rho. With only 1-2
+    points, the rank-based correlation is either undefined or trivially
+    extreme/unstable, which is not informative for the benchmark summary.
+    Returning ``None`` marks the result as insufficient data.
+    """
     if len(x) < 3:
         return None
     xa = np.array(x, dtype=float)
@@ -231,7 +250,7 @@ def _spearman_r(x: list[float], y: list[float]) -> float | None:
     ry = _rank(ya)
     rx_m = rx - rx.mean()
     ry_m = ry - ry.mean()
-    denom = math.sqrt((rx_m ** 2).sum() * (ry_m ** 2).sum())
+    denom = math.sqrt((rx_m * rx_m).sum() * (ry_m * ry_m).sum())
     if denom < 1e-12:
         return 0.0
     return float((rx_m * ry_m).sum() / denom)
