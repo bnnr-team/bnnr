@@ -1307,7 +1307,7 @@ def _rec_block(recs_struct: list[dict[str, Any]], recs_legacy: list[str]) -> str
                       f'padding:4px 10px;background:rgba(34,197,94,0.08);border-radius:6px;'
                       f'border:1px solid rgba(34,197,94,0.2);">'
                       f'{_esc(impact)}</div>')
-            reference = r.get("example_command", "")
+            reference = r.get("literature_note", "")
             if reference:
                 h += (f'<div style="font-size:10px;color:var(--muted);margin-top:4px;'
                       f'font-style:italic;">\U0001f4da {_esc(reference)}</div>')

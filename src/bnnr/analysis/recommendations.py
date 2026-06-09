@@ -299,7 +299,6 @@ def build_recommendations(
                 confidence=best_confidence,
                 priority=priority,
                 linked_finding_ids=finding_ids,
-                example_command=reference,
                 evidence_from_run=evidence_run,
                 literature_note=reference,
             )
@@ -318,7 +317,6 @@ def build_recommendations(
                 expected_impact=f"[Likely] Literature context (not verified on this run): {iq}",
                 confidence="medium",
                 priority=6,
-                example_command=lit["reference"],
                 evidence_from_run=[f"mean_xai_quality={float(mean_q):.3f}"],
                 literature_note=lit["reference"],
             )
@@ -336,7 +334,6 @@ def build_recommendations(
                 expected_impact=f"[Likely] Literature context (not verified on this run): {iq}",
                 confidence="medium",
                 priority=7,
-                example_command=lit["reference"],
                 evidence_from_run=[f"accuracy={float(acc):.3f}"],
                 literature_note=lit["reference"],
             )
