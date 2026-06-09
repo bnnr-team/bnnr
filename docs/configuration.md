@@ -33,7 +33,7 @@ seed: 42
 - `selection_metric` (default: `accuracy`) — the metric used to select the best augmentation branch. Can be any metric from the tables below.
 - `selection_mode` (`max` or `min`, default: `max`) — use `min` for metrics where lower is better (e.g. `loss`, `zero_one_loss`).
 - `early_stopping_patience` (default: `2`)
-- `device` (`cuda`, `cpu`, `auto`; default: `cuda`)
+- `device` (`cuda`, `cpu`, `auto`; default: `auto`)
 - `seed` (default: `42`)
 - `save_checkpoints` (default: `true`)
 - `verbose` (default: `true`)
