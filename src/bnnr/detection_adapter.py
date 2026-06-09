@@ -357,6 +357,7 @@ class UltralyticsDetectionAdapter:
 
         self.device = str(get_device(device))
         self._yolo = YOLO(model_name)
+        self._yolo.to(self.device)
         self._model_name = model_name
         self.score_threshold = score_threshold
         self._num_classes = num_classes
