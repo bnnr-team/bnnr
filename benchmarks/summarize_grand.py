@@ -24,7 +24,7 @@ import math
 import statistics
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -70,9 +70,15 @@ COMPARISON_CONDITIONS = [
 # ---------------------------------------------------------------------------
 
 
+class WilcoxonResult(NamedTuple):
+    W_statistic: float
+    p_value: float
+    rank_biserial_r: float
+
+
 def _wilcoxon_signed_rank(
     x: list[float], y: list[float]
-) -> tuple[float, float, float] | None:
+) -> WilcoxonResult | None:
     """Paired Wilcoxon signed-rank test (two-sided).
 
     Returns (W_statistic, p_value, rank_biserial_r) or None if n < 2.
@@ -89,13 +95,13 @@ def _wilcoxon_signed_rank(
 
         nonzero = [d for d in diffs if d != 0.0]
         if len(nonzero) == 0:
-            return 0.0, 1.0, 0.0
+            return WilcoxonResult(0.0, 1.0, 0.0)
         result = _scipy_wilcoxon(nonzero, alternative="two-sided")
         W = float(result.statistic)
         p = float(result.pvalue)
         n = len(nonzero)
         r = 1.0 - 2.0 * W / (n * (n + 1)) if n > 0 else 0.0
-        return W, p, r
+        return WilcoxonResult(W, p, r)
     except ImportError:
         pass
 
