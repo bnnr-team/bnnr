@@ -377,7 +377,7 @@ def train_command(
     ),
     dashboard_token: Optional[str] = typer.Option(
         None,
-        "--dashboard-token",
+        "--token",
         help="Token to protect dashboard control endpoints (pause/resume). "
         "Also configurable via BNNR_DASHBOARD_TOKEN env var.",
     ),
@@ -516,7 +516,7 @@ def report_command(
     elif fmt == "html":
         typer.echo(
             "Error: Legacy HTML report was removed. "
-            "Use: bnnr dashboard export --run-dir <run_dir> --out <dir>",
+            "Use: bnnr dashboard export --run-dir <run_dir> --output <dir>",
             err=True,
         )
         raise typer.Exit(code=1)
@@ -567,7 +567,7 @@ def _try_alternate_models(
 @app.command("analyze")
 def analyze_command(
     model: Path = typer.Option(..., "--model", "-m", help="Path to model checkpoint (.pt) or state dict"),
-    data: Path = typer.Option(..., "--data", "-d", help="Path to data directory (ImageFolder) or dataset name (e.g. mnist, cifar10)"),
+    data: Path = typer.Option(..., "--data", help="Path to data directory (ImageFolder) or dataset name (e.g. mnist, cifar10)"),
     output: Path = typer.Option(..., "--output", "-o", help="Output directory for analysis_report.json and report.html"),
     task: str = typer.Option(
         "classification",
@@ -579,7 +579,7 @@ def analyze_command(
     max_worst: int = typer.Option(20, "--max-worst", help="Number of worst predictions to include"),
     no_xai: bool = typer.Option(False, "--no-xai", help="Disable XAI analysis"),
     no_data_quality: bool = typer.Option(False, "--no-data-quality", help="Disable data quality checks"),
-    device: Optional[str] = typer.Option(None, "--device", help="Device: cuda, cpu, auto"),
+    device: Optional[str] = typer.Option(None, "--device", "-d", help="Device: cuda, cpu, auto"),
     batch_size: int = typer.Option(64, "--batch-size", help="Batch size for evaluation"),
     output_summary: bool = typer.Option(
         True,
@@ -829,7 +829,7 @@ def dashboard_serve_command(
 @dashboard_app.command("export")
 def dashboard_export_command(
     run_dir: Path = typer.Option(..., "--run-dir"),
-    out: Path = typer.Option(..., "--out"),
+    out: Path = typer.Option(..., "--output", "-o"),
     frontend_dist: Optional[Path] = typer.Option(None, "--frontend-dist"),
 ) -> None:
     """Export a standalone dashboard snapshot to a directory."""

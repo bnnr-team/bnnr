@@ -78,7 +78,7 @@ python3 -m bnnr dashboard serve --run-dir reports --port 8080
 For `train` path use:
 
 ```bash
-python3 -m bnnr train ... --dashboard-token "change-me"
+python3 -m bnnr train ... --token "change-me"
 ```
 
 ## 5) Pause/resume workflow
@@ -93,7 +93,7 @@ python3 -m bnnr train ... --dashboard-token "change-me"
 ```bash
 python3 -m bnnr dashboard export \
   --run-dir reports/run_YYYYMMDD_HHMMSS \
-  --out exported_dashboard
+  --output exported_dashboard
 ```
 
 Artifacts include:

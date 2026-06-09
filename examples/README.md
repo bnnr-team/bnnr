@@ -79,5 +79,5 @@ For each example run:
 4. Export static dashboard and open `index.html`.
 
 ```bash
-python3 -m bnnr dashboard export --run-dir <run_dir> --out exported_dashboard
+python3 -m bnnr dashboard export --run-dir <run_dir> --output exported_dashboard
 ```

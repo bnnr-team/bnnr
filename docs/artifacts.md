@@ -108,7 +108,7 @@ Common event types emitted by current code:
 
 ## Dashboard export artifacts
 
-`python3 -m bnnr dashboard export --run-dir <run_dir> --out <out_dir>` writes:
+`python3 -m bnnr dashboard export --run-dir <run_dir> --output <out_dir>` writes:
 
 - `index.html`
 - `data/events.jsonl`

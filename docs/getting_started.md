@@ -215,7 +215,7 @@ python -m bnnr train \
   --max-val-samples 64 \
   --preset light \
   --with-dashboard \
-  --dashboard-token "change-me"
+  --token "change-me"
 ```
 
 Equivalent replay mode protection:
@@ -248,7 +248,7 @@ Use replay mode when:
 RUN_DIR=$(ls -1dt reports_quickstart/run_* | head -n 1)
 python -m bnnr dashboard export \
   --run-dir "$RUN_DIR" \
-  --out exported_dashboard
+  --output exported_dashboard
 ```
 
 Open `exported_dashboard/index.html`.

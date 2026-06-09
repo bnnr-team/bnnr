@@ -327,7 +327,7 @@ def test_cli_train_command_without_dashboard_keeps_events_for_export(temp_dir, m
             "export",
             "--run-dir",
             str(run_dir),
-            "--out",
+            "--output",
             str(export_out),
         ],
     )

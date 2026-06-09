@@ -188,7 +188,7 @@ For any example with `--with-dashboard`:
 For offline sharing:
 
 ```bash
-python3 -m bnnr dashboard export --run-dir <run_dir> --out exported_dashboard
+python3 -m bnnr dashboard export --run-dir <run_dir> --output exported_dashboard
 ```
 
 ## 7) Example artifacts you should always verify

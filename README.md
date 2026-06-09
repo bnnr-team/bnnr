@@ -216,7 +216,7 @@ python3 -m bnnr list-datasets
 python3 -m bnnr list-augmentations -v
 python3 -m bnnr list-presets
 python3 -m bnnr dashboard serve --run-dir reports --port 8080
-python3 -m bnnr dashboard export --run-dir reports/run_YYYYMMDD_HHMMSS --out exported_dashboard
+python3 -m bnnr dashboard export --run-dir reports/run_YYYYMMDD_HHMMSS --output exported_dashboard
 ```
 
 ### Doc index

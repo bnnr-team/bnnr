@@ -82,7 +82,7 @@ Optional replay/export checks:
 
 ```bash
 python3 -m bnnr dashboard serve --run-dir <run_dir_parent> --port 8080
-python3 -m bnnr dashboard export --run-dir <run_dir> --out /tmp/exported_dashboard
+python3 -m bnnr dashboard export --run-dir <run_dir> --output /tmp/exported_dashboard
 ```
 
 ## CI (GitHub Actions)

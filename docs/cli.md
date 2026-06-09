@@ -82,7 +82,7 @@ Omit `--config` to use built-in quickstart defaults (`m_epochs=3`, `max_iteratio
 - `--with-dashboard / --without-dashboard`
 - `--dashboard-port`
 - `--no-auto-open`
-- `--dashboard-token`
+- `--token`
 - `--batch-size`
 - `--max-train-samples`
 - `--max-val-samples`
@@ -148,7 +148,7 @@ Notes:
 
 ```bash
 python3 -m bnnr dashboard serve --run-dir reports --port 8080
-python3 -m bnnr dashboard export --run-dir reports/run_YYYYMMDD_HHMMSS --out exported_dashboard
+python3 -m bnnr dashboard export --run-dir reports/run_YYYYMMDD_HHMMSS --output exported_dashboard
 ```
 
 `dashboard serve` options:
@@ -161,7 +161,7 @@ python3 -m bnnr dashboard export --run-dir reports/run_YYYYMMDD_HHMMSS --out exp
 `dashboard export` options:
 
 - `--run-dir` (required)
-- `--out` (required)
+- `--output` (required)
 - `--frontend-dist`
 
 ## Dashboard usage notes (important)
