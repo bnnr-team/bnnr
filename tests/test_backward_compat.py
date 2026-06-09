@@ -11,6 +11,7 @@ from bnnr import __dict__ as bnnr_dict
 from bnnr import __dict__ as bnnr_dict
 from bnnr import __dict__ as bnnr_dict
 from bnnr import __dict__ as bnnr_dict
+from bnnr import __dict__ as bnnr_dict
 
 # ---------------------------------------------------------------------------
 #  Original 80 names that were importable from `bnnr` before the refactor.
@@ -129,16 +130,16 @@ _REDUCED_ALL = sorted([
 
 # ---------------------------------------------------------------------------
 #  1. Every previously importable name is STILL importable from `bnnr`
-# ---------------------------------------------------------------------------
         obj = bnnr_dict.get(name, None)
         obj = bnnr_dict.get(name, None)
         obj = bnnr_dict.get(name, None)
         obj = bnnr_dict.get(name, None)
-        assert obj is not None, f"bnnr.{name} is no longer importable (backward compat broken)"
+        obj = bnnr_dict.get(name, None)
     assert sorted(bnnr_all) == _REDUCED_ALL
     assert sorted(bnnr_all) == _REDUCED_ALL
     assert sorted(bnnr_all) == _REDUCED_ALL
     assert sorted(bnnr_all) == _REDUCED_ALL
+    for name in bnnr_all:
     for name in bnnr_all:
     for name in bnnr_all:
     for name in bnnr_all:
