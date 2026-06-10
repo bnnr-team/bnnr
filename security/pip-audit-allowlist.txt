@@ -4,5 +4,11 @@ PYSEC-2025-203  # torch; fixed in torch 2.9+
 PYSEC-2025-204  # torch; fixed in torch 2.9+
 PYSEC-2025-206  # torch; fixed in torch 2.9+
 PYSEC-2026-139  # torch; fixed in torch 2.9+
+# torch.jit.script memory corruption, affects torch <=2.6.0 (local attack vector).
+# False positive on our torch>=2.0,<3 resolution (2.12.0 is past the fix): the advisory
+# carries only a git range, no PyPI fixed-version. BNNR never calls torch.jit.script.
+# aka GHSA-rrmf-rvhw-rf47. IDs kept comment-free so the CI ignore loop matches them.
+CVE-2025-3000
+PYSEC-2025-194
 # starlette via fastapi[dashboard] — bump when upstream pins fixed release
 PYSEC-2026-161
