@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "package-name": "bnnr",
+      "changelog-path": "CHANGELOG.md",
+      "include-v-in-tag": true,
+      "extra-files": [
+        "src/bnnr/version.py",
+        "CITATION.cff",
+        "README.md",
+        "README.pypi.md",
+        "docs/assets/analyze-report-sample.html",
+        "docs/roadmap.md",
+        "docs/citation.md"
+      ]
+    }
+  }
+}
