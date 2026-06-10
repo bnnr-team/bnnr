@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.14] — 2026-06-09
+
 ### Fixed
 
 - XAI cache for `ICD`/`AICD` is now precomputed **after** the baseline phase (on the trained baseline model) instead of before it (on random initial weights), so saliency-guided masks are no longer driven by an untrained network in from-scratch runs.
