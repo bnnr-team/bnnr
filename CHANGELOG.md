@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.16](https://github.com/bnnr-team/bnnr/compare/v0.4.15...v0.4.16) (2026-06-10)
+
+
+### Bug Fixes
+
+* make ICD/AICD CPU-bound to remove apply_tensor recursion ([#285](https://github.com/bnnr-team/bnnr/issues/285)) ([69435d6](https://github.com/bnnr-team/bnnr/commit/69435d68c9de17cd3d6bc9f4acbf988f94586881))
+
 ## [0.4.15](https://github.com/bnnr-team/bnnr/compare/v0.4.14...v0.4.15) (2026-06-10)
 
 
