@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.15](https://github.com/bnnr-team/bnnr/compare/v0.4.14...v0.4.15) (2026-06-10)
+
+
+### Bug Fixes
+
+* treat winning baseline_reeval as no improvement instead of crashing ([#279](https://github.com/bnnr-team/bnnr/issues/279)) ([6ae1512](https://github.com/bnnr-team/bnnr/commit/6ae151226989fd19bd4bc9a79c6b292973948b8a))
+
+
+### Documentation
+
+* add branded ICD/AICD figures to README and align tagline ([#282](https://github.com/bnnr-team/bnnr/issues/282)) ([7f1e3ea](https://github.com/bnnr-team/bnnr/commit/7f1e3ea2405bed36fbf6ddb5b6ebbe9474d4925f))
+
 ## [Unreleased]
 
 ## [0.4.14] — 2026-06-09
