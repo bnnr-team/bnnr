@@ -1,11 +1,13 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "last-release-sha": "80cf94053cddc08b5776ecea6d39a1f64cd05d69",
   "packages": {
     ".": {
       "release-type": "python",
       "package-name": "bnnr",
       "changelog-path": "CHANGELOG.md",
       "include-v-in-tag": true,
+      "include-component-in-tag": false,
       "extra-files": [
         "src/bnnr/version.py",
         "CITATION.cff",
