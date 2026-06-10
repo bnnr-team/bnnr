@@ -61,9 +61,9 @@ pip install bnnr
 
 Runnable script: [`examples/classification/icd_plugin_minimal.py`](../examples/classification/icd_plugin_minimal.py).
 
-## Built on pytorch-grad-cam
+## Saliency backends
 
-BNNR uses [pytorch-grad-cam](https://github.com/jacobgil/pytorch-grad-cam) for saliency when `method="gradcam"` or `method="opticam"` (both route through `GradCAM` in [`src/bnnr/xai.py`](../src/bnnr/xai.py) today).
+`method="gradcam"` produces Grad-CAM (eigen-smoothed) via [pytorch-grad-cam](https://github.com/jacobgil/pytorch-grad-cam); `method="opticam"` (the default) produces Opti-CAM, which optimises a per-image combination of the target-layer activations so the masked input maximises the target-class confidence. Both live in [`src/bnnr/xai.py`](../src/bnnr/xai.py).
 
 ## Citation
 
