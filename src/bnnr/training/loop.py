@@ -618,6 +618,12 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         top_candidate_names = _branching.top_k_candidate_names(iteration_results, trainer.config, k=3)
         candidate_preview_pairs: dict[str, list[tuple[Path, Path]]] = {}
         aug_by_name = {aug.name: aug for aug in trainer.augmentations}
+        # baseline_reeval (and any non-augmentation result) is a comparison point,
+        # not a selectable candidate. If it wins the iteration, no augmentation beat
+        # plain continued training, so treat it as no improvement rather than looking
+        # it up as an augmentation (which previously raised StopIteration).
+        if selected_name is not None and selected_name not in aug_by_name:
+            selected_name = None
         for cand_name in top_candidate_names:
             candidate_aug = aug_by_name.get(cand_name)
             if candidate_aug is None:
