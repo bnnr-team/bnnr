@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/bnnr-team/bnnr/compare/v0.4.16...v0.5.0) (2026-06-10)
+
+
+### Features
+
+* implement real Opti-CAM and split out GradCAMExplainer ([#287](https://github.com/bnnr-team/bnnr/issues/287)) ([385aadd](https://github.com/bnnr-team/bnnr/commit/385aaddb717f7a325645cc9a9655fa9581c9c302))
+
 ## [0.4.16](https://github.com/bnnr-team/bnnr/compare/v0.4.15...v0.4.16) (2026-06-10)
 
 
