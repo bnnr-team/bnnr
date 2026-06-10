@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/bnnr-team/bnnr/compare/v0.5.0...v0.5.1) (2026-06-10)
+
+
+### Bug Fixes
+
+* keep canonical augmentation names instead of indexed aliases ([#289](https://github.com/bnnr-team/bnnr/issues/289)) ([8e285f9](https://github.com/bnnr-team/bnnr/commit/8e285f965585ea45fbb84678cd61c4c077ab4e5c)), closes [#258](https://github.com/bnnr-team/bnnr/issues/258)
+
 ## [0.5.0](https://github.com/bnnr-team/bnnr/compare/v0.4.16...v0.5.0) (2026-06-10)
 
 
