@@ -124,3 +124,64 @@ def test_precompute_runs_after_baseline_and_under_run_dir(temp_dir, monkeypatch)
     assert (run_cache / "manifest.json").exists()
     # Default cache must not land in the shared checkpoint_dir.
     assert not (cfg.checkpoint_dir / "xai_cache").exists()
+
+
+def test_baseline_reeval_win_does_not_crash(temp_dir, monkeypatch) -> None:
+    """A winning baseline_reeval must be treated as no-improvement, not crash."""
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import DataLoader, TensorDataset
+
+    import bnnr.training.branching as branching_mod
+    from bnnr.augmentations import ChurchNoise
+    from bnnr.core import BNNRConfig, BNNRTrainer, SimpleTorchAdapter
+
+    class TinyCNN(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.conv1 = nn.Conv2d(3, 6, 3, padding=1)
+            self.pool = nn.AdaptiveAvgPool2d((1, 1))
+            self.fc = nn.Linear(6, 4)
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            x = torch.relu(self.conv1(x))
+            return self.fc(self.pool(x).flatten(1))
+
+    torch.manual_seed(0)
+    x = torch.rand(12, 3, 8, 8)
+    y = torch.randint(0, 4, (12,))
+    loader = DataLoader(TensorDataset(x, y), batch_size=4, shuffle=False)
+    model = TinyCNN()
+    adapter = SimpleTorchAdapter(
+        model=model,
+        criterion=nn.CrossEntropyLoss(),
+        optimizer=torch.optim.Adam(model.parameters(), lr=1e-3),
+        target_layers=[model.conv1],
+        device="cpu",
+    )
+    cfg = BNNRConfig(
+        m_epochs=1,
+        max_iterations=1,
+        xai_enabled=False,
+        device="cpu",
+        checkpoint_dir=temp_dir / "ckpt",
+        report_dir=temp_dir / "reports",
+        save_checkpoints=False,
+        reeval_baseline_per_iteration=True,
+    )
+
+    # Force the iteration to "select" the baseline re-evaluation, the exact case
+    # that used to raise StopIteration at the augmentation lookup.
+    def _fake_select(results, baseline_metrics, config, xai_scores=None):
+        return "baseline_reeval" if "baseline_reeval" in results else None
+
+    monkeypatch.setattr(branching_mod, "select_best_path", _fake_select)
+
+    aug = ChurchNoise(probability=1.0, random_state=0)
+    trainer = BNNRTrainer(adapter, loader, loader, [aug], cfg)
+    result = trainer.run()  # must not raise
+
+    assert result is not None
+    active_names = [a.name for a in trainer._active_augmentations]
+    assert "baseline_reeval" not in active_names
+    assert "baseline_reeval" not in result.best_path
