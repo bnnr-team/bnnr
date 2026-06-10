@@ -1,5 +1,117 @@
 # Changelog
 
+## [0.5.0](https://github.com/bnnr-team/bnnr/compare/bnnr-v0.4.14...bnnr-v0.5.0) (2026-06-10)
+
+
+### Features
+
+* **analyze:** merge analyze report feature; bump v0.3.0 ([e320e13](https://github.com/bnnr-team/bnnr/commit/e320e13a7c8ed5a68c08dd436258a591c402e1aa))
+* **analyze:** multilabel report path, ECE, CV; CLI classification/multilabel only ([1756b09](https://github.com/bnnr-team/bnnr/commit/1756b096b30c60ae66d5450b3c9424ecfda8e55d))
+* **benchmark:** Colab notebook + --drive-base-dir flag for one-click runs ([#205](https://github.com/bnnr-team/bnnr/issues/205)) ([096c6b4](https://github.com/bnnr-team/bnnr/commit/096c6b4a8c288637f13ad3327f5c62a1fa37a3e0))
+* **benchmarks:** add reproducible baseline vs BNNR harness ([08d42cf](https://github.com/bnnr-team/bnnr/commit/08d42cfb359dd1e7578948af9c07c7242805e88e))
+* **detection:** enable XAI and probe snapshots for Ultralytics YOLO ([b58b749](https://github.com/bnnr-team/bnnr/commit/b58b74989016f8e6090ca3ff267d302bd467ac65))
+* **detection:** Ultralytics v8 training adapter and YOLO loader options ([8035bbd](https://github.com/bnnr-team/bnnr/commit/8035bbd9254c4e5bd6bdcb1cc00e40385f50061b))
+* Faza 0 integrations (grad-cam, Ultralytics, docs hub, outreach) ([ad7b889](https://github.com/bnnr-team/bnnr/commit/ad7b889017e79e6c94c5515d046041a0acc3d49f))
+* merge detection feature into main for v0.2.0 release ([61763c5](https://github.com/bnnr-team/bnnr/commit/61763c590c17fcbb97589a15d93960166fec98e8))
+* **notebook:** add butterfly Colab cooking notebook for students ([79be03f](https://github.com/bnnr-team/bnnr/commit/79be03ff95e5055c9751f5431a917e9481f3ae0a))
+* **notebook:** add butterfly Colab cooking notebook for students ([3e2def8](https://github.com/bnnr-team/bnnr/commit/3e2def8356659da5ce0e9637c44537f07f8ab037))
+* week-1 OSS polish — README, zero-config CLI, community infra ([3641c74](https://github.com/bnnr-team/bnnr/commit/3641c7422fa8a0ee3710eac5175c7144701b7c19))
+
+
+### Bug Fixes
+
+* all co-authors in CITATION.cff ([2d86310](https://github.com/bnnr-team/bnnr/commit/2d86310de21d484f252bf3cdd1e8aa4bb89f6d93))
+* **analyze:** auto-detect STL-10 model architecture from checkpoint ([60d09fd](https://github.com/bnnr-team/bnnr/commit/60d09fdc7b2b179f4292bc0f93aae12f9317a587))
+* **analyze:** embed XAI images in portable HTML report; release v0.4.7 ([67ad30d](https://github.com/bnnr-team/bnnr/commit/67ad30d514e8bbc8ae3c634a6af74b895144b96b))
+* **analyze:** resolve QA issues in report and docs ([6df0f98](https://github.com/bnnr-team/bnnr/commit/6df0f9809ffa8be2bb8c575f8ce2d6bb873d6516))
+* ASCII arrow in print for Windows console encoding ([756029b](https://github.com/bnnr-team/bnnr/commit/756029bd5df913c822b1f4dc01e5fe3949f8da41))
+* **benchmark:** artifacts, resume safety, stats, notebook cleanup ([#217](https://github.com/bnnr-team/bnnr/issues/217)) ([841af4f](https://github.com/bnnr-team/bnnr/commit/841af4fd72ef9765217ae3f53717f2a6f7626b4e))
+* **benchmark:** make run_resnet50.py actually resume-safe ([#204](https://github.com/bnnr-team/bnnr/issues/204)) ([c0e2a64](https://github.com/bnnr-team/bnnr/commit/c0e2a6410e365e4c66ae1913fcfb10507e0bf50f))
+* **ci:** add workflow permissions for CodeQL ([#42](https://github.com/bnnr-team/bnnr/issues/42)) ([39a1599](https://github.com/bnnr-team/bnnr/commit/39a1599218dbae7629b7a3c162a76732526a7d91))
+* **ci:** build dashboard before pip install -e; release 0.1.0.post4 ([9b61e56](https://github.com/bnnr-team/bnnr/commit/9b61e5611436811ac18f59182b3b7f5c387931f6))
+* **ci:** gradcam smoke test without network downloads ([28f1fe4](https://github.com/bnnr-team/bnnr/commit/28f1fe46495a6862310ce8f59915d3c0d9984a59))
+* consolidate code-quality autofixes ([#221](https://github.com/bnnr-team/bnnr/issues/221)–[#228](https://github.com/bnnr-team/bnnr/issues/228)) ([a819276](https://github.com/bnnr-team/bnnr/commit/a8192760e08d0e29f8524e60b0f09a0bb006139c))
+* **dashboard:** lodash &gt;=4.18.0 via npm overrides; release 0.1.2, sync version strings ([dfc7731](https://github.com/bnnr-team/bnnr/commit/dfc77311bcf048c2ff55b6ff1eddf7f408ec9e4a))
+* declare click as a runtime dependency ([#240](https://github.com/bnnr-team/bnnr/issues/240)) ([8c1e168](https://github.com/bnnr-team/bnnr/commit/8c1e1685baa3cae5ffff1cd859c0165de006bae2))
+* detection examples compatibility issues ([4678bd1](https://github.com/bnnr-team/bnnr/commit/4678bd1fc44cbf7fe4475bd2c731ff933bf058b8))
+* detection metrics averaging, YOLO input scaling, dashboard detection UI (v0.2.2) ([b1581c3](https://github.com/bnnr-team/bnnr/commit/b1581c39a8fb3d89f95311ec31302cbae73a9a04))
+* **detection-xai:** pick Ultralytics conv layer by saliency isotropy ([ddb136b](https://github.com/bnnr-team/bnnr/commit/ddb136b5acd67f6a507aac6916bb43ff1df7999a))
+* **detection:** YOLO adapter image scale, rotate90 demo semantics, ICD targets ([d3220f0](https://github.com/bnnr-team/bnnr/commit/d3220f0728b2efb6ddbac8f18dee4fcf495c6da8))
+* **detection:** YOLO scale [0,1], Colab notebook install notes ([927f50f](https://github.com/bnnr-team/bnnr/commit/927f50ffc4638ac87dc1dfecf05223475e9ec697))
+* final audit — docs consistency, broken refs, and Colab URL ([09ddf9e](https://github.com/bnnr-team/bnnr/commit/09ddf9e66d3a0568afb3a2c48a78ffe878712645))
+* **import:** lazy sklearn for Colab numpy/scipy mismatches ([3c61345](https://github.com/bnnr-team/bnnr/commit/3c613457151d79e4d1576969aa89c32dc6e0ece0))
+* include predicted classes in analyze CV confusion matrix ([#188](https://github.com/bnnr-team/bnnr/issues/188)) ([4179d97](https://github.com/bnnr-team/bnnr/commit/4179d975ff9f1abe8a085d7d956faec5c6a52334))
+* **lint:** rename uppercase variable L to n_labels (N806) ([398c819](https://github.com/bnnr-team/bnnr/commit/398c819a29b084297c4109b1a6709a53f77b036f))
+* list all co-authors in CITATION.cff and citation docs ([880be22](https://github.com/bnnr-team/bnnr/commit/880be221183b39617973abb83a07e9a7de99fef6))
+* **mypy:** add bnnr.detection_icd to no-any-return overrides ([499fd8d](https://github.com/bnnr-team/bnnr/commit/499fd8d9b7dcc0948b8bf125cdc48c9875597a67))
+* **notebook:** remove torch.no_grad around OptiCAM saliency in augmentations guide ([de9b619](https://github.com/bnnr-team/bnnr/commit/de9b619c2830e77f9ccee4f41947b69e1df333ca))
+* **notebook:** use saliency maps as numpy from generate_saliency_maps ([9267feb](https://github.com/bnnr-team/bnnr/commit/9267feb2247491b99b5ed7acc65d4f6c8d06de4b))
+* precompute XAI cache after baseline and isolate it per run ([#276](https://github.com/bnnr-team/bnnr/issues/276)) ([f0cdc22](https://github.com/bnnr-team/bnnr/commit/f0cdc22709e8d38dcdc50953b52e893499e4fdb4)), closes [#252](https://github.com/bnnr-team/bnnr/issues/252)
+* **pypi:** README.pypi.md with absolute URLs; bump 0.3.1 ([12e5979](https://github.com/bnnr-team/bnnr/commit/12e5979a36abc289d7d20e13da3afcc04b876496))
+* **readme:** inline video player with audio instead of download link ([4c9f256](https://github.com/bnnr-team/bnnr/commit/4c9f25691adf82d4695df158fcd3e766ff90e138))
+* **readme:** pepy downloads badge, analyze intro, clickable hero video ([c8f921f](https://github.com/bnnr-team/bnnr/commit/c8f921f9e177ea7cef7067b05e1d35027bb20d96))
+* remove unused pytest import in gradcam smoke test ([ac4e512](https://github.com/bnnr-team/bnnr/commit/ac4e5124a5e0839a247fe1fc5f0dad8d7f6d04d0))
+* remove unused pytest import in ICD plugin smoke test ([b9c2d41](https://github.com/bnnr-team/bnnr/commit/b9c2d410206afe438c0fb84b1ef94d4c49bb1897))
+* **security:** avoid logging full events path in warnings ([#43](https://github.com/bnnr-team/bnnr/issues/43)) ([e01bc35](https://github.com/bnnr-team/bnnr/commit/e01bc3559610b7807ae851e7de87975b1a06e09d))
+* **security:** bump vite 5.4→6.4.2 to resolve CVE path-traversal ([205bc1c](https://github.com/bnnr-team/bnnr/commit/205bc1cbfda496d959c862a7c828be7ac2a41870))
+* **security:** harden dashboard export manifest and HTML ([#44](https://github.com/bnnr-team/bnnr/issues/44)) ([a1d49c0](https://github.com/bnnr-team/bnnr/commit/a1d49c0a1c9bcafaa7d88c92b6fb62b62a8867fe))
+* **security:** harden path handling for CodeQL alerts (v0.4.4). ([#33](https://github.com/bnnr-team/bnnr/issues/33)) ([93b77cf](https://github.com/bnnr-team/bnnr/commit/93b77cf21110c2c004e787c77da4d07afe1789d1))
+* **security:** patch esbuild and rollup vulnerabilities via npm overrides ([f9114f2](https://github.com/bnnr-team/bnnr/commit/f9114f2c291aaf3d0f4f5fbca8572b6816f6f634))
+* **security:** patch esbuild and rollup vulnerabilities via npm overrides ([9f04c3a](https://github.com/bnnr-team/bnnr/commit/9f04c3af28f3dbaebad2cd3fccc1c18cfb7325a5))
+* **security:** patch esbuild and rollup vulnerabilities via npm overrides ([b07f1b0](https://github.com/bnnr-team/bnnr/commit/b07f1b002fff14cf266ee2bb4c7990c9233dbbea))
+* stop pulling fastapi into the core training loop ([#241](https://github.com/bnnr-team/bnnr/issues/241)) ([8927f1e](https://github.com/bnnr-team/bnnr/commit/8927f1e6059c8dd9798b60e649bb792cb9ec9aa7))
+* **tests:** adjust list_datasets assertion for 4 datasets (post-detection removal) ([8d0a5ad](https://github.com/bnnr-team/bnnr/commit/8d0a5aded7ec68697d8708d3bdc12bb0f53cac29))
+* treat winning baseline_reeval as no improvement instead of crashing ([#279](https://github.com/bnnr-team/bnnr/issues/279)) ([6ae1512](https://github.com/bnnr-team/bnnr/commit/6ae151226989fd19bd4bc9a79c6b292973948b8a))
+* use ValueError in dataset __getitem__ for CodeQL ([91f0b01](https://github.com/bnnr-team/bnnr/commit/91f0b01c65587bf2f58f99cd6cca14909caae54d))
+* **yolo:** stop non-finite train_step — no GradScaler, clamp cls, grad clip ([e8885a4](https://github.com/bnnr-team/bnnr/commit/e8885a492059bf6a477bcef5b4882edac96fe687))
+
+
+### Reverts
+
+* **docs:** restore README and README.pypi to pre-launch-edit layout ([fcf88b9](https://github.com/bnnr-team/bnnr/commit/fcf88b960927e81bdad372dddcd37dd71e3f06bc))
+
+
+### Documentation
+
+* add BNNR citation (CITATION.cff) and integration citing guide ([54f5c2c](https://github.com/bnnr-team/bnnr/commit/54f5c2c68e6cd7a6c983103f22e405c609b14917))
+* add BNNR citation (CITATION.cff) and integration citing guide ([65b6f24](https://github.com/bnnr-team/bnnr/commit/65b6f24a5b0e68c9e77407ba41cbf490f090c97a))
+* add comprehensive object detection documentation ([ad03045](https://github.com/bnnr-team/bnnr/commit/ad03045a3d8328c7b2dccac8badf55f31e7e988d))
+* add externally-managed-environment and venv troubleshooting section ([#201](https://github.com/bnnr-team/bnnr/issues/201)) ([db3bfd0](https://github.com/bnnr-team/bnnr/commit/db3bfd07c5357a11c0309a14b2076598a39b5162)), closes [#182](https://github.com/bnnr-team/bnnr/issues/182)
+* add launch story assets and analyze-first README ([ab4830d](https://github.com/bnnr-team/bnnr/commit/ab4830d9144264778658270a71ae274d9c00672c))
+* add PyPI downloads badge (pepy.tech) across entrypoints ([7d29989](https://github.com/bnnr-team/bnnr/commit/7d29989b15a0703af07eaf1d1500268d60732f2e))
+* add Roadmap link to Links tables ([#166](https://github.com/bnnr-team/bnnr/issues/166)) ([e67ae47](https://github.com/bnnr-team/bnnr/commit/e67ae4700dae22dfbba4ab4d8852618f59678aa7))
+* add Zenodo DOIs for software and ICD/AICD paper ([#238](https://github.com/bnnr-team/bnnr/issues/238)) ([ab7f52e](https://github.com/bnnr-team/bnnr/commit/ab7f52e0f6f7b12afc90f268a1600f7de25cfacd))
+* add Zenodo DOIs for software and ICD/AICD paper ([#239](https://github.com/bnnr-team/bnnr/issues/239)) ([802f3c8](https://github.com/bnnr-team/bnnr/commit/802f3c8588e3a15b975f74820d3c5a0bb973c4be))
+* align public roadmap with analyze-first and Q2–Q4 plan ([#185](https://github.com/bnnr-team/bnnr/issues/185)) ([f36d8bc](https://github.com/bnnr-team/bnnr/commit/f36d8bc02837d49c587ae99cec3addf17d32ee2d))
+* align user documentation with code (audit 2026-05-31) ([#186](https://github.com/bnnr-team/bnnr/issues/186)) ([daefea2](https://github.com/bnnr-team/bnnr/commit/daefea24a473573998a5f85451cd6fe7728adb60))
+* analyze-first README hero, lead with bnnr analyze ([#199](https://github.com/bnnr-team/bnnr/issues/199)) ([6c0ee1d](https://github.com/bnnr-team/bnnr/commit/6c0ee1d272a522101d49da3192de03aafa62e5c7))
+* **analyze:** add --summary flag to analyze.md, expand api_reference.md ([ed7e251](https://github.com/bnnr-team/bnnr/commit/ed7e2518ad3fd814fc0e95160a7492bdd2578e8c))
+* **analyze:** supplement classification docs — quick start, stl10, xai-samples, fix API reference ([b525b20](https://github.com/bnnr-team/bnnr/commit/b525b20bd4e63d46cb1080b4d891027913ac1a28))
+* clarify YOLO-format vs Ultralytics SDK examples ([55d3e2a](https://github.com/bnnr-team/bnnr/commit/55d3e2afc8787639d222703aa03a32a0c22d3739))
+* drop optional label from analyze section heading ([8761702](https://github.com/bnnr-team/bnnr/commit/8761702111c2836e4d3a41d478c4ff74e32b6fef))
+* drop release_pypi index entry (doc removed) ([83a5bc9](https://github.com/bnnr-team/bnnr/commit/83a5bc980c5d59e75bc446d7095dfd60dffb0aac))
+* drop release_pypi index entry (doc removed) ([0d6b63e](https://github.com/bnnr-team/bnnr/commit/0d6b63ed5b0208c42010fabcd96f99b029f312fb))
+* drop release_pypi index entry (doc removed) ([743e72d](https://github.com/bnnr-team/bnnr/commit/743e72d603ec17bc846e55417e816cd49d3db72b))
+* **examples:** detection demo uses YOLOv8n and COCO128 ([768c99b](https://github.com/bnnr-team/bnnr/commit/768c99b287fba5b048778d246c24727d753c17b7))
+* fix ICD acronym typo (Intelligence -&gt; Intelligent Coarse Dropout) ([#236](https://github.com/bnnr-team/bnnr/issues/236)) ([d5a465f](https://github.com/bnnr-team/bnnr/commit/d5a465f21ed80f8a06d39ed15a4fa7d7f96a3d86))
+* hide object detection from public README and changelog ([bf64484](https://github.com/bnnr-team/bnnr/commit/bf644844f87697a479603a1c8aba65e62c3f1c0c))
+* ICD plug-in guide + minimal training loop (no BNNRTrainer) ([d2ba461](https://github.com/bnnr-team/bnnr/commit/d2ba461ba949c7afd2173d4a45f5e4943d3d709d))
+* ICD plug-in guide + minimal training loop (no BNNRTrainer) ([4335050](https://github.com/bnnr-team/bnnr/commit/43350501fc25f66a5fbc5f51243774f2e2220f59))
+* improve README links, tagline, and live sample report preview ([60a00d1](https://github.com/bnnr-team/bnnr/commit/60a00d1fb81ee1517807e593985ef1fdbfb11ac1))
+* integrations hub (pytorch-grad-cam + Ultralytics) ([0a3f743](https://github.com/bnnr-team/bnnr/commit/0a3f74335fc25474852b99f7d6c831865ff89ee8))
+* move Quickstart with demo/quickstart above the fold in README ([88b9dff](https://github.com/bnnr-team/bnnr/commit/88b9dffeaf14730cbecd8538994c0a828ef4dba1))
+* one-click analyze quickstart Colab notebook ([#218](https://github.com/bnnr-team/bnnr/issues/218)) ([42d8cc3](https://github.com/bnnr-team/bnnr/commit/42d8cc31cfd415a42564eb137826624ddfb9324e))
+* promote torchvision analyze golden path in getting_started ([#230](https://github.com/bnnr-team/bnnr/issues/230)) ([ff507ce](https://github.com/bnnr-team/bnnr/commit/ff507ce795c9ee7750bb2777f1d578206c9a88f4))
+* publish CIFAR-10 benchmark results and branded OptiCAM figure ([6300f13](https://github.com/bnnr-team/bnnr/commit/6300f1327826b581d3361eff535c16a5f2fdcac9))
+* put bnnr demo first in README, move analyze below fold ([88fd1ae](https://github.com/bnnr-team/bnnr/commit/88fd1ae6cfb5151a0cf06cce94c835d04e9e9e96))
+* PyPI launch polish — wheel vs repo, multilabel/CLI clarity ([610db1d](https://github.com/bnnr-team/bnnr/commit/610db1d9e990244e18be003cb116e8b5cf0e8699))
+* README index note for detection advanced API ([a0f8c12](https://github.com/bnnr-team/bnnr/commit/a0f8c1276feae118371b993f8b1467007c7dbd2f))
+* **readme:** point to bnnr.dev for full demo video with audio ([798fc65](https://github.com/bnnr-team/bnnr/commit/798fc65474cbca33b1c7206eb3fc4d24b61b92fe))
+* torchvision analyze section and contributor issue templates ([#180](https://github.com/bnnr-team/bnnr/issues/180)) ([d9ad723](https://github.com/bnnr-team/bnnr/commit/d9ad7231976a7da488330a582c2f770f5a2c613b))
+* Ultralytics YOLO path, YOLO-format loaders, troubleshooting ([fe059aa](https://github.com/bnnr-team/bnnr/commit/fe059aad6bc576cdecb1d8af120df24a22d87145))
+* update README version label to v0.2.1 ([c1f1aab](https://github.com/bnnr-team/bnnr/commit/c1f1aabdb84f98c573ffe0407ca595041f591ffc))
+* update version references from 0.4.11 to 0.4.12 ([#243](https://github.com/bnnr-team/bnnr/issues/243)) ([b008e68](https://github.com/bnnr-team/bnnr/commit/b008e687807146cd1843ce243fe0b77ca013d807))
+
 ## [Unreleased]
 
 ## [0.4.14] — 2026-06-09
