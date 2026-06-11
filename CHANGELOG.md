@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/bnnr-team/bnnr/compare/v0.5.2...v0.5.3) (2026-06-11)
+
+
+### Bug Fixes
+
+* implement real local_mean fill in DetectionICD ([#295](https://github.com/bnnr-team/bnnr/issues/295)) ([8b72635](https://github.com/bnnr-team/bnnr/commit/8b7263583cda364713a796acb6846d615e9a6070)), closes [#255](https://github.com/bnnr-team/bnnr/issues/255)
+
 ## [0.5.2](https://github.com/bnnr-team/bnnr/compare/v0.5.1...v0.5.2) (2026-06-11)
 
 
