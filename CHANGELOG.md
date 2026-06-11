@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.4](https://github.com/bnnr-team/bnnr/compare/v0.5.3...v0.5.4) (2026-06-11)
+
+
+### Bug Fixes
+
+* load checkpoints with weights_only=True first ([#298](https://github.com/bnnr-team/bnnr/issues/298)) ([233dc36](https://github.com/bnnr-team/bnnr/commit/233dc36cfcc201076ff4eac9b683620dea4221e9))
+
 ## [0.5.3](https://github.com/bnnr-team/bnnr/compare/v0.5.2...v0.5.3) (2026-06-11)
 
 
