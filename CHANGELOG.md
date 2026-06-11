@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/bnnr-team/bnnr/compare/v0.5.1...v0.5.2) (2026-06-11)
+
+
+### Bug Fixes
+
+* raise torch floor to 2.10.0 for security fixes ([#293](https://github.com/bnnr-team/bnnr/issues/293)) ([76b52bc](https://github.com/bnnr-team/bnnr/commit/76b52bc31425f017fe04dbddb2cd78c013393d12))
+
 ## [0.5.1](https://github.com/bnnr-team/bnnr/compare/v0.5.0...v0.5.1) (2026-06-10)
 
 
