@@ -126,6 +126,85 @@ def test_precompute_runs_after_baseline_and_under_run_dir(temp_dir, monkeypatch)
     assert not (cfg.checkpoint_dir / "xai_cache").exists()
 
 
+def test_baseline_keeps_best_epoch_not_last(temp_dir, monkeypatch) -> None:
+    """The baseline phase must restore its best epoch's weights, not the last."""
+    import copy
+
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import DataLoader, TensorDataset
+
+    import bnnr.training.loop as loop_mod
+    from bnnr.core import BNNRConfig, BNNRTrainer, SimpleTorchAdapter
+
+    class TinyCNN(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.conv1 = nn.Conv2d(3, 6, 3, padding=1)
+            self.pool = nn.AdaptiveAvgPool2d((1, 1))
+            self.fc = nn.Linear(6, 4)
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            x = torch.relu(self.conv1(x))
+            return self.fc(self.pool(x).flatten(1))
+
+    torch.manual_seed(0)
+    x = torch.rand(12, 3, 8, 8)
+    y = torch.randint(0, 4, (12,))
+    loader = DataLoader(TensorDataset(x, y), batch_size=4, shuffle=False)
+    model = TinyCNN()
+    adapter = SimpleTorchAdapter(
+        model=model,
+        criterion=nn.CrossEntropyLoss(),
+        optimizer=torch.optim.Adam(model.parameters(), lr=1e-2),
+        target_layers=[model.conv1],
+        device="cpu",
+    )
+    cfg = BNNRConfig(
+        m_epochs=3,
+        max_iterations=0,  # baseline only
+        xai_enabled=False,
+        device="cpu",
+        checkpoint_dir=temp_dir / "ckpt",
+        report_dir=temp_dir / "reports",
+        save_checkpoints=False,
+    )
+
+    # Script evaluate so epoch 2 (acc 0.8) is the best; epoch 3 (0.5) is last.
+    scripted = [0.3, 0.8, 0.5]
+    calls = {"n": 0}
+
+    def fake_eval(trainer, ldr, cache_predictions=False):
+        i = calls["n"]
+        calls["n"] += 1
+        acc = scripted[i] if i < len(scripted) else 0.8
+        return {"accuracy": acc, "loss": 1.0 - acc, "f1_macro": acc}
+
+    # Snapshot model weights right after each baseline train epoch.
+    snapshots: list[dict] = []
+    real_train = loop_mod.train_epoch
+
+    def traced_train(trainer, ldr, augmentations=None):
+        out = real_train(trainer, ldr, augmentations)
+        snapshots.append(copy.deepcopy(trainer.model.state_dict()))
+        return out
+
+    monkeypatch.setattr(loop_mod, "evaluate", fake_eval)
+    monkeypatch.setattr(loop_mod, "train_epoch", traced_train)
+
+    trainer = BNNRTrainer(adapter, loader, loader, [], cfg)
+    trainer.run()
+
+    assert len(snapshots) == 3
+    # trainer.model is the adapter; weights are nested under "model".
+    final = trainer.model.state_dict()["model"]
+    best = snapshots[1]["model"]
+    last = snapshots[2]["model"]
+    # Weights match the best epoch (index 1), not the last (index 2).
+    assert torch.equal(final["fc.weight"], best["fc.weight"])
+    assert not torch.equal(final["fc.weight"], last["fc.weight"])
+
+
 def test_baseline_reeval_win_does_not_crash(temp_dir, monkeypatch) -> None:
     """A winning baseline_reeval must be treated as no-improvement, not crash."""
     import torch
