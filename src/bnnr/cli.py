@@ -655,9 +655,11 @@ def analyze_command(
         raise typer.Exit(code=1) from exc
 
     try:
-        import torch
+        from bnnr.utils import safe_torch_load
 
-        ckpt = torch.load(model, map_location="cpu", weights_only=False)
+        # External model file: try the safe weights_only=True path first; the
+        # helper warns and falls back to weights_only=False only if needed.
+        ckpt = safe_torch_load(model, map_location="cpu")
     except Exception as exc:
         typer.echo(f"Error loading model: {exc}", err=True)
         raise typer.Exit(code=1) from exc

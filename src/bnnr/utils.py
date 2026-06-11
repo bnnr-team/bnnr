@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import random
+import warnings
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -85,6 +89,56 @@ def get_device(device: str = "auto") -> torch.device:
     if device == "cpu":
         return torch.device("cpu")
     raise ValueError(f"Unsupported device: {device}")
+
+
+def numpy_rng_safe_globals() -> list[Any]:
+    """Globals needed to unpickle a numpy RNG state under ``weights_only=True``.
+
+    BNNR checkpoints embed ``np.random.get_state()`` (a tuple holding a uint32
+    ndarray), which the restricted ``weights_only=True`` unpickler rejects
+    unless these benign numpy globals are allowlisted.  Resolved at runtime so
+    the set stays correct across numpy 1.x/2.x (``_reconstruct`` moved from
+    ``numpy.core`` to ``numpy._core`` in 2.0; the concrete dtype class differs).
+    """
+    globals_: list[Any] = [np.ndarray, np.dtype, type(np.dtype("uint32"))]
+    for modpath in ("numpy._core.multiarray", "numpy.core.multiarray"):
+        try:
+            globals_.append(importlib.import_module(modpath)._reconstruct)
+            break
+        except Exception:
+            continue
+    return globals_
+
+
+def safe_torch_load(
+    path: Any,
+    *,
+    map_location: Any = "cpu",
+    extra_safe_globals: Sequence[Any] | None = None,
+) -> Any:
+    """Load a torch checkpoint, preferring the safe ``weights_only=True`` path.
+
+    Tries ``weights_only=True`` first (allowlisting *extra_safe_globals* for
+    known-benign payloads such as numpy RNG state).  If the file cannot be
+    loaded that way -- e.g. it pickles arbitrary Python objects -- falls back to
+    ``weights_only=False`` and warns, naming the file, since that path can
+    execute arbitrary code embedded in an untrusted checkpoint.
+    """
+    safe_globals = list(extra_safe_globals or [])
+    try:
+        if safe_globals:
+            with torch.serialization.safe_globals(safe_globals):
+                return torch.load(path, map_location=map_location, weights_only=True)
+        return torch.load(path, map_location=map_location, weights_only=True)
+    except Exception as exc:
+        warnings.warn(
+            f"Could not load {path} with weights_only=True ({type(exc).__name__}); "
+            f"falling back to weights_only=False. This executes arbitrary code if "
+            f"the checkpoint comes from an untrusted source.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return torch.load(path, map_location=map_location, weights_only=False)
 
 
 def tensor_to_numpy(tensor: Tensor) -> np.ndarray:
