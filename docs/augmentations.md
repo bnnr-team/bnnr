@@ -45,6 +45,15 @@ Main classes used by presets:
 - `Smugs`
 - `TeaStains`
 
+## Application order and CPU/GPU paths
+
+`AugmentationRunner` applies augmentations **strictly in the order you list them**. Each aug is dispatched per call to its GPU-native tensor path (`apply_tensor`) when `device_compatible` and a tensor is available, otherwise to the numpy CPU path (`apply`).
+
+- **Sync path** (`async_prefetch=False`, no CPU augs, or a mixed/interleaved list): augs run inline in list order.
+- **Async prefetch** (`async_prefetch=True`): only engaged when every CPU aug precedes every GPU aug in your list. CPU augs run in a background thread for the next batch while the current batch trains; GPU augs run on the main thread (with `sample_indices` threaded through, so index-aware augs key on the sample index rather than an image hash). If the list interleaves CPU and GPU augs, the runner falls back to the sync path so order is never changed by the split.
+
+**CPU/GPU divergence:** `ChurchNoise`, `DifPresets`, and `ProCAM` are `device_compatible=True` but their GPU and CPU implementations are **different transforms**, not just different precision (e.g. `ChurchNoise` is regional line noise on CPU but uniform Gaussian noise on GPU). On a machine with a GPU tensor path the GPU variant runs; on CPU-only the numpy variant runs. See each class docstring for the specifics.
+
 ## Multi-label note
 
 Multi-label task uses the same augmentation pipeline interface as classification.
