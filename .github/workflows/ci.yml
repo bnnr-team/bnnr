@@ -50,7 +50,18 @@ jobs:
             [[ -z "${vuln}" || "${vuln}" =~ ^# ]] && continue
             ALLOWLIST_ARGS+=(--ignore-vuln "${vuln}")
           done < security/pip-audit-allowlist.txt
-          pip-audit "${ALLOWLIST_ARGS[@]}"
+          # pip-audit queries PyPI once per dependency with no built-in retry, so a
+          # single transient PyPI 5xx (ServiceError) fails the whole step. Retry a
+          # few times with backoff before treating it as a real failure.
+          for attempt in 1 2 3; do
+            if pip-audit "${ALLOWLIST_ARGS[@]}"; then
+              exit 0
+            fi
+            echo "pip-audit attempt ${attempt} failed; retrying in $((attempt * 15))s..."
+            sleep $((attempt * 15))
+          done
+          echo "pip-audit failed after 3 attempts"
+          exit 1
 
       - name: Security lint (bandit)
         run: bandit -r src/bnnr -c pyproject.toml -lll -f txt
