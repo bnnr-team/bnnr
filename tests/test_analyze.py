@@ -13,9 +13,37 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from bnnr.adapter import SimpleTorchAdapter
-from bnnr.analyze import AnalysisReport, analyze_model
+from bnnr.analyze import AnalysisReport, _run_cross_validation, analyze_model
 from bnnr.core import BNNRConfig
 from bnnr.evaluation import run_evaluation
+
+
+def test_cross_validation_reuses_cached_predictions(monkeypatch) -> None:
+    """Classification CV must not run a second inference pass when preds are cached."""
+    import bnnr.analyze as analyze_mod
+
+    report = AnalysisReport()
+    report._cached_preds = np.array([0, 1, 2, 0, 1, 2, 0, 1])
+    report._cached_labels = np.array([0, 1, 2, 0, 1, 1, 0, 2])
+
+    calls = {"n": 0}
+
+    def _tracked_collect(*args, **kwargs):
+        calls["n"] += 1
+        return None
+
+    monkeypatch.setattr(analyze_mod, "collect_eval_predictions", _tracked_collect)
+
+    _run_cross_validation(
+        adapter=object(),
+        val_loader=object(),
+        config=BNNRConfig(device="cpu"),
+        report=report,
+        n_folds=2,
+    )
+
+    assert calls["n"] == 0  # no second forward pass
+    assert report.cv_results  # populated from cached preds
 
 
 def _seed_mnist_data_dir(data_parent: Path) -> Path:

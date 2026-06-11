@@ -144,6 +144,12 @@ class AnalysisReport:
         return self.failure_patterns
 
 
+def _stage(message: str, show: bool) -> None:
+    """Print an analyze stage banner when progress output is enabled."""
+    if show:
+        print(f"  [analyze] {message}", flush=True)
+
+
 def analyze_model(
     adapter: Any,
     val_loader: Any,
@@ -200,12 +206,16 @@ def analyze_model(
         confusion=confusion,
     )
 
+    show_progress = bool(getattr(config, "verbose", True))
+
     if eff_task == "classification":
         report.analysis_scope = {"task": "classification", "extended_analysis": True}
         max_probe = max(5, xai_samples // 10) if xai_samples else 5
         if xai_enabled and isinstance(adapter, XAICapableModel):
+            _stage("probe XAI...", show_progress)
             _run_xai(adapter, val_loader, config, report, xai_method, max_probe_per_class=max_probe)
 
+        _stage("failure analysis...", show_progress)
         _run_failure_analysis(
             adapter, val_loader, config, report, max_worst, output_dir, xai_enabled, xai_method
         )
@@ -214,6 +224,7 @@ def analyze_model(
         report.recommendations = _recommendations_from_structured(report.recommendations_structured)
 
         if cv_folds and cv_folds > 1:
+            _stage(f"cross-validation ({cv_folds} folds)...", show_progress)
             _run_cross_validation(
                 adapter=adapter,
                 val_loader=val_loader,
@@ -228,6 +239,7 @@ def analyze_model(
             and output_dir is not None
             and report._cached_preds is not None
         ):
+            _stage("confusion-pair XAI...", show_progress)
             _build_confusion_pair_xai(
                 adapter=adapter,
                 val_loader=val_loader,
@@ -235,12 +247,14 @@ def analyze_model(
                 xai_method=xai_method,
                 output_dir=Path(output_dir),
             )
+            _stage("best/worst per class...", show_progress)
             _build_best_worst_per_class(
                 adapter=adapter,
                 val_loader=val_loader,
                 report=report,
                 xai_method=xai_method,
                 output_dir=Path(output_dir),
+                show_progress=show_progress,
             )
 
     elif eff_task == "multilabel":
@@ -252,6 +266,7 @@ def analyze_model(
                 "use per-label precision/recall for threshold tuning."
             ),
         }
+        _stage("failure analysis...", show_progress)
         _run_failure_analysis(
             adapter, val_loader, config, report, max_worst, output_dir, xai_enabled, xai_method
         )
@@ -283,8 +298,10 @@ def analyze_model(
             )
 
     if run_data_quality:
+        _stage("data quality scan...", show_progress)
         _run_data_quality(val_loader, config, report, output_dir, data_quality_max_samples)
 
+    _stage("done.", show_progress)
     if output_dir is not None:
         report.save(output_dir)
     return report
@@ -792,8 +809,15 @@ def _build_best_worst_per_class(
     output_dir: Path,
     n_best: int = 4,
     n_worst: int = 4,
+    show_progress: bool = False,
 ) -> None:
-    """Build 4 best + 4 worst examples per class with saliency overlays."""
+    """Build 4 best + 4 worst examples per class with saliency overlays.
+
+    Diagnoses every class (no cap): per-class coverage is a deliberate feature,
+    so a progress bar is shown to keep long high-class-count runs legible.
+    """
+    from tqdm.auto import tqdm
+
     from bnnr.xai import save_xai_visualization
 
     preds = report._cached_preds
@@ -806,7 +830,12 @@ def _build_best_worst_per_class(
     classes = sorted(set(int(lbl) for lbl in labels))
     result: dict[str, dict[str, list]] = {}
 
-    for cls in classes:
+    for cls in tqdm(
+        classes,
+        desc="  [analyze] best/worst per class",
+        disable=not show_progress,
+        leave=False,
+    ):
         cls_mask = labels == cls
         cls_preds = preds[cls_mask]
         cls_conf = confidences[cls_mask]
@@ -863,12 +892,15 @@ def _run_cross_validation(
     n_folds: int,
 ) -> None:
     """Run lightweight k-fold CV on cached predictions to populate report.cv_results."""
-    from bnnr.evaluation import collect_eval_predictions
-
-    out = collect_eval_predictions(adapter, val_loader, config)
-    if out is None:
-        return
-    preds, labels, _indices, _confidences, _losses = out
+    # Reuse predictions from the initial pass (cached by _run_failure_analysis),
+    # mirroring the multilabel path; only run a fresh inference if absent.
+    preds = report._cached_preds
+    labels = report._cached_labels
+    if preds is None or labels is None:
+        out = collect_eval_predictions(adapter, val_loader, config)
+        if out is None:
+            return
+        preds, labels, _indices, _confidences, _losses = out
     cv = run_cross_validation_from_predictions(preds, labels, n_folds)
     report.cv_results = serialize_for_json(cv)
 
