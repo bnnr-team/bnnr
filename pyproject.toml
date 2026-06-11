@@ -44,7 +44,10 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Image Recognition",
 ]
 dependencies = [
-  "torch>=2.0.0,<3.0",
+  # Floor raised to 2.10.0: torch <2.9.1 / <2.10.0 carry memory-corruption
+  # advisories (CVE-2025-2999 unpack_sequence, CVE-2025-3001 lstm_cell), fixed
+  # in 2.9.1 / 2.10.0 respectively.
+  "torch>=2.10.0,<3.0",
   "torchvision>=0.15.0,<1.0",
   "numpy>=1.24.0,<3.0",
   "opencv-python>=4.8.0,<5.0",
