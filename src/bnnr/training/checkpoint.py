@@ -13,6 +13,8 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from bnnr.utils import numpy_rng_safe_globals, safe_torch_load
+
 if TYPE_CHECKING:
     from bnnr.trainer import BNNRTrainer
 
@@ -120,9 +122,15 @@ def save_checkpoint(
 
 def load_checkpoint(trainer: BNNRTrainer, checkpoint_path: Path) -> dict[str, Any]:
     """Load a BNNR checkpoint and restore model + RNG state on *trainer*."""
+    # BNNR checkpoints hold tensors + plain metadata + numpy RNG state, so the
+    # safe weights_only=True path works once the numpy RNG globals are allowed.
     state = cast(
         dict[str, Any],
-        torch.load(checkpoint_path, map_location="cpu", weights_only=False),
+        safe_torch_load(
+            checkpoint_path,
+            map_location="cpu",
+            extra_safe_globals=numpy_rng_safe_globals(),
+        ),
     )
     expected_checkpoint_keys = {"model_state", "iteration", "augmentation_name"}
     if not isinstance(state, dict) or not expected_checkpoint_keys.issubset(state.keys()):
