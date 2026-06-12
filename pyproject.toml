@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bnnr"
-version = "0.5.3"
+version = "0.5.5"
 description = "BNNR: XAI-driven augmentation & diagnostics for PyTorch vision - find model failures, fix with saliency-guided augmentation (ICD/AICD), prove with auditable reports."
 readme = "README.pypi.md"
 license = { text = "MIT" }
@@ -170,7 +170,7 @@ skips = [
   "B404",  # subprocess import — dashboard npm build
   "B602",  # shell=True only on Windows for npm.cmd
   "B607",  # npm on PATH
-  "B614",  # torch.load — user checkpoints by design
+  "B614",  # torch.load via safe_torch_load(): weights_only=True first, warns before any weights_only=False fallback
   "B310",  # curated example_data download URL
 ]
 
