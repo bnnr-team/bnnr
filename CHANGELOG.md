@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.7](https://github.com/bnnr-team/bnnr/compare/v0.5.6...v0.5.7) (2026-06-12)
+
+
+### Bug Fixes
+
+* select the best baseline epoch, not the last ([#301](https://github.com/bnnr-team/bnnr/issues/301)) ([95b9d8d](https://github.com/bnnr-team/bnnr/commit/95b9d8d24cb511ef802e76d3415eb89a0a2865f9))
+
 ## [0.5.6](https://github.com/bnnr-team/bnnr/compare/v0.5.5...v0.5.6) (2026-06-12)
 
 
