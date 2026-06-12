@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.5](https://github.com/bnnr-team/bnnr/compare/v0.5.4...v0.5.5) (2026-06-12)
+
+
+### Bug Fixes
+
+* forbid unknown config keys and enforce epoch bounds ([#297](https://github.com/bnnr-team/bnnr/issues/297)) ([985dcc8](https://github.com/bnnr-team/bnnr/commit/985dcc87c3ce5dff2ac4c7a2a80091a3e376df5a))
+
 ## [0.5.4](https://github.com/bnnr-team/bnnr/compare/v0.5.3...v0.5.4) (2026-06-11)
 
 
