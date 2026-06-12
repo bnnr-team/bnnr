@@ -70,7 +70,10 @@ _PRESETS: dict[str, dict[str, Any]] = {
             {"cls": Drust, "kwargs": {"probability": 0.5, "intensity": 0.5}},
             {"cls": LuxferGlass, "kwargs": {"probability": 0.5, "intensity": 0.5}},
             {"cls": ProCAM, "kwargs": {"probability": 0.5}},
-            {"cls": Smugs, "kwargs": {"probability": 0.5, "intensity": 1.5}},
+            # Smugs.apply ignores intensity and the base blend only acts for
+            # intensity<1.0, so intensity>1.0 was a no-op. Dropped to avoid the
+            # misleading knob (behavior is unchanged).
+            {"cls": Smugs, "kwargs": {"probability": 0.5}},
             {"cls": TeaStains, "kwargs": {"probability": 0.5, "intensity": 0.5}},
         ],
     },

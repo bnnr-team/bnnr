@@ -225,13 +225,10 @@ class _DetectionBaseICD(BboxAwareAugmentation):
         channels = image.shape[2] if image.ndim == 3 else 1
         means = image.mean(axis=(0, 1))
         stds = image.std(axis=(0, 1)).clip(1.0)
-        noise = np.empty((n_masked, channels), dtype=image.dtype)
-        for ch in range(channels):
-            noise[:, ch] = np.clip(
-                np.array([self._rnd.gauss(float(means[ch]), float(stds[ch])) for _ in range(n_masked)]),
-                0, 255,
-            ).astype(image.dtype)
-        image[mask] = noise
+        # Vectorized draw (was a per-pixel Python loop), seeded from self._rnd.
+        gen = np.random.default_rng(self._rnd.getrandbits(64))
+        noise = gen.normal(means, stds, size=(n_masked, channels))
+        image[mask] = np.clip(noise, 0, 255).astype(image.dtype)
         return image
 
     def _solid_fill(self, image: np.ndarray, mask: np.ndarray) -> np.ndarray:

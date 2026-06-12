@@ -115,19 +115,16 @@ class BNNRTrainer:
                 )
 
     @property
-
     def _xai_enabled(self) -> bool:
         """Check if XAI is effectively enabled (config + runtime)."""
         return self.config.xai_enabled and not self._runtime.xai_disabled
 
     @property
-
     def _is_detection(self) -> bool:
         """Check if this run is object detection task."""
         return self.config.task == "detection"
 
     @property
-
     def _is_multilabel(self) -> bool:
         """Check if this run is multi-label classification task."""
         return self.config.task == "multilabel"
@@ -187,12 +184,10 @@ class BNNRTrainer:
         return _img.tensor_to_uint8(images, warn_context=self)
 
     @staticmethod
-
     def _uint8_to_tensor(np_images: np.ndarray, *, ref_batch: Tensor) -> Tensor:
         return _img.uint8_to_tensor(np_images, ref_batch=ref_batch)
 
     @staticmethod
-
     def _det_uint8_batch_to_float01(np_images: np.ndarray, *, ref_batch: Tensor) -> Tensor:
         return _img.det_uint8_batch_to_float01(np_images, ref_batch=ref_batch)
 
@@ -368,7 +363,6 @@ class BNNRTrainer:
         return _callbacks.build_xai_insights(baseline_metrics, best_metrics, selected_augmentations, self.config)
 
     @staticmethod
-
     def _saliency_recommendations(
         batch_stats: dict[str, list[dict[str, float]]],
         xai_diagnoses: dict[str, dict[str, Any]] | None = None,
@@ -421,7 +415,6 @@ class BNNRTrainer:
         self._resume_baseline_metrics = cast(Optional[dict[str, float]], state.get("baseline_metrics"))
 
     @staticmethod
-
     def _count_labels(
         loader: DataLoader,
         *,
