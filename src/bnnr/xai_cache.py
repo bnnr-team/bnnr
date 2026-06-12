@@ -131,17 +131,44 @@ class XAICache:
     ) -> None:
         """Persist a saliency map so future lookups are instant (lazy caching).
 
-        At least one of *sample_index* or *image* must be provided so we can
-        derive a cache key.
+        Only *index-keyed* maps are persisted. Hash-keyed persistence was
+        removed: lazy saves hit on a cache miss, which (outside precompute)
+        means the image is already augmented, so a hash key never re-hits and
+        the cache grows unboundedly. The *image* argument is accepted for
+        backward compatibility but is no longer used for persistence.
         """
-        if sample_index is not None:
-            path = self._index_cache_path(sample_index, label)
-        elif image is not None:
-            image_hash = self._hash_image(image)
-            path = self._cache_path(image_hash, label)
-        else:
-            return  # nothing to key on — silently skip
+        if sample_index is None:
+            return  # only index-keyed maps persist (no unbounded hash growth)
+        path = self._index_cache_path(sample_index, label)
         np.save(path, saliency.astype(np.float32))
+
+    def trim_to_max_mb(self, max_mb: int) -> int:
+        """Evict oldest cache maps (LRU by mtime) until under *max_mb*.
+
+        Returns the number of ``.npy`` files deleted. ``max_mb <= 0`` disables
+        the cap (no-op). The manifest is never evicted.
+        """
+        if max_mb <= 0:
+            return 0
+        max_bytes = max_mb * 1024 * 1024
+        npy_files = list(self.cache_dir.glob("*.npy"))
+        sizes = {p: p.stat().st_size for p in npy_files}
+        total = sum(sizes.values())
+        if total <= max_bytes:
+            return 0
+        # Oldest first (smallest mtime). Delete until under the cap.
+        npy_files.sort(key=lambda p: p.stat().st_mtime)
+        evicted = 0
+        for path in npy_files:
+            if total <= max_bytes:
+                break
+            try:
+                path.unlink()
+            except OSError:
+                continue
+            total -= sizes[path]
+            evicted += 1
+        return evicted
 
     # ------------------------------------------------------------------
     # Batch-level helpers for precompute fast-skip
