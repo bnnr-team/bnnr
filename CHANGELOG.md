@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.6](https://github.com/bnnr-team/bnnr/compare/v0.5.5...v0.5.6) (2026-06-12)
+
+
+### Bug Fixes
+
+* make analyze sequential for shuffled val loaders ([#299](https://github.com/bnnr-team/bnnr/issues/299)) ([f204f29](https://github.com/bnnr-team/bnnr/commit/f204f29451d699a6dea4cb78b5a8db94b293ed57))
+
 ## [0.5.5](https://github.com/bnnr-team/bnnr/compare/v0.5.4...v0.5.5) (2026-06-12)
 
 
