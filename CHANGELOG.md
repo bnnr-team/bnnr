@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/bnnr-team/bnnr/compare/v0.5.7...v0.6.0) (2026-06-13)
+
+
+### Features
+
+* add icd preset for saliency-guided training ([#303](https://github.com/bnnr-team/bnnr/issues/303)) ([ba7ba4d](https://github.com/bnnr-team/bnnr/commit/ba7ba4d212c03ca15dea671d7d25949342a49d86))
+
 ## [0.5.7](https://github.com/bnnr-team/bnnr/compare/v0.5.6...v0.5.7) (2026-06-12)
 
 

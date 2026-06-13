@@ -50,7 +50,7 @@ Run `bnnr analyze` on a trained model and you get a self-contained HTML report: 
 - **My augmentations are guesswork.** → ICD/AICD condition augmentation on saliency maps, then a branch search keeps only the augmentations that measurably improve your validation metric.
 - **I need to prove model quality to stakeholders or compliance.** → A portable `report.html` plus a structured JSON audit artifact you can attach to a review.
 
-<sub>BNNR also ships a training pipeline (`bnnr train`), a live dashboard, multi-label support, and object detection (YOLO / COCO-mini). Single-label classification is the focus for `analyze`. Supported tasks in **v0.5.7**: single-label classification, multi-label classification, object detection. Full docs: [docs/README.md](docs/README.md) ([analyze](docs/analyze.md) · [detection](docs/detection.md) · [benchmarks](docs/benchmarks.md)).</sub><!-- x-release-please-version -->
+<sub>BNNR also ships a training pipeline (`bnnr train`), a live dashboard, multi-label support, and object detection (YOLO / COCO-mini). Single-label classification is the focus for `analyze`. Supported tasks in **v0.6.0**: single-label classification, multi-label classification, object detection. Full docs: [docs/README.md](docs/README.md) ([analyze](docs/analyze.md) · [detection](docs/detection.md) · [benchmarks](docs/benchmarks.md)).</sub><!-- x-release-please-version -->
 
 ---
 
