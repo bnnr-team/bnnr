@@ -78,7 +78,7 @@ Omit `--config` to use built-in quickstart defaults (`m_epochs=3`, `max_iteratio
 - `--epochs, -e`
 - `--seed, -s`
 - `--no-xai`
-- `--augmentation-preset, --preset` (`auto`, `light`, `standard`, `aggressive`, `gpu`, `none`; unknown names fall back to `auto` with a warning)
+- `--augmentation-preset, --preset` (`auto`, `light`, `standard`, `aggressive`, `gpu`, `icd`, `none`; unknown names fall back to `auto` with a warning). `icd` = saliency-guided ICD + AICD candidates (model/target layers supplied by the pipeline).
 - `--with-dashboard / --without-dashboard`
 - `--dashboard-port` (if busy, the dashboard auto-falls back to the next free port in `port..port+9` and prints the actual port)
 - `--no-auto-open`
