@@ -682,6 +682,13 @@ def precompute_xai_cache(trainer) -> XAICache | None:
     )
     trainer._log(f"Precomputed {written} XAI cache maps")
 
+    evicted = cache.trim_to_max_mb(trainer.config.xai_cache_max_mb)
+    if evicted > 0:
+        trainer._log(
+            f"XAI cache exceeded {trainer.config.xai_cache_max_mb} MB; "
+            f"evicted {evicted} oldest maps"
+        )
+
     for aug in trainer.augmentations:
         if isinstance(aug, (ICD, AICD)):
             aug.cache = cache

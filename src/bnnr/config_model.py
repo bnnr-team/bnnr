@@ -43,6 +43,9 @@ class BNNRConfig(BaseModel):
     xai_cache_dir: Optional[Path] = None  # noqa: UP045 – pydantic evaluates at runtime; Path | None breaks on 3.9
     xai_cache_samples: int = 0  # 0 = cache entire dataset
     xai_cache_max_samples: int = 50000
+    # Disk cap for the on-disk XAI cache, in megabytes. After precompute the
+    # cache is trimmed LRU-by-mtime to stay under this. 0 disables the cap.
+    xai_cache_max_mb: int = Field(default=2048, ge=0)
     log_file: Optional[Path] = None  # noqa: UP045
     report_preview_size: int = 224
     report_xai_size: int = 512
