@@ -362,7 +362,7 @@ def train_command(
         "auto",
         "--augmentation-preset",
         "--preset",
-        help="Augmentation preset: auto, light, standard, aggressive, gpu, none",
+        help="Augmentation preset: auto, light, standard, aggressive, gpu, icd, none",
     ),
     with_dashboard: bool = typer.Option(
         True,
