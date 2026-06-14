@@ -15,10 +15,14 @@ class BNNRConfig(BaseModel):
     XAI behavior, and task-specific options for classification, detection,
     and multilabel workflows.
     """
-    model_config = ConfigDict(frozen=True)
+    # extra="forbid" turns YAML typos (e.g. "m_epoch: 50") into an immediate
+    # ValidationError naming the unknown key instead of silently training with
+    # the default value.
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-    m_epochs: int = 5
-    max_iterations: int = 10
+    m_epochs: int = Field(default=5, ge=1)
+    # max_iterations=0 is valid: it runs the baseline phase only (no search).
+    max_iterations: int = Field(default=10, ge=0)
     metrics: list[str] = Field(default_factory=lambda: ["accuracy", "f1_macro", "loss"])
     selection_metric: str = "accuracy"
     selection_mode: str = "max"
