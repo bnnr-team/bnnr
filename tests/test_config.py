@@ -33,6 +33,35 @@ def test_validate_config_warnings() -> None:
     assert isinstance(warnings, list)
 
 
+def test_unknown_key_rejected(temp_dir: Path) -> None:
+    """A YAML typo (unknown key) must fail loudly, naming the bad key."""
+    path = temp_dir / "typo.yaml"
+    path.write_text("m_epoch: 50\n")  # missing trailing 's'
+    with pytest.raises(ValueError, match="m_epoch"):
+        _ = load_config(path)
+
+
+def test_unknown_key_rejected_direct() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        _ = BNNRConfig(device="cpu", not_a_real_field=123)
+
+
+def test_invalid_m_epochs_rejected() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _ = BNNRConfig(m_epochs=0, device="cpu")
+
+
+def test_max_iterations_zero_is_valid() -> None:
+    """max_iterations=0 runs the baseline phase only and must be accepted."""
+    cfg = BNNRConfig(max_iterations=0, device="cpu")
+    assert cfg.max_iterations == 0
+    assert "max_iterations" not in " ".join(validate_config(cfg))
+
+
 def test_merge_configs_overrides() -> None:
     cfg = BNNRConfig(device="cpu", xai_enabled=False)
     merged = merge_configs(cfg, {"m_epochs": 9})

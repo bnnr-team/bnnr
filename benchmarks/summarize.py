@@ -63,7 +63,6 @@ def _welch_t(a: list[float], b: list[float]) -> tuple[float, float] | None:
 def _p_from_t(t: float, df: float) -> float:
     """Two-sided p-value approximation for Welch t (accurate enough for n=5)."""
     # Abramowitz & Stegun approximation of the t CDF tail
-    x = df / (df + t * t)
     # Regularized incomplete beta via continued fraction (simple approx)
     # For our purposes (n=5 seeds), we only need to know p<0.05/0.01/0.001
     try:

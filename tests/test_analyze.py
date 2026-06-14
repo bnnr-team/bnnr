@@ -13,7 +13,12 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from bnnr.adapter import SimpleTorchAdapter
-from bnnr.analyze import AnalysisReport, _run_cross_validation, analyze_model
+from bnnr.analyze import (
+    AnalysisReport,
+    _ensure_sequential_loader,
+    _run_cross_validation,
+    analyze_model,
+)
 from bnnr.core import BNNRConfig
 from bnnr.evaluation import run_evaluation
 
@@ -44,6 +49,30 @@ def test_cross_validation_reuses_cached_predictions(monkeypatch) -> None:
 
     assert calls["n"] == 0  # no second forward pass
     assert report.cv_results  # populated from cached preds
+
+
+def test_ensure_sequential_loader_unshuffled_is_passthrough() -> None:
+    ds = TensorDataset(torch.arange(12).float().reshape(12, 1))
+    loader = DataLoader(ds, batch_size=4, shuffle=False)
+    import warnings as _w
+
+    with _w.catch_warnings():
+        _w.simplefilter("error")  # any warning would fail the test
+        assert _ensure_sequential_loader(loader) is loader
+
+
+def test_ensure_sequential_loader_rebuilds_shuffled_in_order() -> None:
+    values = torch.arange(20).float().reshape(20, 1)
+    ds = TensorDataset(values)
+    shuffled = DataLoader(ds, batch_size=4, shuffle=True)
+
+    with pytest.warns(RuntimeWarning, match="shuffled"):
+        fixed = _ensure_sequential_loader(shuffled)
+
+    assert fixed is not shuffled
+    seen = torch.cat([batch[0] for batch in fixed]).flatten()
+    # Sequential order means we get 0..19 exactly in order.
+    assert torch.equal(seen, values.flatten())
 
 
 def _seed_mnist_data_dir(data_parent: Path) -> Path:

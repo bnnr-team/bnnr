@@ -122,6 +122,15 @@ python3 -m bnnr analyze --model PATH --data PATH_OR_DATASET --output DIR [OPTION
 - Progress: when the config is `verbose` (the default), analyze prints a stage banner for each phase (probe XAI, failure analysis, cross-validation, confusion-pair XAI, best/worst per class, data quality) and a per-class progress bar for the best/worst section.
 - The best/worst-per-class section diagnoses **every** class with no cap — full per-class coverage is intentional. On datasets with many classes this section dominates runtime, which is why it shows a progress bar.
 
+### Validation loader contract
+
+`analyze` pairs each prediction with its source image by index so XAI overlays and per-sample confidences line up with the right picture. There are two ways the index is determined:
+
+- **Indexed dataset (recommended):** the loader yields `(image, label, index)` 3-tuples, and the explicit `index` is used directly. This is robust to any sampling or shuffling.
+- **2-tuple fallback:** the loader yields `(image, label)`, and analyze synthesizes the index as a running offset, which assumes iteration order equals dataset order.
+
+Because the 2-tuple fallback breaks under shuffling, analyze automatically rebuilds a shuffled (`RandomSampler`) `DataLoader` with `shuffle=False` for the analysis pass and emits a warning. Order does not affect analyze (metrics are aggregated, XAI is keyed per index), so this only fixes mispairing. Pass an unshuffled loader (or an indexed 3-tuple dataset) to avoid the warning.
+
 ### Metric definitions (practical)
 
 - `accuracy`, `precision`, `recall`, `f1`, `cohen_kappa`, and confusion-based diagnostics are computed in the evaluation/analysis pipeline (`run_evaluation` and downstream analysis modules).

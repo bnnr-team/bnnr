@@ -127,6 +127,7 @@ trainer = BNNRTrainer(
 - `xai_cache_dir` (default: `null`): when `null`, the cache lives under the current run directory (`<report_dir>/run_<timestamp>/xai_cache`), so saliency maps are never silently reused across runs. Set an explicit path to share a cache between runs (you own invalidation in that case).
 - `xai_cache_samples` (default: `0` = whole dataset)
 - `xai_cache_max_samples` (default: `50000`)
+- `xai_cache_max_mb` (default: `2048`, validated `>=0`): disk cap for the on-disk XAI cache, in megabytes. After precompute the cache is trimmed LRU-by-mtime (oldest maps evicted first) until it fits under this. `0` disables the cap. Only index-keyed precompute maps are persisted, so the cache is naturally bounded by the dataset size; this cap is a disk-budget safety net.
 - `xai_cache_force_recompute` (default: `false`)
 - `xai_cache_progress` (default: `true`)
 

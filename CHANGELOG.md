@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.7](https://github.com/bnnr-team/bnnr/compare/v0.5.6...v0.5.7) (2026-06-12)
+
+
+### Bug Fixes
+
+* select the best baseline epoch, not the last ([#301](https://github.com/bnnr-team/bnnr/issues/301)) ([95b9d8d](https://github.com/bnnr-team/bnnr/commit/95b9d8d24cb511ef802e76d3415eb89a0a2865f9))
+
+## [0.5.6](https://github.com/bnnr-team/bnnr/compare/v0.5.5...v0.5.6) (2026-06-12)
+
+
+### Bug Fixes
+
+* make analyze sequential for shuffled val loaders ([#299](https://github.com/bnnr-team/bnnr/issues/299)) ([f204f29](https://github.com/bnnr-team/bnnr/commit/f204f29451d699a6dea4cb78b5a8db94b293ed57))
+
+## [0.5.5](https://github.com/bnnr-team/bnnr/compare/v0.5.4...v0.5.5) (2026-06-12)
+
+
+### Bug Fixes
+
+* forbid unknown config keys and enforce epoch bounds ([#297](https://github.com/bnnr-team/bnnr/issues/297)) ([985dcc8](https://github.com/bnnr-team/bnnr/commit/985dcc87c3ce5dff2ac4c7a2a80091a3e376df5a))
+
+## [0.5.4](https://github.com/bnnr-team/bnnr/compare/v0.5.3...v0.5.4) (2026-06-11)
+
+
+### Bug Fixes
+
+* load checkpoints with weights_only=True first ([#298](https://github.com/bnnr-team/bnnr/issues/298)) ([233dc36](https://github.com/bnnr-team/bnnr/commit/233dc36cfcc201076ff4eac9b683620dea4221e9))
+
 ## [0.5.3](https://github.com/bnnr-team/bnnr/compare/v0.5.2...v0.5.3) (2026-06-11)
 
 
