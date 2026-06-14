@@ -70,7 +70,10 @@ _PRESETS: dict[str, dict[str, Any]] = {
             {"cls": Drust, "kwargs": {"probability": 0.5, "intensity": 0.5}},
             {"cls": LuxferGlass, "kwargs": {"probability": 0.5, "intensity": 0.5}},
             {"cls": ProCAM, "kwargs": {"probability": 0.5}},
-            {"cls": Smugs, "kwargs": {"probability": 0.5, "intensity": 1.5}},
+            # Smugs.apply ignores intensity and the base blend only acts for
+            # intensity<1.0, so intensity>1.0 was a no-op. Dropped to avoid the
+            # misleading knob (behavior is unchanged).
+            {"cls": Smugs, "kwargs": {"probability": 0.5}},
             {"cls": TeaStains, "kwargs": {"probability": 0.5, "intensity": 0.5}},
         ],
     },
@@ -86,6 +89,14 @@ _PRESETS: dict[str, dict[str, Any]] = {
         "description": (
             "Onboarding demo: saliency-guided ICD plus a lightweight baseline aug. "
             "Requires model and target_layers (see build_demo_augmentations)."
+        ),
+        "augmentations": [],
+    },
+    "icd": {
+        "description": (
+            "Saliency-guided only: ICD (mask the salient object) + AICD (mask the "
+            "background). Requires model and target_layers (resolved automatically "
+            "by `bnnr train --preset icd`)."
         ),
         "augmentations": [],
     },
@@ -117,6 +128,36 @@ def build_demo_augmentations(
     return [church, icd]
 
 
+def build_icd_augmentations(
+    model: nn.Module,
+    target_layers: list[nn.Module],
+    *,
+    random_state: int | None = 42,
+) -> list[BaseAugmentation]:
+    """Saliency-guided candidate set for ``--preset icd`` — ICD + AICD.
+
+    ICD masks the most salient (object) tiles; AICD masks the least salient
+    (background) tiles. Both require ``model`` and ``target_layers`` for XAI.
+    """
+    from bnnr.icd import AICD, ICD
+
+    icd = ICD(
+        model=model,
+        target_layers=target_layers,
+        threshold_percentile=75.0,
+        probability=0.5,
+        random_state=random_state,
+    )
+    aicd = AICD(
+        model=model,
+        target_layers=target_layers,
+        threshold_percentile=75.0,
+        probability=0.5,
+        random_state=(random_state + 1) if random_state is not None else None,
+    )
+    return [icd, aicd]
+
+
 def list_presets() -> dict[str, str]:
     """Return a dict of preset_name → description."""
     return {name: info["description"] for name, info in _PRESETS.items()}
@@ -136,9 +177,11 @@ def get_preset(
     ----------
     name:
         Preset name. One of: ``auto``, ``light``, ``standard``, ``aggressive``,
-        ``gpu``, ``demo``, ``screening``.
+        ``gpu``, ``demo``, ``icd``, ``screening``.
         If ``auto``, calls :func:`auto_select_augmentations`.
         If ``demo``, requires ``model`` and ``target_layers`` (XAI-guided ICD).
+        If ``icd``, requires ``model`` and ``target_layers`` (saliency-guided
+        ICD + AICD candidates).
         If ``screening``, returns the ``aggressive`` preset with uniform ``p=0.5``
         — useful for the subset-proxy screening phase where uniform probability
         isolates augmentation *type* from *dosage*.
@@ -160,18 +203,26 @@ def get_preset(
         return augs
 
     if name == "demo":
-        if model is None or not target_layers:
+        if model is None or target_layers is None or not target_layers:
             raise ValueError(
                 "Preset 'demo' requires model= and target_layers= (XAI-guided ICD). "
                 "Use build_demo_augmentations(model, target_layers) or pass them to get_preset."
             )
         return build_demo_augmentations(model, target_layers, random_state=random_state)
 
+    if name == "icd":
+        if model is None or not target_layers:
+            raise ValueError(
+                "Preset 'icd' requires model= and target_layers= (saliency-guided ICD + AICD). "
+                "Use build_icd_augmentations(model, target_layers) or pass them to get_preset."
+            )
+        return build_icd_augmentations(model, target_layers, random_state=random_state)
+
     if name == "screening":
         return get_preset("aggressive", random_state=random_state, prob_override=0.5)
 
     if name not in _PRESETS:
-        available = ", ".join(sorted(list(_PRESETS.keys()) + ["auto", "screening", "demo"]))
+        available = ", ".join(sorted(list(_PRESETS) + ["auto", "screening", "demo"]))
         raise ValueError(f"Unknown preset '{name}'. Available: {available}")
 
     preset = _PRESETS[name]
