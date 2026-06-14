@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 import torch
@@ -56,6 +58,32 @@ def test_registered_augmentations_apply_shape() -> None:
         out = aug.apply(image)
         assert out.shape == image.shape
         assert out.dtype == np.uint8
+
+
+def test_builtins_report_canonical_names_not_indexed_aliases() -> None:
+    """Built-ins must expose their descriptive canonical name (e.g.
+    "church_noise"), never the legacy "augmentation_N" alias, while the alias
+    still resolves to the same class for backward compatibility."""
+    canonical_to_alias = {
+        "church_noise": "augmentation_1",
+        "basic_augmentation": "augmentation_3",
+        "dif_presets": "augmentation_5",
+        "drust": "augmentation_6",
+        "luxfer_glass": "augmentation_7",
+        "procam": "augmentation_8",
+        "smugs": "augmentation_9",
+        "tea_stains": "augmentation_10",
+    }
+    for canonical, alias in canonical_to_alias.items():
+        registered_cls = AugmentationRegistry.get(canonical)
+        # Class attribute is the canonical name, not the indexed alias.
+        assert registered_cls.name == canonical
+        # The legacy alias still resolves to the same class.
+        assert AugmentationRegistry.get(alias) is registered_cls
+        # Instances report the canonical name regardless of the lookup key used.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            assert AugmentationRegistry.create(alias, probability=0.0).name == canonical
 
 
 def test_probability_in_apply_batch() -> None:

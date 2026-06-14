@@ -150,3 +150,23 @@ def test_cache_miss_computes_online(dummy_model, temp_dir) -> None:
     assert out.shape == image.shape
     # Verify the miss counter was incremented
     assert aug._cache_miss_count >= 1
+
+
+def test_icd_is_cpu_bound_and_apply_tensor_does_not_recurse(dummy_model) -> None:
+    """ICD/AICD are CPU-bound; apply_tensor must take the numpy path, not recurse."""
+    import torch
+
+    assert ICD.device_compatible is False
+    assert AICD.device_compatible is False
+
+    model, layers = _dummy_model_and_layers(dummy_model)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # no-cache warning
+        aug = ICD(model=model, target_layers=layers, cache=None, probability=1.0, random_state=42)
+    aug.set_label(0)
+
+    images = torch.rand(2, 3, 32, 32)
+    out = aug.apply_tensor(images)  # raised RecursionError before the fix
+
+    assert isinstance(out, torch.Tensor)
+    assert out.shape == images.shape

@@ -9,6 +9,7 @@ import torch
 
 from bnnr.xai import (
     CRAFTExplainer,
+    GradCAMExplainer,
     OptiCAMExplainer,
     generate_saliency_maps,
     save_xai_visualization,
@@ -18,6 +19,63 @@ from bnnr.xai import (
 def test_opticam_explainer_init() -> None:
     exp = OptiCAMExplainer(use_cuda=False)
     assert exp.name == "opticam"
+
+
+def test_gradcam_explainer_init() -> None:
+    exp = GradCAMExplainer(use_cuda=False)
+    assert exp.name == "gradcam"
+
+
+def test_gradcam_explainer_explain(dummy_model) -> None:
+    images = torch.rand(2, 3, 32, 32)
+    labels = torch.tensor([0, 1], dtype=torch.long)
+    maps = GradCAMExplainer(use_cuda=False).explain(dummy_model, images, labels, [dummy_model.conv1])
+    assert maps.shape == (2, 32, 32)
+    assert maps.min() >= 0.0
+    assert maps.max() <= 1.0 + 1e-5
+
+
+def test_opticam_returns_normalized_map(dummy_model) -> None:
+    images = torch.rand(2, 3, 32, 32)
+    labels = torch.tensor([0, 1], dtype=torch.long)
+    maps = OptiCAMExplainer(use_cuda=False, n_iters=10).explain(
+        dummy_model, images, labels, [dummy_model.conv1]
+    )
+    assert maps.shape == (2, 32, 32)
+    assert maps.dtype == np.float32
+    assert maps.min() >= 0.0
+    assert maps.max() <= 1.0 + 1e-5
+
+
+def test_opticam_optimization_changes_saliency(dummy_model) -> None:
+    """Real Opti-CAM optimises the map; the result must differ from the
+    un-optimised uniform combination (n_iters=0) and raise target confidence."""
+    images = torch.rand(2, 3, 32, 32)
+    labels = torch.tensor([0, 1], dtype=torch.long)
+    layers = [dummy_model.conv1]
+
+    uniform = OptiCAMExplainer(use_cuda=False, n_iters=0).explain(dummy_model, images, labels, layers)
+    optimized = OptiCAMExplainer(use_cuda=False, n_iters=50, lr=0.5).explain(dummy_model, images, labels, layers)
+    assert not np.allclose(uniform, optimized)
+
+    dummy_model.eval()
+    with torch.no_grad():
+        idx = labels
+        base_conf = torch.softmax(dummy_model(torch.from_numpy(uniform).unsqueeze(1) * images), dim=1)
+        opt_conf = torch.softmax(dummy_model(torch.from_numpy(optimized).unsqueeze(1) * images), dim=1)
+        base = base_conf.gather(1, idx.unsqueeze(1)).squeeze(1)
+        opt = opt_conf.gather(1, idx.unsqueeze(1)).squeeze(1)
+    assert (opt.mean() >= base.mean() - 1e-6)
+
+
+def test_generate_saliency_maps_gradcam_and_opticam_differ(dummy_model) -> None:
+    images = torch.rand(2, 3, 32, 32)
+    labels = torch.tensor([0, 1], dtype=torch.long)
+    layers = [dummy_model.conv1]
+    opticam = generate_saliency_maps(dummy_model, images, labels, layers, method="opticam", n_iters=10)
+    gradcam = generate_saliency_maps(dummy_model, images, labels, layers, method="gradcam")
+    assert opticam.shape == (2, 32, 32)
+    assert gradcam.shape == (2, 32, 32)
 
 
 def test_craft_explainer_init() -> None:

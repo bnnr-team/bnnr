@@ -62,8 +62,10 @@ class BaseExplainer(abc.ABC):
         return paths
 
 
-class OptiCAMExplainer(BaseExplainer):
-    name = "opticam"
+class GradCAMExplainer(BaseExplainer):
+    """Grad-CAM (eigen-smoothed) saliency via the pytorch-grad-cam backend."""
+
+    name = "gradcam"
 
     def __init__(
         self,
@@ -82,7 +84,7 @@ class OptiCAMExplainer(BaseExplainer):
             from pytorch_grad_cam import GradCAM
             from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
         except ImportError as exc:
-            raise RuntimeError("pytorch-grad-cam is required for OptiCAMExplainer") from exc
+            raise RuntimeError("pytorch-grad-cam is required for GradCAMExplainer") from exc
 
         device = images.device
         model = model.to(device)
@@ -111,6 +113,110 @@ class OptiCAMExplainer(BaseExplainer):
         return out
 
 
+class OptiCAMExplainer(BaseExplainer):
+    """Opti-CAM saliency (Zhang et al., 2023).
+
+    Instead of weighting activation maps by gradients, Opti-CAM optimises a
+    per-image combination of the target-layer activations so that masking the
+    input with the resulting map maximises the model's confidence in the target
+    class. The activations are captured once and held fixed; only the
+    combination weights are optimised, so no model gradients are needed.
+    """
+
+    name = "opticam"
+
+    def __init__(
+        self,
+        use_cuda: bool = True,
+        batch_size: int = 16,
+        n_iters: int = 100,
+        lr: float = 0.1,
+    ) -> None:
+        self.use_cuda = use_cuda
+        self.batch_size = batch_size
+        self.n_iters = n_iters
+        self.lr = lr
+
+    @staticmethod
+    def _combine(activations: Tensor, weights: Tensor, out_hw: tuple[int, int]) -> Tensor:
+        # Convex combination of activation maps, upsampled and min-max normalised
+        # to [0, 1] so it can be used as a soft multiplicative mask.
+        alpha = torch.softmax(weights, dim=1)
+        combined = (alpha.unsqueeze(-1).unsqueeze(-1) * activations).sum(dim=1)
+        upsampled = torch.nn.functional.interpolate(
+            combined.unsqueeze(1), size=out_hw, mode="bilinear", align_corners=False
+        ).squeeze(1)
+        flat_min = upsampled.amin(dim=(1, 2), keepdim=True)
+        flat_max = upsampled.amax(dim=(1, 2), keepdim=True)
+        return (upsampled - flat_min) / (flat_max - flat_min + 1e-8)
+
+    def explain(self, model: nn.Module, images: Tensor, labels: Tensor, target_layers: list[nn.Module]) -> np.ndarray:
+        if not target_layers:
+            raise ValueError("OptiCAMExplainer requires at least one target layer")
+
+        device = images.device
+        if self.use_cuda and torch.cuda.is_available():
+            device = torch.device("cuda")
+        model = model.to(device)
+        images = images.to(device)
+        batch, _, height, width = images.shape
+
+        targets = torch.as_tensor(
+            [int(label.item()) if label.ndim == 0 else int(label.argmax().item()) for label in labels],
+            device=device,
+            dtype=torch.long,
+        )
+
+        captured: list[Tensor] = []
+        handles = [layer.register_forward_hook(lambda _m, _i, out: captured.append(out)) for layer in target_layers]
+
+        was_training = model.training
+        model.eval()
+        prev_requires_grad = [p.requires_grad for p in model.parameters()]
+        for param in model.parameters():
+            param.requires_grad_(False)
+        try:
+            with torch.no_grad():
+                model(images)
+            for handle in handles:
+                handle.remove()
+            handles = []
+
+            feat_h = max(act.shape[2] for act in captured)
+            feat_w = max(act.shape[3] for act in captured)
+            activations = torch.cat(
+                [
+                    act
+                    if act.shape[2:] == (feat_h, feat_w)
+                    else torch.nn.functional.interpolate(act, size=(feat_h, feat_w), mode="bilinear", align_corners=False)
+                    for act in captured
+                ],
+                dim=1,
+            ).detach()
+
+            weights = torch.zeros(batch, activations.shape[1], device=device, requires_grad=True)
+            optimizer = torch.optim.Adam([weights], lr=self.lr)
+            for _ in range(self.n_iters):
+                optimizer.zero_grad()
+                mask = self._combine(activations, weights, (height, width))
+                masked = mask.unsqueeze(1) * images
+                probs = torch.softmax(model(masked), dim=1)
+                score = probs.gather(1, targets.unsqueeze(1)).squeeze(1)
+                (-score.mean()).backward()
+                optimizer.step()
+
+            with torch.no_grad():
+                saliency = self._combine(activations, weights, (height, width))
+            return saliency.detach().cpu().numpy().astype(np.float32)
+        finally:
+            for handle in handles:
+                handle.remove()
+            for param, requires in zip(model.parameters(), prev_requires_grad):
+                param.requires_grad_(requires)
+            if was_training:
+                model.train()
+
+
 def generate_saliency_maps(
     model: nn.Module,
     images: Tensor,
@@ -120,8 +226,10 @@ def generate_saliency_maps(
     **kwargs: Any,
 ) -> np.ndarray:
     method = method.lower()
-    if method == "opticam" or method == "gradcam":
+    if method == "opticam":
         return OptiCAMExplainer(**kwargs).explain(model, images, labels, target_layers)
+    if method == "gradcam":
+        return GradCAMExplainer(**kwargs).explain(model, images, labels, target_layers)
     if method == "real_craft":
         return RealCRAFTExplainer(**kwargs).explain(model, images, labels, target_layers)
     if method == "craft":
@@ -182,6 +290,7 @@ def save_xai_visualization(
 
 __all__ = [
     "BaseExplainer",
+    "GradCAMExplainer",
     "OptiCAMExplainer",
     "NMFConceptExplainer",
     "CRAFTExplainer",

@@ -124,11 +124,13 @@ trainer = BNNRTrainer(
 - `xai_enabled` (default: `true`)
 - `xai_samples` (default: `4`)
 - `xai_method` (`opticam`, `gradcam`, `craft`, `nmf`, `nmf_concepts`, `real_craft`; default: `opticam`)
-- `xai_cache_dir` (default: `null`)
+- `xai_cache_dir` (default: `null`): when `null`, the cache lives under the current run directory (`<report_dir>/run_<timestamp>/xai_cache`), so saliency maps are never silently reused across runs. Set an explicit path to share a cache between runs (you own invalidation in that case).
 - `xai_cache_samples` (default: `0` = whole dataset)
 - `xai_cache_max_samples` (default: `50000`)
 - `xai_cache_force_recompute` (default: `false`)
 - `xai_cache_progress` (default: `true`)
+
+The XAI cache is precomputed **after** the baseline phase, so masks from `ICD`/`AICD` are guided by the trained baseline model rather than random initial weights, and is computed once for all branch-search iterations. A `manifest.json` records the XAI method, dataset size, and image shape; if any of these differs from the cached maps (for example a different `xai_method` against an explicit `xai_cache_dir`), the stale maps are dropped and recomputed.
 - `xai_selection_weight` (default: `0.0`, validated to `[0,1]`)
 - `xai_pruning_threshold` (default: `0.0`, validated to `[0,1]`)
 - `adaptive_icd_threshold` (default: `false`)

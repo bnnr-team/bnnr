@@ -2,11 +2,29 @@
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from bnnr.xai_cache import XAICache
+from bnnr.xai_cache import (
+    _MANIFEST_SCHEMA,
+    XAICache,
+    _safe_dataset_size,
+    _safe_image_shape,
+)
+
+
+def _write_matching_manifest(cache: XAICache, loader: DataLoader, method: str) -> None:
+    """Mark the cache as produced by *method* on *loader* so it is reusable."""
+    manifest = {
+        "schema": _MANIFEST_SCHEMA,
+        "method": method,
+        "dataset_size": _safe_dataset_size(loader),
+        "image_shape": _safe_image_shape(loader),
+    }
+    cache._manifest_path().write_text(json.dumps(manifest), encoding="utf-8")
 
 
 def test_xai_cache_save_and_get(temp_dir) -> None:
@@ -33,12 +51,16 @@ def test_xai_cache_get_by_sample_index(temp_dir) -> None:
 
 def test_precompute_cache_skips_when_existing_entries_cover_target(temp_dir, dummy_model, monkeypatch) -> None:
     cache = XAICache(temp_dir / "xai_cache")
-    for idx in range(3):
-        np.save(cache.cache_dir / f"existing_{idx}.npy", np.zeros((4, 4), dtype=np.float32))
 
     x = torch.rand(3, 3, 8, 8)
     y = torch.randint(0, 2, (3,))
     loader = DataLoader(TensorDataset(x, y), batch_size=3)
+
+    # A matching manifest marks the existing entries as same-provenance, so the
+    # count-based fast-skip is allowed to reuse them.
+    _write_matching_manifest(cache, loader, "opticam")
+    for idx in range(3):
+        np.save(cache.cache_dir / f"existing_{idx}.npy", np.zeros((4, 4), dtype=np.float32))
 
     called = {"value": False}
 
@@ -58,4 +80,93 @@ def test_precompute_cache_skips_when_existing_entries_cover_target(temp_dir, dum
     )
 
     assert written == 0
+    assert called["value"] is False
+
+
+def test_precompute_writes_manifest(temp_dir, dummy_model, monkeypatch) -> None:
+    cache = XAICache(temp_dir / "xai_cache")
+    x = torch.rand(2, 3, 8, 8)
+    y = torch.randint(0, 2, (2,))
+    loader = DataLoader(TensorDataset(x, y), batch_size=2)
+
+    monkeypatch.setattr(
+        "bnnr.xai_cache.generate_saliency_maps",
+        lambda *_a, **_k: np.zeros((2, 8, 8), dtype=np.float32),
+    )
+    cache.precompute_cache(
+        model=dummy_model,
+        train_loader=loader,
+        target_layers=[dummy_model.conv1],
+        n_samples=2,
+        method="opticam",
+    )
+
+    manifest = json.loads(cache._manifest_path().read_text(encoding="utf-8"))
+    assert manifest["schema"] == _MANIFEST_SCHEMA
+    assert manifest["method"] == "opticam"
+    assert manifest["dataset_size"] == 2
+    assert manifest["image_shape"] == [3, 8, 8]
+
+
+def test_precompute_invalidates_on_manifest_mismatch(temp_dir, dummy_model, monkeypatch) -> None:
+    cache = XAICache(temp_dir / "xai_cache")
+    x = torch.rand(3, 3, 8, 8)
+    y = torch.randint(0, 2, (3,))
+    loader = DataLoader(TensorDataset(x, y), batch_size=3)
+
+    # Stale maps left by a run that used a different XAI method.
+    _write_matching_manifest(cache, loader, "craft")
+    for idx in range(3):
+        np.save(cache.cache_dir / f"idx_{idx}_0.npy", np.zeros((4, 4), dtype=np.float32))
+
+    called = {"value": False}
+
+    def _fake_generate(*_args, **_kwargs):
+        called["value"] = True
+        return np.zeros((3, 8, 8), dtype=np.float32)
+
+    monkeypatch.setattr("bnnr.xai_cache.generate_saliency_maps", _fake_generate)
+    written = cache.precompute_cache(
+        model=dummy_model,
+        train_loader=loader,
+        target_layers=[dummy_model.conv1],
+        n_samples=3,
+        method="opticam",
+    )
+
+    # Method changed (craft -> opticam): stale maps were dropped and recomputed.
+    assert called["value"] is True
+    assert written == 3
+    assert json.loads(cache._manifest_path().read_text(encoding="utf-8"))["method"] == "opticam"
+
+
+def test_precompute_reuses_on_manifest_match(temp_dir, dummy_model, monkeypatch) -> None:
+    cache = XAICache(temp_dir / "xai_cache")
+    x = torch.rand(3, 3, 8, 8)
+    y = torch.zeros(3, dtype=torch.long)
+    loader = DataLoader(TensorDataset(x, y), batch_size=3)
+
+    monkeypatch.setattr(
+        "bnnr.xai_cache.generate_saliency_maps",
+        lambda *_a, **_k: np.zeros((3, 8, 8), dtype=np.float32),
+    )
+    first = cache.precompute_cache(
+        model=dummy_model, train_loader=loader, target_layers=[dummy_model.conv1],
+        n_samples=3, method="opticam",
+    )
+    assert first == 3
+
+    called = {"value": False}
+
+    def _fake_generate(*_args, **_kwargs):
+        called["value"] = True
+        return np.zeros((3, 8, 8), dtype=np.float32)
+
+    monkeypatch.setattr("bnnr.xai_cache.generate_saliency_maps", _fake_generate)
+    second = cache.precompute_cache(
+        model=dummy_model, train_loader=loader, target_layers=[dummy_model.conv1],
+        n_samples=3, method="opticam",
+    )
+    # Same provenance: nothing recomputed.
+    assert second == 0
     assert called["value"] is False

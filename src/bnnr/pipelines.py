@@ -342,7 +342,9 @@ def build_mnist_pipeline(
         target_layers=[model.conv2],
         device=config.device,
     )
-    augmentations = _resolve_augmentations(augmentation_preset, config.seed)
+    augmentations = _resolve_augmentations(
+        augmentation_preset, config.seed, model=model, target_layers=[model.conv2]
+    )
     return adapter, train_loader, val_loader, augmentations
 
 
@@ -383,7 +385,9 @@ def build_fashion_mnist_pipeline(
         target_layers=[model.conv2],
         device=config.device,
     )
-    augmentations = _resolve_augmentations(augmentation_preset, config.seed)
+    augmentations = _resolve_augmentations(
+        augmentation_preset, config.seed, model=model, target_layers=[model.conv2]
+    )
     return adapter, train_loader, val_loader, augmentations
 
 
@@ -480,7 +484,9 @@ def build_stl10_pipeline(
         device=config.device,
         scheduler=scheduler,
     )
-    augmentations = _resolve_augmentations(augmentation_preset, config.seed)
+    augmentations = _resolve_augmentations(
+        augmentation_preset, config.seed, model=model, target_layers=[model.target_layer]
+    )
     return adapter, train_loader, val_loader, augmentations
 
 
@@ -579,7 +585,9 @@ def build_imagefolder_pipeline(
         target_layers=[model.conv3],
         device=config.device,
     )
-    augmentations = _resolve_augmentations(augmentation_preset, config.seed)
+    augmentations = _resolve_augmentations(
+        augmentation_preset, config.seed, model=model, target_layers=[model.conv3]
+    )
     return adapter, train_loader, val_loader, augmentations
 
 

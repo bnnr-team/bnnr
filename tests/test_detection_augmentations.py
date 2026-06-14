@@ -335,6 +335,47 @@ class TestDetectionICD:
         # With no boxes, saliency is all zeros → no masking
         assert out_img.shape == sample_image.shape
 
+    def test_local_mean_differs_from_global_mean(self) -> None:
+        """local_mean must be a real strategy, not a silent alias of global_mean.
+
+        Image: dark left half (10), bright right half (240). The box sits in the
+        bright half, so local_mean fills masked tiles with bright neighbour
+        colours while global_mean fills with the overall mean (~125).
+        threshold_percentile=90 keeps the tile threshold above zero so only
+        the box tiles are masked (lower percentiles mask every tile when the
+        box saliency map is mostly zeros)."""
+        image = np.full((64, 64, 3), 10, dtype=np.uint8)
+        image[:, 32:] = 240
+        target = {
+            "boxes": np.array([[40.0, 16.0, 56.0, 48.0]], dtype=np.float32),
+            "labels": np.array([1], dtype=np.int64),
+        }
+
+        local = DetectionICD(
+            probability=1.0, threshold_percentile=90.0, tile_size=8,
+            fill_strategy="local_mean", random_state=42,
+        )
+        global_ = DetectionICD(
+            probability=1.0, threshold_percentile=90.0, tile_size=8,
+            fill_strategy="global_mean", random_state=42,
+        )
+        out_local, _ = local.apply_with_targets(image.copy(), dict(target))
+        out_global, _ = global_.apply_with_targets(image.copy(), dict(target))
+
+        # The strategies must not be aliases of each other.
+        assert not np.array_equal(out_local, out_global)
+
+        # local_mean fills the masked tiles with their bright neighbours'
+        # colour (240), which in this locally uniform region is a no-op.
+        assert np.array_equal(out_local, image)
+
+        # global_mean visibly drops the masked tiles to the overall mean (~125).
+        assert not np.array_equal(out_global, image)
+        box_region_local = out_local[24:40, 44:52].mean()
+        box_region_global = out_global[24:40, 44:52].mean()
+        assert box_region_local > 180
+        assert box_region_global < 180
+
     def test_aicd_different_from_icd(self, sample_image, sample_target) -> None:
         """ICD and AICD should produce different results (different masks)."""
         icd = DetectionICD(
