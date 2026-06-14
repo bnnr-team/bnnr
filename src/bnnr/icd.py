@@ -32,7 +32,9 @@ class _BaseICD(BaseAugmentation):
     """
 
     invert_mask: bool = False
-    device_compatible: bool = True
+    # ICD/AICD masking runs on the numpy/OpenCV path and needs per-sample labels,
+    # so it is CPU-bound (not a GPU-native tensor augmentation).
+    device_compatible: bool = False
 
     def __init__(
         self,
@@ -94,17 +96,6 @@ class _BaseICD(BaseAugmentation):
                 RuntimeWarning,
                 stacklevel=2,
             )
-
-    # ------------------------------------------------------------------
-    # Tensor entry-point (delegates to numpy path)
-    # ------------------------------------------------------------------
-
-    def apply_tensor_native(self, images: torch.Tensor) -> torch.Tensor:
-        """GPU-native ICD/AICD masking using cached saliency maps.
-
-        Falls back to CPU path if cache is unavailable or labels are not set.
-        """
-        return self.apply_tensor(images)
 
     # ------------------------------------------------------------------
     # Label helpers

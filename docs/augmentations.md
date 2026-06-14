@@ -30,7 +30,7 @@ augs_auto = auto_select_augmentations(random_state=42)
 augs_std = get_preset("standard", random_state=42)
 ```
 
-CLI `--preset` / `--augmentation-preset` on `train` supports: `auto`, `light`, `standard`, `aggressive`, `gpu`, `none` (unknown names fall back to `auto` with a warning). The `demo` command always uses preset `demo`.
+CLI `--preset` / `--augmentation-preset` on `train` supports: `auto`, `light`, `standard`, `aggressive`, `gpu`, `icd`, `none` (unknown names fall back to `auto` with a warning). `icd` runs the saliency-guided candidates (ICD + AICD); the pipeline supplies the model and target layers automatically. The `demo` command always uses preset `demo`.
 
 ## Built-in classification augmentations
 

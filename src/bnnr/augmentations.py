@@ -127,7 +127,13 @@ class AugmentationRegistry:
     def register(cls, name: str) -> Callable[[type[AugT]], type[AugT]]:
         def decorator(aug_cls: type[AugT]) -> type[AugT]:
             cls._registry[name] = aug_cls
-            aug_cls.name = name
+            # Built-ins are registered under a canonical descriptive name plus a
+            # legacy "augmentation_N" alias. Keep the first name a class registers
+            # as its canonical name so logs, events, and reports show e.g.
+            # "church_noise" instead of "augmentation_1"; later alias registrations
+            # only add a lookup key without renaming the class.
+            if "name" not in aug_cls.__dict__:
+                aug_cls.name = name
             return aug_cls
 
         return decorator
