@@ -1,6 +1,6 @@
 # Citing BNNR
 
-If you use BNNR in research, a report, or a downstream integration guide, cite the appropriate entry below. Pin a [release tag](https://github.com/bnnr-team/bnnr/releases) (for example `v0.4.13`) when you need a fixed software version.
+If you use BNNR in research, a report, or a downstream integration guide, cite the appropriate entry below. Pin a [release tag](https://github.com/bnnr-team/bnnr/releases) (for example `v0.5.7`) when you need a fixed software version. <!-- x-release-please-version -->
 
 Authors (software): Mateusz Walo, Diana Morzhak, Dominika Zydorczyk, Zuzanna Saczuk ([team record](../AUTHORS.md)).
 
@@ -38,7 +38,7 @@ Plain text (papers without BibTeX):
   title = {{BNNR}: Bulletproof Neural Network Recipe},
   year = {2026},
   url = {https://github.com/bnnr-team/bnnr},
-  version = {0.4.13},
+  version = {0.4.14},
   doi = {10.5281/zenodo.20581372},
   license = {MIT}
 }

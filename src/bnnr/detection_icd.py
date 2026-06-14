@@ -153,7 +153,7 @@ class _DetectionBaseICD(BboxAwareAugmentation):
         if strategy == "gaussian_blur":
             return self._gaussian_blur_fill(out, mask)
         if strategy == "local_mean":
-            return self._global_mean_fill(out, mask)
+            return self._local_mean_fill(out, mask)
         if strategy == "global_mean":
             return self._global_mean_fill(out, mask)
         if strategy == "noise":
@@ -167,6 +167,52 @@ class _DetectionBaseICD(BboxAwareAugmentation):
             k_size += 1
         blurred = cv2.GaussianBlur(image, (k_size, k_size), 0)
         image[mask] = blurred[mask]
+        return image
+
+    def _local_mean_fill(self, image: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        """Fill each masked tile with the mean colour of its non-masked neighbours.
+
+        Ported from the classification ICD; only depends on the tile grid, not
+        on how the saliency map was produced.
+        """
+        ts = self.tile_size
+        h, w = image.shape[:2]
+        n_rows = max(1, h // ts)
+        n_cols = max(1, w // ts)
+
+        # Build a tile-level mask (True = masked)
+        tile_masked = np.zeros((n_rows, n_cols), dtype=bool)
+        for r in range(n_rows):
+            y0, y1 = r * ts, min((r + 1) * ts, h)
+            for c in range(n_cols):
+                x0, x1 = c * ts, min((c + 1) * ts, w)
+                tile_masked[r, c] = mask[y0:y1, x0:x1].any()
+
+        for r in range(n_rows):
+            y0, y1 = r * ts, min((r + 1) * ts, h)
+            for c in range(n_cols):
+                if not tile_masked[r, c]:
+                    continue
+                x0, x1 = c * ts, min((c + 1) * ts, w)
+                # Collect colours from neighbouring non-masked tiles
+                neighbour_pixels: list[np.ndarray] = []
+                for dr in (-1, 0, 1):
+                    for dc in (-1, 0, 1):
+                        nr, nc = r + dr, c + dc
+                        if 0 <= nr < n_rows and 0 <= nc < n_cols:
+                            if not tile_masked[nr, nc]:
+                                ny0, ny1 = nr * ts, min((nr + 1) * ts, h)
+                                nx0, nx1 = nc * ts, min((nc + 1) * ts, w)
+                                neighbour_pixels.append(
+                                    image[ny0:ny1, nx0:nx1].reshape(-1, image.shape[2])
+                                )
+                if neighbour_pixels:
+                    mean_colour = np.concatenate(neighbour_pixels, axis=0).mean(axis=0)
+                else:
+                    # All neighbours are masked, fall back to global mean
+                    mean_colour = image.mean(axis=(0, 1))
+                image[y0:y1, x0:x1][mask[y0:y1, x0:x1]] = mean_colour.astype(image.dtype)
+
         return image
 
     def _global_mean_fill(self, image: np.ndarray, mask: np.ndarray) -> np.ndarray:

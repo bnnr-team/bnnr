@@ -126,6 +126,26 @@ class TestResolveAugmentations:
         assert isinstance(augs, list)
         assert len(augs) > 0
 
+    def test_icd_preset_resolves_icd_and_aicd(self):
+        """--preset icd must yield ICD + AICD candidates when the pipeline
+        supplies model + target_layers."""
+        from bnnr.icd import AICD, ICD
+
+        model = torch.nn.Sequential(torch.nn.Conv2d(3, 4, 3, padding=1))
+        augs = _resolve_augmentations(
+            "icd", seed=42, model=model, target_layers=[model[0]]
+        )
+        assert any(isinstance(a, ICD) for a in augs)
+        assert any(isinstance(a, AICD) for a in augs)
+
+    def test_icd_preset_without_model_falls_back(self):
+        """Without model/target_layers the icd preset cannot build; it must warn
+        and fall back to auto rather than crash."""
+        with pytest.warns(UserWarning, match="Unknown augmentation preset|icd"):
+            augs = _resolve_augmentations("icd", seed=42)
+        assert isinstance(augs, list)
+        assert len(augs) > 0
+
 
 # ---------------------------------------------------------------------------
 # CNN model forward passes

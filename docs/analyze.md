@@ -120,6 +120,15 @@ python3 -m bnnr analyze --model PATH --data PATH_OR_DATASET --output DIR [OPTION
 - Output layout: `output_dir/analysis_report.json`, `output_dir/report.html` (portable, embedded images), and optionally `output_dir/artifacts/` (raw PNGs; see `artifacts.md`).
 - `--cv-folds` is a lightweight estimate of metric variability on validation predictions: analyze runs one inference pass, then computes k-fold metrics on cached predictions (it does not train k separate models).
 
+### Validation loader contract
+
+`analyze` pairs each prediction with its source image by index so XAI overlays and per-sample confidences line up with the right picture. There are two ways the index is determined:
+
+- **Indexed dataset (recommended):** the loader yields `(image, label, index)` 3-tuples, and the explicit `index` is used directly. This is robust to any sampling or shuffling.
+- **2-tuple fallback:** the loader yields `(image, label)`, and analyze synthesizes the index as a running offset, which assumes iteration order equals dataset order.
+
+Because the 2-tuple fallback breaks under shuffling, analyze automatically rebuilds a shuffled (`RandomSampler`) `DataLoader` with `shuffle=False` for the analysis pass and emits a warning. Order does not affect analyze (metrics are aggregated, XAI is keyed per index), so this only fixes mispairing. Pass an unshuffled loader (or an indexed 3-tuple dataset) to avoid the warning.
+
 ### Metric definitions (practical)
 
 - `accuracy`, `precision`, `recall`, `f1`, `cohen_kappa`, and confusion-based diagnostics are computed in the evaluation/analysis pipeline (`run_evaluation` and downstream analysis modules).

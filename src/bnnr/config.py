@@ -67,10 +67,9 @@ def save_config(config: BNNRConfig, save_path: Path) -> None:
 
 def validate_config(config: BNNRConfig) -> list[str]:
     warnings: list[str] = []
-    if config.m_epochs <= 0:
-        warnings.append("m_epochs should be > 0")
-    if config.max_iterations <= 0:
-        warnings.append("max_iterations should be > 0")
+    # NOTE: m_epochs (ge=1) and max_iterations (ge=0) are enforced by Field
+    # validators in BNNRConfig, so invalid values fail at construction time and
+    # never reach this function.
     if config.selection_metric not in config.metrics:
         warnings.append("selection_metric is not present in metrics")
     if config.selection_mode not in {"max", "min"}:
