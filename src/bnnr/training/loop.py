@@ -288,13 +288,6 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         log_dataset_profile(dataset_profile)
     trainer._emit_pipeline_phase("dataset_profiling", "completed")
 
-    trainer._emit_pipeline_phase("xai_cache", "started", "Precomputing XAI cache...")
-    xai_cache = _xai.precompute_xai_cache(trainer)
-    if xai_cache is None:
-        trainer._emit_pipeline_phase("xai_cache", "skipped")
-    else:
-        trainer._emit_pipeline_phase("xai_cache", "completed")
-
     baseline_metrics: dict[str, float]
     best_metrics: dict[str, float]
     if trainer.current_iteration > 0:
@@ -312,6 +305,15 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
             f"{'='*60}",
             flush=True,
         )
+        # Track the best baseline epoch by the selection metric, mirroring
+        # run_single_iteration. Without this the baseline kept its last epoch
+        # while candidates kept their best, biasing candidate-vs-baseline
+        # deltas upward (best-vs-last).
+        sel_mode = trainer.config.selection_mode
+        best_baseline_state = trainer._clone_state_dict(trainer.model.state_dict())
+        best_baseline_xai_stats = copy.deepcopy(trainer._prev_xai_batch_stats)
+        best_baseline_epoch = 0
+        best_baseline_sel: float | None = None
         for epoch in range(1, trainer.config.m_epochs + 1):
             train_metrics = train_epoch(trainer, trainer.train_loader, augmentations=[])
             val_metrics = evaluate(trainer, trainer.val_loader, cache_predictions=True)
@@ -345,6 +347,23 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
             _xai_q = _callbacks.xai_mean_quality(xai_diagnoses)
             if _xai_q is not None:
                 epoch_metrics["xai_quality"] = round(_xai_q, 4)
+
+            # Record the best baseline epoch (state + metrics) by selection metric.
+            sel_v = epoch_metrics.get(sel_m, 0)
+            is_new_baseline_best = (
+                best_baseline_sel is None
+                or (sel_mode == "max" and sel_v > best_baseline_sel)
+                or (sel_mode == "min" and sel_v < best_baseline_sel)
+            )
+            if is_new_baseline_best:
+                # Fresh clone (not in-place copy): a YOLO model fuses conv+BN
+                # during the first epoch, changing its key set, so reusing the
+                # pre-fusion buffer would keep stale BN keys and break a strict
+                # load_state_dict later.
+                best_baseline_state = trainer._clone_state_dict(trainer.model.state_dict())
+                best_baseline_xai_stats = copy.deepcopy(trainer._prev_xai_batch_stats)
+                best_baseline_epoch = epoch
+                best_baseline_sel = sel_v
 
             # Merge XAI insights into per-class data
             for cls_id, insight_text in xai_insights.items():
@@ -390,12 +409,25 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
                 xai_paths=xai_paths,
             )
             trainer._check_pause()
-        baseline_metrics = evaluate(trainer, trainer.val_loader)
+        # Restore the best-epoch weights so subsequent iterations branch from
+        # the best baseline (not the last epoch), then re-evaluate to refresh
+        # the cached predictions used by the report.
+        trainer.model.load_state_dict(best_baseline_state)
+        if best_baseline_epoch and best_baseline_epoch != trainer.config.m_epochs:
+            print(
+                f"  (baseline best epoch: e{best_baseline_epoch})",
+                flush=True,
+            )
+        baseline_metrics = evaluate(trainer, trainer.val_loader, cache_predictions=True)
+        # Overwrite the on-disk baseline checkpoint (per-epoch saves left the
+        # last epoch) so resume restores the best baseline, not the last one.
+        _ckpt.save_checkpoint(trainer, 0, "baseline", baseline_metrics)
         best_metrics = baseline_metrics
         best_path = "baseline"
         selected_augmentations = []
-        # Freeze baseline XAI stats for delta-vs-baseline in all future checkpoints
-        trainer._baseline_xai_stats = copy.deepcopy(trainer._prev_xai_batch_stats)
+        # Freeze the best-epoch baseline XAI stats for delta-vs-baseline in all
+        # future checkpoints.
+        trainer._baseline_xai_stats = copy.deepcopy(best_baseline_xai_stats)
 
         sel_m = trainer.config.selection_metric
         print(
@@ -415,6 +447,17 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
     current_branch_id = "root:baseline"
     start_iteration = max(1, trainer.current_iteration or 1)
     resume_iteration = trainer.current_iteration if trainer.current_iteration > 0 else None
+
+    # XAI cache is precomputed AFTER the baseline phase so saliency maps reflect the
+    # trained baseline model rather than random initial weights. It is stored under the
+    # run directory (never reused across runs) and computed once for all iterations,
+    # matching the equal-compute benchmark protocol.
+    trainer._emit_pipeline_phase("xai_cache", "started", "Precomputing XAI cache...")
+    xai_cache = _xai.precompute_xai_cache(trainer)
+    if xai_cache is None:
+        trainer._emit_pipeline_phase("xai_cache", "skipped")
+    else:
+        trainer._emit_pipeline_phase("xai_cache", "completed")
 
     for iteration in tqdm(
         range(start_iteration, trainer.config.max_iterations + 1),
@@ -614,6 +657,12 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         top_candidate_names = _branching.top_k_candidate_names(iteration_results, trainer.config, k=3)
         candidate_preview_pairs: dict[str, list[tuple[Path, Path]]] = {}
         aug_by_name = {aug.name: aug for aug in trainer.augmentations}
+        # baseline_reeval (and any non-augmentation result) is a comparison point,
+        # not a selectable candidate. If it wins the iteration, no augmentation beat
+        # plain continued training, so treat it as no improvement rather than looking
+        # it up as an augmentation (which previously raised StopIteration).
+        if selected_name is not None and selected_name not in aug_by_name:
+            selected_name = None
         for cand_name in top_candidate_names:
             candidate_aug = aug_by_name.get(cand_name)
             if candidate_aug is None:

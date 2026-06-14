@@ -127,7 +127,13 @@ class AugmentationRegistry:
     def register(cls, name: str) -> Callable[[type[AugT]], type[AugT]]:
         def decorator(aug_cls: type[AugT]) -> type[AugT]:
             cls._registry[name] = aug_cls
-            aug_cls.name = name
+            # Built-ins are registered under a canonical descriptive name plus a
+            # legacy "augmentation_N" alias. Keep the first name a class registers
+            # as its canonical name so logs, events, and reports show e.g.
+            # "church_noise" instead of "augmentation_1"; later alias registrations
+            # only add a lookup key without renaming the class.
+            if "name" not in aug_cls.__dict__:
+                aug_cls.name = name
             return aug_cls
 
         return decorator
@@ -183,6 +189,15 @@ def _np_rng(rnd: random.Random) -> np.random.Generator:
 @AugmentationRegistry.register("augmentation_1")
 @AugmentationRegistry.register("church_noise")
 class ChurchNoise(BaseAugmentation):
+    """Noise augmentation. CPU/GPU paths diverge by design.
+
+    The CPU path (``apply``) adds line-partitioned *regional* noise; the
+    GPU path (``apply_tensor_native``) adds *uniform* full-image Gaussian
+    noise. ``device_compatible=True``, so the runner uses the GPU path
+    whenever a tensor is available, which is a different transform than the
+    numpy fallback. ``num_lines`` only affects the CPU path.
+    """
+
     device_compatible: bool = True
 
     def __init__(self, num_lines: int = 3, noise_strength_range: tuple[float, float] = (5.0, 14.0), **kwargs: Any) -> None:
@@ -275,6 +290,15 @@ class BasicAugmentation(BaseAugmentation):
 @AugmentationRegistry.register("augmentation_5")
 @AugmentationRegistry.register("dif_presets")
 class DifPresets(BaseAugmentation):
+    """Color-effect augmentation. CPU/GPU paths diverge by design.
+
+    The CPU path (``apply``) paints several *localized* feathered circles with
+    per-circle effects (warm/cold/sharpen/blur/vivid/fade); the GPU path
+    (``apply_tensor_native``) applies a single *global* color-temperature
+    shift (warm/cold/vivid/fade). ``device_compatible=True``, so the runner
+    uses the GPU path on tensors. The circle params only affect the CPU path.
+    """
+
     device_compatible: bool = True
 
     def __init__(self, num_circles_range: tuple[int, int] = (3, 6), radius_range: tuple[int, int] = (15, 60), feather: int = 35, **kwargs: Any) -> None:
@@ -456,6 +480,15 @@ class LuxferGlass(BaseAugmentation):
 @AugmentationRegistry.register("augmentation_8")
 @AugmentationRegistry.register("procam")
 class ProCAM(BaseAugmentation):
+    """Camera-simulation augmentation. CPU/GPU paths diverge by design.
+
+    The CPU path (``apply``) runs a full camera-profile pipeline
+    (cheap/smartphone/pro/webcam/darkroom: white balance plus
+    saturation/contrast tweaks); the GPU path (``apply_tensor_native``)
+    applies only white balance + gamma. ``device_compatible=True``, so the
+    runner uses the simpler GPU path on tensors.
+    """
+
     device_compatible: bool = True
 
     def apply_tensor_native(self, images: Tensor) -> Tensor:

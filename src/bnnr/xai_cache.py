@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from pathlib import Path
 
@@ -15,6 +16,37 @@ from tqdm import tqdm
 from bnnr.xai import BaseExplainer, generate_saliency_maps
 
 logger = logging.getLogger(__name__)
+
+# Manifest describing what produced the cached maps. A mismatch (different XAI
+# method, dataset size, or image shape) invalidates the cache so stale saliency
+# maps are never reused, e.g. across runs that share an explicit cache dir.
+_MANIFEST_FILENAME = "manifest.json"
+_MANIFEST_SCHEMA = 1
+
+
+def _safe_dataset_size(loader: DataLoader) -> int | None:
+    """Best-effort dataset length; ``None`` when the loader has no sized dataset."""
+    try:
+        return int(len(loader.dataset))  # type: ignore[arg-type]
+    except (TypeError, AttributeError):
+        return None
+
+
+def _safe_image_shape(loader: DataLoader) -> list[int] | None:
+    """Best-effort image shape from the first sample; ``None`` if unavailable."""
+    dataset = getattr(loader, "dataset", None)
+    if dataset is None:
+        return None
+    try:
+        sample = dataset[0]
+    except Exception:
+        return None
+    img = sample[0] if isinstance(sample, (list, tuple)) else sample
+    shape = getattr(img, "shape", None)
+    if shape is None:
+        return None
+    return [int(x) for x in shape]
+
 
 # Prefer xxhash (much faster) if available, else fall back to sha256.
 # Benchmarks show sha256 is faster than md5 on modern CPUs with
@@ -44,6 +76,49 @@ class XAICache:
         return self.cache_dir / f"idx_{sample_index}_{label}.npy"
 
     # ------------------------------------------------------------------
+    # Manifest-based invalidation
+    # ------------------------------------------------------------------
+
+    def _manifest_path(self) -> Path:
+        return self.cache_dir / _MANIFEST_FILENAME
+
+    def _load_manifest(self) -> dict | None:
+        path = self._manifest_path()
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+
+    def _ensure_cache_consistent(
+        self,
+        *,
+        method: str,
+        dataset_size: int | None,
+        image_shape: list[int] | None,
+        force_recompute: bool,
+    ) -> None:
+        """Drop cached maps whose provenance differs from the current request.
+
+        Writes a manifest of ``{method, dataset_size, image_shape}``. When an
+        existing manifest does not match (or ``force_recompute`` is set), all
+        ``*.npy`` maps are removed so they are recomputed from the current
+        model/method/dataset instead of silently reused.
+        """
+        desired = {
+            "schema": _MANIFEST_SCHEMA,
+            "method": method,
+            "dataset_size": dataset_size,
+            "image_shape": image_shape,
+        }
+        if not force_recompute and self._load_manifest() == desired:
+            return
+        for npy in self.cache_dir.glob("*.npy"):
+            npy.unlink(missing_ok=True)
+        self._manifest_path().write_text(json.dumps(desired), encoding="utf-8")
+
+    # ------------------------------------------------------------------
     # Lazy-caching: persist a single saliency map computed on-the-fly
     # ------------------------------------------------------------------
 
@@ -56,17 +131,44 @@ class XAICache:
     ) -> None:
         """Persist a saliency map so future lookups are instant (lazy caching).
 
-        At least one of *sample_index* or *image* must be provided so we can
-        derive a cache key.
+        Only *index-keyed* maps are persisted. Hash-keyed persistence was
+        removed: lazy saves hit on a cache miss, which (outside precompute)
+        means the image is already augmented, so a hash key never re-hits and
+        the cache grows unboundedly. The *image* argument is accepted for
+        backward compatibility but is no longer used for persistence.
         """
-        if sample_index is not None:
-            path = self._index_cache_path(sample_index, label)
-        elif image is not None:
-            image_hash = self._hash_image(image)
-            path = self._cache_path(image_hash, label)
-        else:
-            return  # nothing to key on — silently skip
+        if sample_index is None:
+            return  # only index-keyed maps persist (no unbounded hash growth)
+        path = self._index_cache_path(sample_index, label)
         np.save(path, saliency.astype(np.float32))
+
+    def trim_to_max_mb(self, max_mb: int) -> int:
+        """Evict oldest cache maps (LRU by mtime) until under *max_mb*.
+
+        Returns the number of ``.npy`` files deleted. ``max_mb <= 0`` disables
+        the cap (no-op). The manifest is never evicted.
+        """
+        if max_mb <= 0:
+            return 0
+        max_bytes = max_mb * 1024 * 1024
+        npy_files = list(self.cache_dir.glob("*.npy"))
+        sizes = {p: p.stat().st_size for p in npy_files}
+        total = sum(sizes.values())
+        if total <= max_bytes:
+            return 0
+        # Oldest first (smallest mtime). Delete until under the cap.
+        npy_files.sort(key=lambda p: p.stat().st_mtime)
+        evicted = 0
+        for path in npy_files:
+            if total <= max_bytes:
+                break
+            try:
+                path.unlink()
+            except OSError:
+                continue
+            total -= sizes[path]
+            evicted += 1
+        return evicted
 
     # ------------------------------------------------------------------
     # Batch-level helpers for precompute fast-skip
@@ -119,6 +221,16 @@ class XAICache:
             is exhausted).
         """
         model.eval()
+
+        # Invalidate stale maps (different method/dataset/image shape) before any
+        # fast-skip so we never reuse another run's saliency.
+        self._ensure_cache_consistent(
+            method=method,
+            dataset_size=_safe_dataset_size(train_loader),
+            image_shape=_safe_image_shape(train_loader),
+            force_recompute=force_recompute,
+        )
+
         written = 0
         processed = 0
         skipped_batches = 0

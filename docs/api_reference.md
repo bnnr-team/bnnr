@@ -29,7 +29,7 @@ Detection, events, config I/O, and extended XAI symbols are **not** in `__all__`
 | `BaseAugmentation`, `BasicAugmentation`, `ChurchNoise` | Core augmentation types |
 | `ICD`, `AICD` | Saliency-guided augmentations |
 | `auto_select_augmentations`, `get_preset`, `list_presets` | Preset helpers |
-| `OptiCAMExplainer`, `generate_saliency_maps` | Classification XAI |
+| `OptiCAMExplainer`, `GradCAMExplainer`, `generate_saliency_maps` | Classification XAI |
 | `start_dashboard` | Live dashboard helper |
 | `analyze_model`, `AnalysisReport` | Standalone model diagnostics |
 
@@ -98,7 +98,7 @@ Optional backends — `from bnnr.kornia_aug import …`, `from bnnr.albumentatio
 
 ## XAI API (classification)
 
-Stable: `OptiCAMExplainer`, `generate_saliency_maps`, `ICD`, `AICD`.
+Stable: `OptiCAMExplainer`, `GradCAMExplainer`, `generate_saliency_maps`, `ICD`, `AICD`.
 
 Backward-compatible — `from bnnr.xai import …`, `from bnnr.xai_cache import …`, `from bnnr.xai_analysis import …`:
 

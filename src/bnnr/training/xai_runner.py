@@ -352,15 +352,8 @@ def generate_xai(trainer, iteration: int, augmentation_name: str, confusion: dic
 
     true_labels = labels.detach().cpu().numpy().tolist()
 
-    # Resolve class names from run metadata if available
-    class_names = None  # reassignment: list[str] | None
-    if hasattr(trainer.reporter, "_event_sink") and trainer.reporter._event_sink is not None:
-        # Try to get class names from the dataset profile event
-        pass
-    run_meta = getattr(trainer.reporter, "_run_class_names", None)
-    if run_meta is None:
-        # Best-effort: check the reporter's internal state
-        pass
+    # Classification XAI does not resolve class names here (handled upstream).
+    class_names = None
 
     # Enriched analysis when confusion data is available
     confusion_matrix: list[list[int]] | None = None
@@ -654,7 +647,11 @@ def precompute_xai_cache(trainer) -> XAICache | None:
     if not needs_cache:
         return None
 
-    cache_dir = trainer.config.xai_cache_dir or (trainer.config.checkpoint_dir / "xai_cache")
+    # Default the cache under the (timestamped) run directory so saliency maps are
+    # never silently reused across runs. An explicit config.xai_cache_dir still wins.
+    run_dir = getattr(trainer.reporter, "run_dir", None)
+    default_cache_dir = (run_dir / "xai_cache") if run_dir is not None else (trainer.config.checkpoint_dir / "xai_cache")
+    cache_dir = trainer.config.xai_cache_dir or default_cache_dir
     cache = XAICache(cache_dir)
 
     # Resolve n_samples: 0 means "cache all", capped by xai_cache_max_samples
@@ -677,6 +674,13 @@ def precompute_xai_cache(trainer) -> XAICache | None:
         show_progress=trainer.config.xai_cache_progress and trainer.config.verbose,
     )
     trainer._log(f"Precomputed {written} XAI cache maps")
+
+    evicted = cache.trim_to_max_mb(trainer.config.xai_cache_max_mb)
+    if evicted > 0:
+        trainer._log(
+            f"XAI cache exceeded {trainer.config.xai_cache_max_mb} MB; "
+            f"evicted {evicted} oldest maps"
+        )
 
     for aug in trainer.augmentations:
         if isinstance(aug, (ICD, AICD)):

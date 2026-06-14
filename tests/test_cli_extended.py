@@ -21,6 +21,57 @@ from bnnr.core import BNNRConfig
 runner = CliRunner()
 
 
+def _fake_pipeline():
+    """A minimal but real adapter + loaders so _print_pipeline_summary runs."""
+    from torch.utils.data import DataLoader, TensorDataset
+
+    from bnnr.adapter import SimpleTorchAdapter
+
+    model = nn.Sequential(nn.Flatten(), nn.Linear(12, 3))
+    adapter = SimpleTorchAdapter(
+        model=model,
+        criterion=nn.CrossEntropyLoss(),
+        optimizer=torch.optim.Adam(model.parameters()),
+        target_layers=[model[1]],
+        device="cpu",
+    )
+    x = torch.rand(8, 12)
+    y = torch.randint(0, 3, (8,))
+    loader = DataLoader(TensorDataset(x, y), batch_size=4)
+    return adapter, loader, loader, []
+
+
+class TestTrainDryRun:
+    def test_dry_run_builds_and_exits_without_training(self, monkeypatch):
+        monkeypatch.setattr(
+            "bnnr.pipelines.build_pipeline", lambda **kw: _fake_pipeline()
+        )
+        result = runner.invoke(
+            app, ["train", "--dataset", "mnist", "--dry-run", "--without-dashboard"]
+        )
+        assert result.exit_code == 0
+        assert "Dry run" in result.stdout
+        assert "PIPELINE SUMMARY" in result.stdout
+        assert "TRAINING COMPLETE" not in result.stdout
+
+    def test_dry_run_echoes_config_warnings(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "bnnr.pipelines.build_pipeline", lambda **kw: _fake_pipeline()
+        )
+        cfg_path = tmp_path / "warn.yaml"
+        # selection_metric not present in metrics → validate_config warns.
+        cfg_path.write_text(
+            "selection_metric: precision\nmetrics: [accuracy, loss]\nm_epochs: 1\n"
+        )
+        result = runner.invoke(
+            app,
+            ["train", "-c", str(cfg_path), "--dataset", "mnist", "--dry-run", "--without-dashboard"],
+        )
+        assert result.exit_code == 0
+        assert "Config warnings" in result.stdout
+        assert "selection_metric is not present in metrics" in result.stdout
+
+
 class TestVersionCommand:
     def test_version_output(self):
         result = runner.invoke(app, ["version"])

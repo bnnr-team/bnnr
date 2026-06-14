@@ -32,7 +32,9 @@ class _BaseICD(BaseAugmentation):
     """
 
     invert_mask: bool = False
-    device_compatible: bool = True
+    # ICD/AICD masking runs on the numpy/OpenCV path and needs per-sample labels,
+    # so it is CPU-bound (not a GPU-native tensor augmentation).
+    device_compatible: bool = False
 
     def __init__(
         self,
@@ -94,17 +96,6 @@ class _BaseICD(BaseAugmentation):
                 RuntimeWarning,
                 stacklevel=2,
             )
-
-    # ------------------------------------------------------------------
-    # Tensor entry-point (delegates to numpy path)
-    # ------------------------------------------------------------------
-
-    def apply_tensor_native(self, images: torch.Tensor) -> torch.Tensor:
-        """GPU-native ICD/AICD masking using cached saliency maps.
-
-        Falls back to CPU path if cache is unavailable or labels are not set.
-        """
-        return self.apply_tensor(images)
 
     # ------------------------------------------------------------------
     # Label helpers
@@ -334,16 +325,11 @@ class _BaseICD(BaseAugmentation):
         channels = image.shape[2] if image.ndim == 3 else 1
         means = image.mean(axis=(0, 1))
         stds = image.std(axis=(0, 1)).clip(1.0)  # avoid zero-std
-        noise = np.empty((n_masked, channels), dtype=image.dtype)
-        for ch in range(channels):
-            noise[:, ch] = np.clip(
-                np.array(
-                    [self._rnd.gauss(float(means[ch]), float(stds[ch])) for _ in range(n_masked)]
-                ),
-                0,
-                255,
-            ).astype(image.dtype)
-        image[mask] = noise
+        # Vectorized draw (was a per-pixel Python loop). Seeded from self._rnd
+        # so two augmentations with the same random_state still match.
+        gen = np.random.default_rng(self._rnd.getrandbits(64))
+        noise = gen.normal(means, stds, size=(n_masked, channels))
+        image[mask] = np.clip(noise, 0, 255).astype(image.dtype)
         return image
 
     def _solid_fill(self, image: np.ndarray, mask: np.ndarray) -> np.ndarray:

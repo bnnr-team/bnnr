@@ -6,6 +6,7 @@ Zero-friction diagnostics for a trained model without running full BNNR training
 from __future__ import annotations
 
 import json
+import warnings
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -144,6 +145,55 @@ class AnalysisReport:
         return self.failure_patterns
 
 
+def _ensure_sequential_loader(val_loader: Any) -> Any:
+    """Return a non-shuffling view of *val_loader* for index-stable analysis.
+
+    For 2-tuple batches, analyze synthesizes per-sample indices as a running
+    offset, which assumes iteration order == dataset order.  A shuffled /
+    ``RandomSampler``-driven loader would make ``dataset[ds_index]`` fetch the
+    wrong image, so XAI overlays and confidences would silently mispair.  Order
+    is irrelevant for analyze (metrics are aggregated, XAI is keyed per index),
+    so a shuffled loader is rebuilt with shuffling disabled and a warning.
+    Non-``DataLoader`` iterables are returned unchanged.
+    """
+    try:
+        from torch.utils.data import DataLoader, RandomSampler
+    except Exception:
+        return val_loader
+    if not isinstance(val_loader, DataLoader):
+        return val_loader
+
+    sampler = getattr(val_loader, "sampler", None)
+    batch_sampler = getattr(val_loader, "batch_sampler", None)
+    shuffled = isinstance(sampler, RandomSampler) or isinstance(
+        getattr(batch_sampler, "sampler", None), RandomSampler
+    )
+    if not shuffled:
+        return val_loader
+
+    warnings.warn(
+        "analyze received a shuffled (RandomSampler) val loader; rebuilding it "
+        "with shuffle disabled so XAI overlays and confidences pair with the "
+        "correct images. Pass an unshuffled loader to silence this.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+    try:
+        return DataLoader(
+            val_loader.dataset,
+            batch_size=val_loader.batch_size,
+            shuffle=False,
+            num_workers=val_loader.num_workers,
+            collate_fn=val_loader.collate_fn,
+            pin_memory=val_loader.pin_memory,
+            drop_last=val_loader.drop_last,
+        )
+    except Exception:
+        # Custom DataLoader subclass we can't safely reconstruct; the warning
+        # above already flagged the mispairing risk.
+        return val_loader
+
+
 def analyze_model(
     adapter: Any,
     val_loader: Any,
@@ -187,6 +237,10 @@ def analyze_model(
             f"bnnr analyze supports only task 'classification' or 'multilabel', not {eff_task!r}. "
             "Detection and other tasks are not supported in analyze yet."
         )
+
+    # Index-dependent XAI sections assume iteration order == dataset order; a
+    # shuffled loader would mispair overlays. Make the analysis pass sequential.
+    val_loader = _ensure_sequential_loader(val_loader)
 
     metrics, per_class, confusion, _preds, _labels = run_evaluation(
         adapter,

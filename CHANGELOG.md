@@ -1,6 +1,88 @@
 # Changelog
 
+## [0.5.7](https://github.com/bnnr-team/bnnr/compare/v0.5.6...v0.5.7) (2026-06-12)
+
+
+### Bug Fixes
+
+* select the best baseline epoch, not the last ([#301](https://github.com/bnnr-team/bnnr/issues/301)) ([95b9d8d](https://github.com/bnnr-team/bnnr/commit/95b9d8d24cb511ef802e76d3415eb89a0a2865f9))
+
+## [0.5.6](https://github.com/bnnr-team/bnnr/compare/v0.5.5...v0.5.6) (2026-06-12)
+
+
+### Bug Fixes
+
+* make analyze sequential for shuffled val loaders ([#299](https://github.com/bnnr-team/bnnr/issues/299)) ([f204f29](https://github.com/bnnr-team/bnnr/commit/f204f29451d699a6dea4cb78b5a8db94b293ed57))
+
+## [0.5.5](https://github.com/bnnr-team/bnnr/compare/v0.5.4...v0.5.5) (2026-06-12)
+
+
+### Bug Fixes
+
+* forbid unknown config keys and enforce epoch bounds ([#297](https://github.com/bnnr-team/bnnr/issues/297)) ([985dcc8](https://github.com/bnnr-team/bnnr/commit/985dcc87c3ce5dff2ac4c7a2a80091a3e376df5a))
+
+## [0.5.4](https://github.com/bnnr-team/bnnr/compare/v0.5.3...v0.5.4) (2026-06-11)
+
+
+### Bug Fixes
+
+* load checkpoints with weights_only=True first ([#298](https://github.com/bnnr-team/bnnr/issues/298)) ([233dc36](https://github.com/bnnr-team/bnnr/commit/233dc36cfcc201076ff4eac9b683620dea4221e9))
+
+## [0.5.3](https://github.com/bnnr-team/bnnr/compare/v0.5.2...v0.5.3) (2026-06-11)
+
+
+### Bug Fixes
+
+* implement real local_mean fill in DetectionICD ([#295](https://github.com/bnnr-team/bnnr/issues/295)) ([8b72635](https://github.com/bnnr-team/bnnr/commit/8b7263583cda364713a796acb6846d615e9a6070)), closes [#255](https://github.com/bnnr-team/bnnr/issues/255)
+
+## [0.5.2](https://github.com/bnnr-team/bnnr/compare/v0.5.1...v0.5.2) (2026-06-11)
+
+
+### Bug Fixes
+
+* raise torch floor to 2.10.0 for security fixes ([#293](https://github.com/bnnr-team/bnnr/issues/293)) ([76b52bc](https://github.com/bnnr-team/bnnr/commit/76b52bc31425f017fe04dbddb2cd78c013393d12))
+
+## [0.5.1](https://github.com/bnnr-team/bnnr/compare/v0.5.0...v0.5.1) (2026-06-10)
+
+
+### Bug Fixes
+
+* keep canonical augmentation names instead of indexed aliases ([#289](https://github.com/bnnr-team/bnnr/issues/289)) ([8e285f9](https://github.com/bnnr-team/bnnr/commit/8e285f965585ea45fbb84678cd61c4c077ab4e5c)), closes [#258](https://github.com/bnnr-team/bnnr/issues/258)
+
+## [0.5.0](https://github.com/bnnr-team/bnnr/compare/v0.4.16...v0.5.0) (2026-06-10)
+
+
+### Features
+
+* implement real Opti-CAM and split out GradCAMExplainer ([#287](https://github.com/bnnr-team/bnnr/issues/287)) ([385aadd](https://github.com/bnnr-team/bnnr/commit/385aaddb717f7a325645cc9a9655fa9581c9c302))
+
+## [0.4.16](https://github.com/bnnr-team/bnnr/compare/v0.4.15...v0.4.16) (2026-06-10)
+
+
+### Bug Fixes
+
+* make ICD/AICD CPU-bound to remove apply_tensor recursion ([#285](https://github.com/bnnr-team/bnnr/issues/285)) ([69435d6](https://github.com/bnnr-team/bnnr/commit/69435d68c9de17cd3d6bc9f4acbf988f94586881))
+
+## [0.4.15](https://github.com/bnnr-team/bnnr/compare/v0.4.14...v0.4.15) (2026-06-10)
+
+
+### Bug Fixes
+
+* treat winning baseline_reeval as no improvement instead of crashing ([#279](https://github.com/bnnr-team/bnnr/issues/279)) ([6ae1512](https://github.com/bnnr-team/bnnr/commit/6ae151226989fd19bd4bc9a79c6b292973948b8a))
+
+
+### Documentation
+
+* add branded ICD/AICD figures to README and align tagline ([#282](https://github.com/bnnr-team/bnnr/issues/282)) ([7f1e3ea](https://github.com/bnnr-team/bnnr/commit/7f1e3ea2405bed36fbf6ddb5b6ebbe9474d4925f))
+
 ## [Unreleased]
+
+## [0.4.14] — 2026-06-09
+
+### Fixed
+
+- XAI cache for `ICD`/`AICD` is now precomputed **after** the baseline phase (on the trained baseline model) instead of before it (on random initial weights), so saliency-guided masks are no longer driven by an untrained network in from-scratch runs.
+- The cache now defaults to a per-run directory (`<report_dir>/run_<timestamp>/xai_cache`) and carries a `manifest.json` (XAI method, dataset size, image shape); stale maps are dropped on a mismatch. This stops a different model from silently reusing another run's cached saliency under a shared `checkpoint_dir`.
 
 ## [0.4.13] — 2026-06-09
 
