@@ -61,7 +61,13 @@ class AugmentationRunner:
         self.gpu_augmentations = [a for a in augmentations if a.device_compatible]
         self.cpu_augmentations = [a for a in augmentations if not a.device_compatible]
 
-        self._prefetch_queue: Queue[tuple[Tensor, Tensor] | None] = Queue(
+        # The async split (CPU augs in a worker thread, GPU augs on the main
+        # thread) only preserves the user's order when every CPU aug precedes
+        # every GPU aug in the list. When the list interleaves them, we fall
+        # back to the in-order sync path so results never depend on the split.
+        self._cpu_then_gpu = list(augmentations) == self.cpu_augmentations + self.gpu_augmentations
+
+        self._prefetch_queue: Queue[tuple[Tensor, Tensor, Tensor | None] | None] = Queue(
             maxsize=prefetch_queue_size
         )
         self._prefetch_thread: threading.Thread | None = None
@@ -76,11 +82,14 @@ class AugmentationRunner:
     ) -> tuple[Tensor, Tensor]:
         """Apply all augmentations to a batch (synchronous).
 
-        GPU-native augmentations are applied directly on the tensor.
-        CPU-bound augmentations go through the numpy fallback path.
+        Augmentations run strictly in the user-provided list order; each is
+        dispatched to its GPU-native tensor path or numpy fallback per call
+        (see ``_apply_augmentation_list``). Order is preserved even for mixed
+        CPU/GPU lists, unlike the async split.
         """
-        images = self._apply_gpu_augmentations(images, labels, sample_indices)
-        images = self._apply_cpu_augmentations(images, labels, sample_indices)
+        images = self._apply_augmentation_list(
+            self.augmentations, images, labels, sample_indices
+        )
         return images, labels
 
     def _apply_augmentation_list(
@@ -159,8 +168,10 @@ class AugmentationRunner:
         tuple[Tensor, Tensor]
             (augmented_images, labels)
         """
-        if not self.async_prefetch or not self.cpu_augmentations:
-            # Sync path: just apply augmentations inline
+        if not self.async_prefetch or not self.cpu_augmentations or not self._cpu_then_gpu:
+            # Sync path: apply augmentations inline in strict list order. Used
+            # when async is disabled, there are no CPU augs to offload, or the
+            # list interleaves CPU/GPU augs (where the split would reorder them).
             for raw_batch in data_loader:
                 images, labels, sample_indices = _unpack_batch(raw_batch)
                 images, labels = self.apply_batch(images, labels, sample_indices)
@@ -207,9 +218,11 @@ class AugmentationRunner:
                         )
                     break
 
-                images, labels = batch
-                # GPU augmentations are applied here (main thread, on-device)
-                images = self._apply_gpu_augmentations(images, labels)
+                images, labels, sample_indices = batch
+                # GPU augmentations are applied here (main thread, on-device).
+                # sample_indices are threaded through so index-aware GPU augs
+                # (e.g. cached ICD) key on the sample index, not an image hash.
+                images = self._apply_gpu_augmentations(images, labels, sample_indices)
                 yield images, labels
         finally:
             self._stop_event.set()
@@ -225,7 +238,7 @@ class AugmentationRunner:
                 images, labels, sample_indices = _unpack_batch(raw_batch)
                 # Apply CPU augmentations in this background thread
                 images = self._apply_cpu_augmentations(images, labels, sample_indices)
-                self._prefetch_queue.put((images, labels))
+                self._prefetch_queue.put((images, labels, sample_indices))
         except Exception as exc:
             self._worker_exception = exc
             logger.exception("AugmentationRunner prefetch worker failed")

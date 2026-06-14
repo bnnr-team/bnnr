@@ -208,13 +208,17 @@ class TestHashImage:
         assert cache._hash_image(img1) != cache._hash_image(img2)
 
     def test_cache_lookup_works(self, tmp_path: Path) -> None:
-        """Cache save/load should work with the new hash function."""
+        """Index-keyed cache save/load round-trips.
+
+        Hash-keyed persistence was removed (it grew unboundedly on augmented
+        images), so save_map persists only when a sample_index is given.
+        """
         cache = XAICache(tmp_path / "cache")
         image = np.random.RandomState(0).randint(0, 256, (32, 32, 3), dtype=np.uint8)
         saliency = np.random.rand(32, 32).astype(np.float32)
 
-        cache.save_map(saliency, label=5, image=image)
-        loaded = cache.get_importance_map(image, label=5)
+        cache.save_map(saliency, label=5, sample_index=11, image=image)
+        loaded = cache.get_importance_map(image, label=5, sample_index=11)
 
         assert loaded is not None
         assert np.allclose(loaded, saliency)

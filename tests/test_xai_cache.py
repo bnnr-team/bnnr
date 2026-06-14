@@ -49,6 +49,53 @@ def test_xai_cache_get_by_sample_index(temp_dir) -> None:
     assert out.shape == (16, 16)
 
 
+def test_save_map_index_keyed_persists(temp_dir) -> None:
+    cache = XAICache(temp_dir / "xai_cache")
+    cache.save_map(np.ones((8, 8), dtype=np.float32), label=1, sample_index=3)
+    assert cache._index_cache_path(3, 1).exists()
+
+
+def test_save_map_hash_only_does_not_persist(temp_dir) -> None:
+    """Without a sample_index, save_map must not write (no unbounded growth)."""
+    cache = XAICache(temp_dir / "xai_cache")
+    before = list(cache.cache_dir.glob("*.npy"))
+    # Different images, all hash-only — must add zero files.
+    for _ in range(5):
+        image = (np.random.rand(8, 8, 3) * 255).astype(np.uint8)
+        cache.save_map(np.ones((8, 8), dtype=np.float32), label=0, image=image)
+    after = list(cache.cache_dir.glob("*.npy"))
+    assert len(after) == len(before) == 0
+
+
+def test_trim_to_max_mb_evicts_oldest(temp_dir) -> None:
+    import os
+
+    cache = XAICache(temp_dir / "xai_cache")
+    # 8 maps of ~1 MB each (512x512 float32 = 1 MiB), mtimes 1000..1007.
+    arr = np.ones((512, 512), dtype=np.float32)
+    paths = []
+    for i in range(8):
+        p = cache._index_cache_path(i, 0)
+        np.save(p, arr)
+        os.utime(p, (1000 + i, 1000 + i))  # oldest = i0
+        paths.append(p)
+
+    evicted = cache.trim_to_max_mb(3)  # keep ~3 newest
+    assert evicted >= 4
+    total_mb = sum(p.stat().st_size for p in cache.cache_dir.glob("*.npy")) / (1024 * 1024)
+    assert total_mb <= 3
+    # The newest map (index 7) must survive; the oldest (index 0) must be gone.
+    assert cache._index_cache_path(7, 0).exists()
+    assert not cache._index_cache_path(0, 0).exists()
+
+
+def test_trim_to_max_mb_disabled_when_zero(temp_dir) -> None:
+    cache = XAICache(temp_dir / "xai_cache")
+    np.save(cache._index_cache_path(0, 0), np.ones((256, 256), dtype=np.float32))
+    assert cache.trim_to_max_mb(0) == 0
+    assert cache._index_cache_path(0, 0).exists()
+
+
 def test_precompute_cache_skips_when_existing_entries_cover_target(temp_dir, dummy_model, monkeypatch) -> None:
     cache = XAICache(temp_dir / "xai_cache")
 
