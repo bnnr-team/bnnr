@@ -5,8 +5,13 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from bnnr.icd import ICD
-from bnnr.presets import build_demo_augmentations, get_preset, list_presets
+from bnnr.icd import AICD, ICD
+from bnnr.presets import (
+    build_demo_augmentations,
+    build_icd_augmentations,
+    get_preset,
+    list_presets,
+)
 
 
 class _TinyCNN(nn.Module):
@@ -37,3 +42,30 @@ def test_get_preset_demo_with_model() -> None:
     model = _TinyCNN()
     augs = get_preset("demo", random_state=7, model=model, target_layers=[model.conv2])
     assert any(isinstance(a, ICD) for a in augs)
+
+
+def test_icd_listed_in_presets() -> None:
+    presets = list_presets()
+    assert "icd" in presets
+    assert "ICD" in presets["icd"] or "saliency" in presets["icd"].lower()
+
+
+def test_build_icd_augmentations_has_icd_and_aicd() -> None:
+    model = _TinyCNN()
+    augs = build_icd_augmentations(model, [model.conv2], random_state=42)
+    assert any(isinstance(a, ICD) for a in augs)
+    assert any(isinstance(a, AICD) for a in augs)
+
+
+def test_get_preset_icd_requires_model() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="requires model"):
+        get_preset("icd")
+
+
+def test_get_preset_icd_with_model() -> None:
+    model = _TinyCNN()
+    augs = get_preset("icd", random_state=7, model=model, target_layers=[model.conv2])
+    assert any(isinstance(a, ICD) for a in augs)
+    assert any(isinstance(a, AICD) for a in augs)

@@ -98,6 +98,7 @@ class TestRunTrainOnCompleteOrdering:
                 return_value=(MagicMock(), MagicMock(), MagicMock(), []),
             ),
             patch("bnnr.cli._print_pipeline_summary"),
+            patch("bnnr.cli.validate_config", return_value=[]),
             patch("bnnr.cli.start_dashboard", return_value="http://127.0.0.1:8080/"),
             patch("bnnr.cli.BNNRTrainer") as trainer_cls,
             patch("bnnr.cli.time.sleep", side_effect=InterruptedError),
