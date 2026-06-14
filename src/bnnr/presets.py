@@ -55,7 +55,7 @@ _PRESETS: dict[str, dict[str, Any]] = {
     "standard": {
         "description": "Balanced augmentation set for general-purpose training.",
         "augmentations": [
-            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5, "noise_strength_range": (3.0, 8.0)}},
+            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5}},
             {"cls": BasicAugmentation, "kwargs": {"probability": 0.5, "intensity": 0.5}},
             {"cls": ProCAM, "kwargs": {"probability": 0.5}},
             {"cls": DifPresets, "kwargs": {"probability": 0.5, "intensity": 0.7}},
@@ -64,7 +64,7 @@ _PRESETS: dict[str, dict[str, Any]] = {
     "aggressive": {
         "description": "Heavy augmentations for robust model training. May slow down convergence.",
         "augmentations": [
-            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5, "noise_strength_range": (3.0, 8.0)}},
+            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5}},
             {"cls": BasicAugmentation, "kwargs": {"probability": 0.5, "intensity": 0.5}},
             {"cls": DifPresets, "kwargs": {"probability": 0.5, "intensity": 0.7}},
             {"cls": Drust, "kwargs": {"probability": 0.5, "intensity": 0.5}},
@@ -77,7 +77,7 @@ _PRESETS: dict[str, dict[str, Any]] = {
     "gpu": {
         "description": "GPU-native augmentations only. Fastest throughput, requires CUDA.",
         "augmentations": [
-            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5, "noise_strength_range": (3.0, 8.0)}},
+            {"cls": ChurchNoise, "kwargs": {"probability": 0.5, "intensity": 0.5}},
             {"cls": ProCAM, "kwargs": {"probability": 0.5}},
             {"cls": DifPresets, "kwargs": {"probability": 0.5, "intensity": 0.7}},
         ],
