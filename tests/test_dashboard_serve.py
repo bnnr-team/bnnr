@@ -7,6 +7,7 @@ _find_frontend_dist, and the dashboard __init__ lazy imports.
 
 from __future__ import annotations
 
+import socket
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,12 +15,36 @@ import pytest
 
 from bnnr.dashboard.serve import (
     _dist_build_mtime,
+    _find_free_port,
     _find_frontend_dist,
     _frontend_dist_candidates,
     _frontend_source_candidates,
     _get_lan_ip,
     _print_qr_code,
 )
+
+
+class TestFindFreePort:
+    def test_returns_start_when_free(self):
+        # Grab a free port, release it, then assert the probe reclaims it.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            free = s.getsockname()[1]
+        assert _find_free_port("127.0.0.1", free, max_tries=5) == free
+
+    def test_skips_busy_port(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
+            busy.bind(("127.0.0.1", 0))
+            busy_port = busy.getsockname()[1]
+            chosen = _find_free_port("127.0.0.1", busy_port, max_tries=10)
+            assert chosen is not None
+            assert chosen != busy_port
+
+    def test_returns_none_when_all_taken(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
+            busy.bind(("127.0.0.1", 0))
+            busy_port = busy.getsockname()[1]
+            assert _find_free_port("127.0.0.1", busy_port, max_tries=1) is None
 
 # ---------------------------------------------------------------------------
 # _get_lan_ip

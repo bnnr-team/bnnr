@@ -61,9 +61,9 @@ pip install bnnr
 
 Runnable script: [`examples/classification/icd_plugin_minimal.py`](../examples/classification/icd_plugin_minimal.py).
 
-## Built on pytorch-grad-cam
+## Saliency backends
 
-BNNR uses [pytorch-grad-cam](https://github.com/jacobgil/pytorch-grad-cam) for saliency when `method="gradcam"` or `method="opticam"` (both route through `GradCAM` in [`src/bnnr/xai.py`](../src/bnnr/xai.py) today).
+`method="gradcam"` produces Grad-CAM (eigen-smoothed) via [pytorch-grad-cam](https://github.com/jacobgil/pytorch-grad-cam); `method="opticam"` (the default) produces Opti-CAM, which optimises a per-image combination of the target-layer activations so the masked input maximises the target-class confidence. Both live in [`src/bnnr/xai.py`](../src/bnnr/xai.py).
 
 ## Citation
 
@@ -87,7 +87,7 @@ If you use ICD/AICD from BNNR in research, cite the **method paper**, **BNNR sof
   title = {{BNNR}: Bulletproof Neural Network Recipe},
   year = {2026},
   url = {https://github.com/bnnr-team/bnnr},
-  version = {0.4.13},
+  version = {0.4.14},
   doi = {10.5281/zenodo.20581372},
   license = {MIT}
 }

@@ -16,7 +16,7 @@ from bnnr.presets import auto_select_augmentations, get_preset, list_presets
 from bnnr.quick_run import quick_run
 from bnnr.reporting import BNNRRunResult, Reporter, compare_runs, load_report
 from bnnr.version import __version__
-from bnnr.xai import OptiCAMExplainer, generate_saliency_maps
+from bnnr.xai import GradCAMExplainer, OptiCAMExplainer, generate_saliency_maps
 
 # Full API available via subpackage imports (bnnr.xai, bnnr.augmentations,
 # bnnr.detection_adapter, bnnr.events, bnnr.kornia_aug, etc.).
@@ -45,6 +45,7 @@ __all__ = [
     "list_presets",
     # XAI (essentials)
     "OptiCAMExplainer",
+    "GradCAMExplainer",
     "generate_saliency_maps",
     # Dashboard
     "start_dashboard",

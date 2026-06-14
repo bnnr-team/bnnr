@@ -27,9 +27,15 @@ from typing import Any, Optional, Union
 import click
 import typer
 
-from bnnr.config import default_demo_config, default_train_config, load_config
+from bnnr.config import (
+    default_demo_config,
+    default_train_config,
+    load_config,
+    validate_config,
+)
 from bnnr.core import BNNRTrainer
 from bnnr.dashboard.serve import (
+    _find_free_port,
     _find_frontend_dist,
     _get_lan_ip,
     _pick_bind_host,
@@ -202,6 +208,7 @@ def _run_train(
     max_val_samples: Optional[int],
     num_classes: Optional[int],
     on_complete: Optional[Callable[[Any], None]] = None,
+    dry_run: bool = False,
 ) -> Any:
     """Shared training path for ``train``, ``demo``, and ``quickstart`` commands."""
     from bnnr.pipelines import build_pipeline
@@ -235,6 +242,19 @@ def _run_train(
         preset=augmentation_preset,
         custom_data_path=data_path,
     )
+
+    config_warnings = validate_config(cfg)
+    if config_warnings:
+        typer.echo("")
+        typer.echo("  ⚠  Config warnings:")
+        for warning in config_warnings:
+            typer.echo(f"    • {warning}")
+
+    if dry_run:
+        typer.echo("")
+        typer.echo("  Dry run — pipeline built and validated, no training performed.")
+        typer.echo("")
+        return None
 
     dashboard_url: str | None = None
     if with_dashboard:
@@ -362,7 +382,7 @@ def train_command(
         "auto",
         "--augmentation-preset",
         "--preset",
-        help="Augmentation preset: auto, light, standard, aggressive, gpu, none",
+        help="Augmentation preset: auto, light, standard, aggressive, gpu, icd, none",
     ),
     with_dashboard: bool = typer.Option(
         True,
@@ -385,6 +405,11 @@ def train_command(
     max_train_samples: Optional[int] = typer.Option(None, "--max-train-samples", help="Limit training samples"),
     max_val_samples: Optional[int] = typer.Option(None, "--max-val-samples", help="Limit validation samples"),
     num_classes: Optional[int] = typer.Option(None, "--num-classes", help="Number of classes (for imagefolder)"),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Build the pipeline, print the summary + config warnings, then exit without training.",
+    ),
 ) -> None:
     """Run BNNR augmentation search training.
 
@@ -414,6 +439,7 @@ def train_command(
         max_train_samples=max_train_samples,
         max_val_samples=max_val_samples,
         num_classes=num_classes,
+        dry_run=dry_run,
     )
 
 
@@ -655,9 +681,11 @@ def analyze_command(
         raise typer.Exit(code=1) from exc
 
     try:
-        import torch
+        from bnnr.utils import safe_torch_load
 
-        ckpt = torch.load(model, map_location="cpu", weights_only=False)
+        # External model file: try the safe weights_only=True path first; the
+        # helper warns and falls back to weights_only=False only if needed.
+        ckpt = safe_torch_load(model, map_location="cpu")
     except Exception as exc:
         typer.echo(f"Error loading model: {exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -798,6 +826,21 @@ def dashboard_serve_command(
     available = list_runs(resolved)
     typer.echo(f"Available runs: {len(available)}")
 
+    bind_host = _pick_bind_host(port)
+    if bind_host != "0.0.0.0":
+        typer.echo(f"  Bind host      : {bind_host} (fallback from 0.0.0.0)")
+    chosen_port = _find_free_port(bind_host, port)
+    if chosen_port is None:
+        typer.echo(
+            f"Error: no free port in range {port}-{port + 9}. "
+            "Stop the process using it or pass a different --port.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    if chosen_port != port:
+        typer.echo(f"  Port {port} is in use; using {chosen_port} instead.")
+    port = chosen_port
+
     local_url = f"http://127.0.0.1:{port}/"
     lan_ip = _get_lan_ip()
     lan_url = f"http://{lan_ip}:{port}/"
@@ -817,11 +860,6 @@ def dashboard_serve_command(
     elif not (effective_frontend_dist / "index.html").exists():
         typer.echo(f"  Warning: --frontend-dist has no index.html: {effective_frontend_dist}")
 
-    bind_host = _pick_bind_host(port)
-    if bind_host != "0.0.0.0":
-        typer.echo(
-            f"  Bind host      : {bind_host} (fallback from 0.0.0.0)",
-        )
     app_instance = create_dashboard_app(resolved, static_dir=effective_frontend_dist, auth_token=token, mode="serve")
     uvicorn.run(
         app_instance,
