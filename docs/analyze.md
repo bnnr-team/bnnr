@@ -118,7 +118,9 @@ python3 -m bnnr analyze --model PATH --data PATH_OR_DATASET --output DIR [OPTION
 - The CLI builds a pipeline (dataset + adapter) from `--data` and loads the checkpoint into the adapter. For ImageFolder, use `--data /path/to/val_root`; the pipeline expects `--config` or compatible defaults (e.g. `num_classes` for imagefolder).
 - XAI requires an adapter that implements `XAICapableModel` (e.g. `SimpleTorchAdapter` with `target_layers`). If the checkpoint was saved by BNNR train, the same config/dataset usually provides the right adapter.
 - Output layout: `output_dir/analysis_report.json`, `output_dir/report.html` (portable, embedded images), and optionally `output_dir/artifacts/` (raw PNGs; see `artifacts.md`).
-- `--cv-folds` is a lightweight estimate of metric variability on validation predictions: analyze runs one inference pass, then computes k-fold metrics on cached predictions (it does not train k separate models).
+- `--cv-folds` is a lightweight estimate of metric variability on validation predictions: analyze reuses the cached predictions from the single inference pass and computes k-fold metrics on them (it does not train k separate models and never re-runs inference).
+- Progress: when the config is `verbose` (the default), analyze prints a stage banner for each phase (probe XAI, failure analysis, cross-validation, confusion-pair XAI, best/worst per class, data quality) and a per-class progress bar for the best/worst section.
+- The best/worst-per-class section diagnoses **every** class with no cap — full per-class coverage is intentional. On datasets with many classes this section dominates runtime, which is why it shows a progress bar.
 
 ### Validation loader contract
 
