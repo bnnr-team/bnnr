@@ -57,6 +57,23 @@ def _pick_bind_host(port: int) -> str:
     return "0.0.0.0"
 
 
+def _find_free_port(host: str, start_port: int, max_tries: int = 10) -> int | None:
+    """Return the first free TCP port in ``[start_port, start_port+max_tries)``.
+
+    Probes by binding on *host* (the same host uvicorn will use), so a port
+    reported free here is actually bindable. Returns ``None`` if every
+    candidate is taken.
+    """
+    for candidate in range(start_port, start_port + max_tries):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((host, candidate))
+                return candidate
+            except OSError:
+                continue
+    return None
+
+
 def _print_qr_code(url: str) -> None:
     """Print a terminal-friendly QR code for *url*.
 
@@ -241,16 +258,29 @@ def start_dashboard(
     static_dir = _find_frontend_dist(auto_build=build_frontend)
     dashboard_app = create_dashboard_app(run_root.resolve(), static_dir=static_dir, auth_token=auth_token)
 
-    local_url = f"http://127.0.0.1:{port}/"
-    lan_ip = _get_lan_ip()
-    lan_url = f"http://{lan_ip}:{port}/"
-
     bind_host = _pick_bind_host(port)
     if bind_host != "0.0.0.0":
         print(
             "[dashboard] Could not bind to 0.0.0.0; "
             f"falling back to local-only host {bind_host}.",
         )
+
+    # Auto-fallback to the next free port so a busy 8080 doesn't crash uvicorn
+    # inside the daemon thread (leaving a dead URL in the banner).
+    chosen_port = _find_free_port(bind_host, port)
+    if chosen_port is None:
+        print(
+            f"[dashboard] No free port in range {port}-{port + 9}; "
+            "dashboard not started. Training will continue."
+        )
+        return None
+    if chosen_port != port:
+        print(f"[dashboard] Port {port} is in use; using {chosen_port} instead.")
+    port = chosen_port
+
+    local_url = f"http://127.0.0.1:{port}/"
+    lan_ip = _get_lan_ip()
+    lan_url = f"http://{lan_ip}:{port}/"
 
     thread = threading.Thread(
         target=uvicorn.run,

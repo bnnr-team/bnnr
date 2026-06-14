@@ -41,6 +41,8 @@ Replay events from existing run(s):
 python3 -m bnnr dashboard serve --run-dir reports --port 8080
 ```
 
+If the requested `--port` is already in use, the dashboard automatically picks the next free port in `port..port+9` and prints the actual URL. If every port in that range is taken, `dashboard serve` exits with a clear error (pass a different `--port`).
+
 Use replay when:
 - you want to inspect old runs,
 - you do post-mortem/debug,
