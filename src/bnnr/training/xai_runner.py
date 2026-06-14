@@ -352,15 +352,8 @@ def generate_xai(trainer, iteration: int, augmentation_name: str, confusion: dic
 
     true_labels = labels.detach().cpu().numpy().tolist()
 
-    # Resolve class names from run metadata if available
-    class_names = None  # reassignment: list[str] | None
-    if hasattr(trainer.reporter, "_event_sink") and trainer.reporter._event_sink is not None:
-        # Try to get class names from the dataset profile event
-        pass
-    run_meta = getattr(trainer.reporter, "_run_class_names", None)
-    if run_meta is None:
-        # Best-effort: check the reporter's internal state
-        pass
+    # Classification XAI does not resolve class names here (handled upstream).
+    class_names = None
 
     # Enriched analysis when confusion data is available
     confusion_matrix: list[list[int]] | None = None
