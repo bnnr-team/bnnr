@@ -237,7 +237,7 @@ def run_single_iteration(
 
         # Print progress to terminal
         best_marker = " ★" if is_new_best else ""
-        print(
+        trainer.console.print(
             f"    epoch {epoch_idx}/{trainer.config.m_epochs} "
             f"— {sel_m}={sel_v:.4f}  loss={epoch_metrics.get('loss', 0):.4f}"
             f"  (best: e{best_epoch}={best_sel_value:.4f}){best_marker}",
@@ -265,7 +265,7 @@ def run_single_iteration(
             and _branching.should_prune_candidate(best_metrics, baseline_metrics, trainer.config)
         ):
             pruned = True
-            print(
+            trainer.console.print(
                 f"    ✗ Pruned at epoch {epoch_idx} "
                 f"(best-so-far {sel_m}={best_sel_value:.4f} below threshold)",
                 flush=True,
@@ -322,7 +322,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         selected_augmentations = [aug.name for aug in trainer._active_augmentations]
     else:
         # Baseline phase
-        print(
+        trainer.console.print(
             f"\n{'='*60}\n"
             f"  BASELINE TRAINING ({trainer.config.m_epochs} epochs)\n"
             f"  Starting...\n"
@@ -350,7 +350,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
             sel_m = trainer.config.selection_metric
             # For detection, loss comes from train_metrics (eval has no loss)
             display_loss = val_metrics.get("loss", train_metrics.get("loss", 0))
-            print(
+            trainer.console.print(
                 f"  baseline epoch {epoch}/{trainer.config.m_epochs} "
                 f"— {sel_m}={val_metrics.get(sel_m, 0):.4f}  "
                 f"loss={display_loss:.4f}",
@@ -438,7 +438,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         # the cached predictions used by the report.
         trainer.model.load_state_dict(best_baseline_state)
         if best_baseline_epoch and best_baseline_epoch != trainer.config.m_epochs:
-            print(
+            trainer.console.print(
                 f"  (baseline best epoch: e{best_baseline_epoch})",
                 flush=True,
             )
@@ -454,7 +454,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         trainer._baseline_xai_stats = copy.deepcopy(best_baseline_xai_stats)
 
         sel_m = trainer.config.selection_metric
-        print(
+        trainer.console.print(
             f"\n  ✓ Baseline complete: {sel_m}={baseline_metrics.get(sel_m, 0):.4f}\n",
             flush=True,
         )
@@ -514,7 +514,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
 
         # ── Optional baseline re-evaluation for this iteration ────
         if trainer.config.reeval_baseline_per_iteration and iteration > 0:
-            print(
+            trainer.console.print(
                 f"\n  ↻ Baseline re-evaluation (iteration {iteration}, "
                 f"{trainer.config.m_epochs} epochs, no augmentations)",
                 flush=True,
@@ -555,7 +555,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
 
             # Restore original model state
             trainer.model.load_state_dict(saved_state)
-            print(
+            trainer.console.print(
                 f"    ✓ Baseline re-eval: "
                 f"{trainer.config.selection_metric}={reeval_metrics.get(trainer.config.selection_metric, 0):.4f}",
                 flush=True,
@@ -564,7 +564,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         if candidates:
             sel_m = trainer.config.selection_metric
             base_val = baseline_metrics.get(sel_m, 0)
-            print(
+            trainer.console.print(
                 f"\n{'='*60}\n"
                 f"  ITERATION {iteration} — Evaluating {len(candidates)} candidates\n"
                 f"  Baseline {sel_m}: {base_val:.4f}\n"
@@ -585,7 +585,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
             xai_scores_by_candidate: dict[str, float] = {}
             for idx, augmentation in enumerate(candidate_bar, start=1):
                 t0 = time.perf_counter()
-                print(
+                trainer.console.print(
                     f"\n  ▶ [{idx}/{len(candidates)}] {augmentation.name} "
                     f"(p={augmentation.probability:.2f})",
                     flush=True,
@@ -647,7 +647,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
                 delta = cand_best_metrics.get(sel_m, 0) - base_val
                 delta_str = f"+{delta:.4f}" if delta > 0 else f"{delta:.4f}"
                 status = "PRUNED" if pruned else f"Δ{delta_str}"
-                print(
+                trainer.console.print(
                     f"  ◀ [{idx}/{len(candidates)}] {augmentation.name}: "
                     f"{sel_m}={cand_best_metrics.get(sel_m, 0):.4f} "
                     f"(best@e{cand_best_epoch}, {status})",
@@ -671,7 +671,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
                     )
                     if projected >= _LONG_RUN_WARN_SECONDS:
                         long_run_warned = True
-                        print(
+                        trainer.console.print(
                             f"\n  WARNING: branch search may take ~{projected / 3600:.1f}h more "
                             f"(~{avg_time:.0f}s/candidate over the remaining iterations). "
                             "Lower --max-iterations or pick a lighter preset to shorten it; "
@@ -729,13 +729,13 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
 
         if selected_name is None:
             patience_count += 1
-            print(
+            trainer.console.print(
                 f"\n  ⚠ No improvement at iteration {iteration} "
                 f"({patience_count}/{trainer.config.early_stopping_patience})",
                 flush=True,
             )
             if patience_count >= trainer.config.early_stopping_patience:
-                print("  ⛔ Early stopping triggered", flush=True)
+                trainer.console.print("  ⛔ Early stopping triggered", flush=True)
                 break
             continue
 
@@ -767,7 +767,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
 
         winner_metric = final_metrics.get(trainer.config.selection_metric, 0)
         base_val = initial_baseline_metrics.get(trainer.config.selection_metric, 0)
-        print(
+        trainer.console.print(
             f"\n  ★ SELECTED: '{selected_name}' "
             f"(best@epoch {winner_best_epoch}/{trainer.config.m_epochs}, "
             f"{trainer.config.selection_metric}={winner_metric:.4f}, "
@@ -874,13 +874,13 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
             trend = xai_summary.get("quality_trend", "unknown")
             cov = xai_summary.get("mean_quality_coverage", 0.0)
             foc = xai_summary.get("mean_quality_focus", 0.0)
-            print(
+            trainer.console.print(
                 f"\n  [XAI SUMMARY] trend={trend}  "
                 f"coverage={cov:.1%}  focus(gini)={foc:.2f}",
                 flush=True,
             )
             for rec in recs:
-                print(f"    → {rec}", flush=True)
+                trainer.console.print(f"    → {rec}", flush=True)
     dual_xai_analysis = _xai.generate_dual_xai_analysis(trainer)
     if dual_xai_analysis:
         analysis["dual_xai"] = dual_xai_analysis

@@ -19,6 +19,7 @@ from bnnr.adapter import (  # noqa: F401 — re-exported for backward compat
 )
 from bnnr.augmentations import BaseAugmentation
 from bnnr.config_model import BNNRConfig  # noqa: F401 — re-exported for backward compat
+from bnnr.console import ConsoleReporter
 from bnnr.training import branching as _branching
 from bnnr.training import callbacks as _callbacks
 from bnnr.training import dataset_profile as _dprofile
@@ -62,6 +63,7 @@ class BNNRTrainer:
         self.val_loader = val_loader
         self.augmentations = augmentations
         self.config = config
+        self.console = ConsoleReporter(config.verbose)
         self._runtime = _RuntimeState()
 
         if reporter is None:
@@ -166,11 +168,11 @@ class BNNRTrainer:
         pause_file = self.reporter.run_dir / PAUSE_SIGNAL_FILENAME
         if not pause_file.exists():
             return
-        print("\n  ⏸  Training paused — waiting for resume signal ...", flush=True)
+        self.console.print("\n  ⏸  Training paused — waiting for resume signal ...")
         self._log("Training paused via dashboard signal")
         while pause_file.exists():
             time.sleep(0.5)
-        print("  ▶  Training resumed\n", flush=True)
+        self.console.print("  ▶  Training resumed\n")
         self._log("Training resumed")
 
     def _average_metrics(self, all_metrics: list[dict[str, float]]) -> dict[str, float]:
