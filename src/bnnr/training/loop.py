@@ -274,6 +274,30 @@ def run_single_iteration(
     return best_metrics, best_model_state, best_epoch, pruned
 
 
+# Projected branch-search time above which a one-time long-run warning is printed.
+_LONG_RUN_WARN_SECONDS = 3600.0
+
+
+def _estimate_remaining_seconds(
+    avg_candidate_seconds: float,
+    candidates_per_iteration: int,
+    completed_in_iteration: int,
+    current_iteration: int,
+    max_iterations: int,
+) -> float:
+    """Project wall-clock seconds left in the branch search.
+
+    Uses the running average candidate duration and counts the unfinished
+    candidates in the current iteration plus a full candidate sweep for each
+    iteration still to come. Best-effort (ignores pruning/early-stop), so it is
+    an upper-ish bound used only to warn about very long runs.
+    """
+    remaining_this_iter = max(candidates_per_iteration - completed_in_iteration, 0)
+    remaining_iterations = max(max_iterations - current_iteration, 0)
+    total_candidates_left = remaining_this_iter + candidates_per_iteration * remaining_iterations
+    return max(avg_candidate_seconds, 0.0) * total_candidates_left
+
+
 def run(trainer: BNNRTrainer) -> BNNRRunResult:
     from bnnr.reporting import BNNRRunResult
 
@@ -459,6 +483,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
     else:
         trainer._emit_pipeline_phase("xai_cache", "completed")
 
+    long_run_warned = False
     for iteration in tqdm(
         range(start_iteration, trainer.config.max_iterations + 1),
         desc="BNNR iterations",
@@ -635,6 +660,24 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
                 remaining = max(len(candidates) - idx, 0)
                 eta = avg_time * remaining
                 candidate_bar.set_postfix_str(f"avg={avg_time:.2f}s eta={eta:.1f}s")
+
+                if not long_run_warned:
+                    projected = _estimate_remaining_seconds(
+                        avg_time,
+                        len(candidates),
+                        idx,
+                        iteration,
+                        trainer.config.max_iterations,
+                    )
+                    if projected >= _LONG_RUN_WARN_SECONDS:
+                        long_run_warned = True
+                        print(
+                            f"\n  WARNING: branch search may take ~{projected / 3600:.1f}h more "
+                            f"(~{avg_time:.0f}s/candidate over the remaining iterations). "
+                            "Lower --max-iterations or pick a lighter preset to shorten it; "
+                            "training is checkpointed, so Ctrl+C and resume is safe.\n",
+                            flush=True,
+                        )
 
                 if trainer.config.save_checkpoints:
                     _ = _ckpt.save_checkpoint(trainer,

@@ -6,7 +6,26 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bnnr.training.loop import run_single_iteration
+from bnnr.training.loop import (
+    _LONG_RUN_WARN_SECONDS,
+    _estimate_remaining_seconds,
+    run_single_iteration,
+)
+
+
+def test_estimate_remaining_seconds_counts_this_and_future_iterations() -> None:
+    # 4 candidates/iter, 1 done in iter 2 of max 5: 3 left now + 4*3 future = 15.
+    assert _estimate_remaining_seconds(10.0, 4, 1, 2, 5) == 150.0
+
+
+def test_estimate_remaining_seconds_last_candidate_last_iteration_is_zero() -> None:
+    assert _estimate_remaining_seconds(10.0, 4, 4, 5, 5) == 0.0
+
+
+def test_estimate_remaining_seconds_crosses_long_run_threshold() -> None:
+    # ~6 min/candidate over many candidates trips the 1h warning threshold.
+    projected = _estimate_remaining_seconds(360.0, 8, 1, 1, 5)
+    assert projected >= _LONG_RUN_WARN_SECONDS
 
 
 @pytest.fixture()
