@@ -16,6 +16,33 @@ import torch
 from torch import Tensor
 
 
+class _LazyModule:
+    """Defer importing a heavy module until its first attribute access.
+
+    Lets modules on the ``import bnnr`` path reference e.g. ``cv2`` at the top
+    level without paying its (slow, wheel-fragile) import cost on startup. The
+    real import happens on the first ``<proxy>.<attr>`` use. Usage::
+
+        from bnnr.utils import lazy_cv2 as cv2
+        ...
+        cv2.cvtColor(...)  # cv2 is imported here, not at module load
+    """
+
+    def __init__(self, module_name: str) -> None:
+        self._module_name = module_name
+        self._module: Any = None
+
+    def __getattr__(self, attr: str) -> Any:
+        module = object.__getattribute__(self, "_module")
+        if module is None:
+            module = importlib.import_module(self._module_name)
+            object.__setattr__(self, "_module", module)
+        return getattr(module, attr)
+
+
+lazy_cv2 = _LazyModule("cv2")
+
+
 class JsonFormatter(logging.Formatter):
     """Simple JSON formatter for production-friendly structured logs."""
 

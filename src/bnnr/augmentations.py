@@ -9,10 +9,11 @@ import warnings
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-import cv2
 import numpy as np
 import torch
 from torch import Tensor
+
+from bnnr.utils import lazy_cv2 as cv2
 
 AugT = TypeVar("AugT", bound="BaseAugmentation")
 

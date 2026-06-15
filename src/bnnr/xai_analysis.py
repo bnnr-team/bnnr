@@ -27,8 +27,9 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
-import cv2
 import numpy as np
+
+from bnnr.utils import lazy_cv2 as cv2
 
 __all__ = [
     "analyze_saliency_map",

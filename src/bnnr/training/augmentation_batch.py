@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import cv2
 import numpy as np
 import torch
 from torch import Tensor
 
 from bnnr.augmentations import BaseAugmentation
+from bnnr.utils import lazy_cv2 as cv2
 
 if TYPE_CHECKING:
     from bnnr.trainer import BNNRTrainer

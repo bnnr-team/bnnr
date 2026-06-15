@@ -18,10 +18,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F  # noqa: N812
+
+from bnnr.utils import lazy_cv2 as cv2
 
 logger = logging.getLogger(__name__)
 

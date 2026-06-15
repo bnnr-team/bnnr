@@ -6,12 +6,12 @@ import logging
 import warnings
 from typing import Any
 
-import cv2
 import numpy as np
 import torch
 from torch import nn
 
 from bnnr.augmentations import BaseAugmentation
+from bnnr.utils import lazy_cv2 as cv2
 from bnnr.xai import generate_saliency_maps
 from bnnr.xai_cache import XAICache
 
