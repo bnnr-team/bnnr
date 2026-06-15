@@ -804,9 +804,8 @@ def dashboard_serve_command(
 ) -> None:
     """Serve the BNNR dashboard for live or replay viewing.
 
-    The server binds to 0.0.0.0 so it is reachable from other devices
-    on the same network (e.g. your phone).  A QR code is printed so you
-    can scan it and open the dashboard instantly.
+    The server binds to 127.0.0.1 for local-only access. A QR code is
+    printed so you can open the dashboard URL quickly.
     """
     try:
         import uvicorn  # noqa: I001
@@ -827,8 +826,7 @@ def dashboard_serve_command(
     typer.echo(f"Available runs: {len(available)}")
 
     bind_host = _pick_bind_host(port)
-    if bind_host != "0.0.0.0":
-        typer.echo(f"  Bind host      : {bind_host} (fallback from 0.0.0.0)")
+    typer.echo(f"  Bind host      : {bind_host}")
     chosen_port = _find_free_port(bind_host, port)
     if chosen_port is None:
         typer.echo(

@@ -4,10 +4,8 @@ Every script — CLI, examples, and user-written — should call
 :func:`start_dashboard` instead of rolling its own ``uvicorn.run``
 wrapper.  This guarantees that:
 
-* The server binds to ``0.0.0.0`` so phones on the same LAN can connect
-  (intentional trade-off for local training dashboards; use
-  ``BNNR_DASHBOARD_TOKEN`` for mutating control endpoints).
-* A QR code with the LAN URL is always printed.
+* The server binds to ``127.0.0.1`` by default for safer local access.
+* A QR code with the URL is always printed.
 * Frontend discovery / auto-build logic is consistent.
 """
 
@@ -39,22 +37,19 @@ def _get_lan_ip() -> str:
 
 
 def _pick_bind_host(port: int) -> str:
-    """Pick the best bind host for the dashboard server.
+    """Pick a safe bind host for the dashboard server.
 
-    Prefer ``0.0.0.0`` for LAN access. If that bind is not permitted in the
-    environment, gracefully fall back to ``127.0.0.1`` so local access still
-    works.
+    Bind only to loopback (``127.0.0.1``) to avoid exposing the service on
+    all interfaces.
     """
-    for host in ("0.0.0.0", "127.0.0.1"):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind((host, port))
-            return host
-        except OSError:
-            continue
-    # If both probes fail, keep historical behavior so uvicorn surfaces
-    # the concrete bind error to the user.
-    return "0.0.0.0"
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", port))
+        return "127.0.0.1"
+    except OSError:
+        # If the probe fails, keep loopback behavior so uvicorn surfaces
+        # the concrete bind error to the user.
+        return "127.0.0.1"
 
 
 def _find_free_port(host: str, start_port: int, max_tries: int = 10) -> int | None:
