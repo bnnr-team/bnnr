@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.6.0](https://github.com/bnnr-team/bnnr/compare/v0.5.7...v0.6.0) (2026-06-16)
+
+
+### Features
+
+* add icd preset for saliency-guided training ([#303](https://github.com/bnnr-team/bnnr/issues/303)) ([ba7ba4d](https://github.com/bnnr-team/bnnr/commit/ba7ba4d212c03ca15dea671d7d25949342a49d86))
+* analyze progress output and CV cached-pred reuse ([e7d6364](https://github.com/bnnr-team/bnnr/commit/e7d636443b556921eecbe3452c35d670a9ba144f))
+* bound the XAI cache and stop unbounded hash-keyed growth ([1be85ac](https://github.com/bnnr-team/bnnr/commit/1be85ac97de2d4e1d0a9e9594096acee598b0b03))
+* dashboard port auto-fallback, train --dry-run, config warning echo ([309d1eb](https://github.com/bnnr-team/bnnr/commit/309d1ebbaa69bedb41e0e041a38249d4ffad6597))
+* warn once when branch search projects a very long runtime ([#318](https://github.com/bnnr-team/bnnr/issues/318)) ([0231591](https://github.com/bnnr-team/bnnr/commit/02315916aca57ee681bb025b0b98dd65b3a8efd4))
+
+
+### Bug Fixes
+
+* apply augmentations in list order and pass async sample indices ([76ea8d9](https://github.com/bnnr-team/bnnr/commit/76ea8d9179a1a59a49e722c728ce385552cef352))
+* invalidate XAI cache when a different model shares the cache dir ([#317](https://github.com/bnnr-team/bnnr/issues/317)) ([202e258](https://github.com/bnnr-team/bnnr/commit/202e25822bf5b1adc320a1fefabbc7925c7e6e8b))
+
+
+### Performance Improvements
+
+* lazy-import cv2 so import bnnr no longer pays the OpenCV cost ([85f0689](https://github.com/bnnr-team/bnnr/commit/85f0689db1804685819ff095e661305c99cb1660))
+
 ## [0.5.7](https://github.com/bnnr-team/bnnr/compare/v0.5.6...v0.5.7) (2026-06-12)
 
 
