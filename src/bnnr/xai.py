@@ -7,7 +7,6 @@ import inspect
 from pathlib import Path
 from typing import Any
 
-import cv2
 import numpy as np
 import torch
 from torch import Tensor, nn
@@ -18,6 +17,7 @@ from bnnr.craft import (
     RealCRAFTExplainer,
     RecursiveCRAFTExplainer,
 )
+from bnnr.utils import lazy_cv2 as cv2
 
 
 class BaseExplainer(abc.ABC):

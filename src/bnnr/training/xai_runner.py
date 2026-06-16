@@ -8,7 +8,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-import cv2
 import numpy as np
 import torch
 from torch import Tensor
@@ -20,6 +19,7 @@ from bnnr.training import callbacks as _callbacks
 from bnnr.training import image_utils as _img
 from bnnr.training import probe as _probe
 from bnnr.training.checkpoint import _is_ultralytics_tasks_backbone
+from bnnr.utils import lazy_cv2 as cv2
 from bnnr.xai import generate_saliency_maps, save_xai_visualization
 from bnnr.xai_analysis import analyze_xai_batch_rich
 from bnnr.xai_cache import XAICache

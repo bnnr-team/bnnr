@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import cv2
 import numpy as np
 from torch import Tensor
 
@@ -32,6 +31,7 @@ from bnnr.detection_augmentations import (
     _ensure_numpy_labels,
     _restore_target_types,
 )
+from bnnr.utils import lazy_cv2 as cv2
 
 _VALID_FILL_STRATEGIES = frozenset(
     {"gaussian_blur", "local_mean", "global_mean", "noise", "solid"}

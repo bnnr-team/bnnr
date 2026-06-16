@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-import cv2
 import numpy as np
 import torch
 from torch import Tensor
+
+from bnnr.utils import lazy_cv2 as cv2
 
 
 def tensor_to_uint8(
