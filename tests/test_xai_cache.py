@@ -11,18 +11,22 @@ from torch.utils.data import DataLoader, TensorDataset
 from bnnr.xai_cache import (
     _MANIFEST_SCHEMA,
     XAICache,
+    _model_state_hash,
     _safe_dataset_size,
     _safe_image_shape,
 )
 
 
-def _write_matching_manifest(cache: XAICache, loader: DataLoader, method: str) -> None:
-    """Mark the cache as produced by *method* on *loader* so it is reusable."""
+def _write_matching_manifest(
+    cache: XAICache, loader: DataLoader, method: str, model: torch.nn.Module
+) -> None:
+    """Mark the cache as produced by *method*/*model* on *loader* so it is reusable."""
     manifest = {
         "schema": _MANIFEST_SCHEMA,
         "method": method,
         "dataset_size": _safe_dataset_size(loader),
         "image_shape": _safe_image_shape(loader),
+        "model_hash": _model_state_hash(model),
     }
     cache._manifest_path().write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -105,7 +109,7 @@ def test_precompute_cache_skips_when_existing_entries_cover_target(temp_dir, dum
 
     # A matching manifest marks the existing entries as same-provenance, so the
     # count-based fast-skip is allowed to reuse them.
-    _write_matching_manifest(cache, loader, "opticam")
+    _write_matching_manifest(cache, loader, "opticam", dummy_model)
     for idx in range(3):
         np.save(cache.cache_dir / f"existing_{idx}.npy", np.zeros((4, 4), dtype=np.float32))
 
@@ -153,6 +157,43 @@ def test_precompute_writes_manifest(temp_dir, dummy_model, monkeypatch) -> None:
     assert manifest["method"] == "opticam"
     assert manifest["dataset_size"] == 2
     assert manifest["image_shape"] == [3, 8, 8]
+    assert manifest["model_hash"] == _model_state_hash(dummy_model)
+
+
+def test_precompute_invalidates_on_model_change(temp_dir, dummy_model, monkeypatch) -> None:
+    """A different model sharing the cache dir must invalidate stale maps."""
+    cache = XAICache(temp_dir / "xai_cache")
+    x = torch.rand(3, 3, 8, 8)
+    y = torch.randint(0, 2, (3,))
+    loader = DataLoader(TensorDataset(x, y), batch_size=3)
+
+    # Matching manifest + maps left by the model at its current weights.
+    _write_matching_manifest(cache, loader, "opticam", dummy_model)
+    for idx in range(3):
+        np.save(cache.cache_dir / f"idx_{idx}_0.npy", np.zeros((4, 4), dtype=np.float32))
+
+    # Same method/dataset/shape, but the weights changed -> stale maps.
+    with torch.no_grad():
+        next(dummy_model.parameters()).add_(1.0)
+
+    called = {"value": False}
+
+    def _fake_generate(*_args, **_kwargs):
+        called["value"] = True
+        return np.zeros((3, 8, 8), dtype=np.float32)
+
+    monkeypatch.setattr("bnnr.xai_cache.generate_saliency_maps", _fake_generate)
+    cache.precompute_cache(
+        model=dummy_model,
+        train_loader=loader,
+        target_layers=[dummy_model.conv1],
+        n_samples=3,
+        method="opticam",
+    )
+
+    assert called["value"] is True  # recomputed instead of reusing stale maps
+    manifest = json.loads(cache._manifest_path().read_text(encoding="utf-8"))
+    assert manifest["model_hash"] == _model_state_hash(dummy_model)
 
 
 def test_precompute_invalidates_on_manifest_mismatch(temp_dir, dummy_model, monkeypatch) -> None:
@@ -162,7 +203,7 @@ def test_precompute_invalidates_on_manifest_mismatch(temp_dir, dummy_model, monk
     loader = DataLoader(TensorDataset(x, y), batch_size=3)
 
     # Stale maps left by a run that used a different XAI method.
-    _write_matching_manifest(cache, loader, "craft")
+    _write_matching_manifest(cache, loader, "craft", dummy_model)
     for idx in range(3):
         np.save(cache.cache_dir / f"idx_{idx}_0.npy", np.zeros((4, 4), dtype=np.float32))
 

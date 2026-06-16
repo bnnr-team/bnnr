@@ -131,7 +131,7 @@ trainer = BNNRTrainer(
 - `xai_cache_force_recompute` (default: `false`)
 - `xai_cache_progress` (default: `true`)
 
-The XAI cache is precomputed **after** the baseline phase, so masks from `ICD`/`AICD` are guided by the trained baseline model rather than random initial weights, and is computed once for all branch-search iterations. A `manifest.json` records the XAI method, dataset size, and image shape; if any of these differs from the cached maps (for example a different `xai_method` against an explicit `xai_cache_dir`), the stale maps are dropped and recomputed.
+The XAI cache is precomputed **after** the baseline phase, so masks from `ICD`/`AICD` are guided by the trained baseline model rather than random initial weights, and is computed once for all branch-search iterations. A `manifest.json` records the XAI method, dataset size, image shape, and a fingerprint of the baseline model's weights; if any of these differs from the cached maps (for example a different `xai_method`, or a **different model** sharing an explicit `xai_cache_dir`), the stale maps are dropped and recomputed.
 - `xai_selection_weight` (default: `0.0`, validated to `[0,1]`)
 - `xai_pruning_threshold` (default: `0.0`, validated to `[0,1]`)
 - `adaptive_icd_threshold` (default: `false`)

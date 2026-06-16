@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # method, dataset size, or image shape) invalidates the cache so stale saliency
 # maps are never reused, e.g. across runs that share an explicit cache dir.
 _MANIFEST_FILENAME = "manifest.json"
-_MANIFEST_SCHEMA = 1
+_MANIFEST_SCHEMA = 2
 
 
 def _safe_dataset_size(loader: DataLoader) -> int | None:
@@ -61,6 +61,33 @@ except ImportError:
         return hashlib.sha256(data).hexdigest()
 
 
+def _model_state_hash(model: nn.Module) -> str:
+    """Cheap, deterministic fingerprint of a model's weights.
+
+    Each parameter is sampled (up to 64 evenly spaced values plus a global sum)
+    so the cost stays low for large models while still changing whenever the
+    weights change. Used so the XAI cache invalidates when a *different* model
+    writes into the same cache dir, not only on a different method/dataset/shape.
+    """
+    parts: list[bytes] = []
+    state = model.state_dict()
+    for name in sorted(state):
+        tensor = state[name]
+        parts.append(name.encode())
+        if not hasattr(tensor, "detach"):
+            parts.append(repr(tensor).encode())
+            continue
+        flat = tensor.detach().to(torch.float64).reshape(-1).cpu()
+        n = int(flat.numel())
+        parts.append(str(tuple(tensor.shape)).encode())
+        if n == 0:
+            continue
+        idx = torch.linspace(0, n - 1, steps=min(n, 64)).long()
+        parts.append(flat[idx].numpy().tobytes())
+        parts.append(repr(float(flat.sum())).encode())
+    return _fast_hash(b"".join(parts))
+
+
 class XAICache:
     def __init__(self, cache_dir: Path | str) -> None:
         self.cache_dir = Path(cache_dir)
@@ -98,19 +125,23 @@ class XAICache:
         dataset_size: int | None,
         image_shape: list[int] | None,
         force_recompute: bool,
+        model_hash: str | None = None,
     ) -> None:
         """Drop cached maps whose provenance differs from the current request.
 
-        Writes a manifest of ``{method, dataset_size, image_shape}``. When an
-        existing manifest does not match (or ``force_recompute`` is set), all
-        ``*.npy`` maps are removed so they are recomputed from the current
-        model/method/dataset instead of silently reused.
+        Writes a manifest of ``{method, dataset_size, image_shape, model_hash}``.
+        When an existing manifest does not match (or ``force_recompute`` is set),
+        all ``*.npy`` maps are removed so they are recomputed from the current
+        model/method/dataset instead of silently reused. ``model_hash`` lets a
+        different model sharing the same cache dir invalidate stale saliency even
+        when method, dataset size and image shape are identical.
         """
         desired = {
             "schema": _MANIFEST_SCHEMA,
             "method": method,
             "dataset_size": dataset_size,
             "image_shape": image_shape,
+            "model_hash": model_hash,
         }
         if not force_recompute and self._load_manifest() == desired:
             return
@@ -229,6 +260,7 @@ class XAICache:
             dataset_size=_safe_dataset_size(train_loader),
             image_shape=_safe_image_shape(train_loader),
             force_recompute=force_recompute,
+            model_hash=_model_state_hash(model),
         )
 
         written = 0
