@@ -68,12 +68,14 @@ def test_check_pause_blocks_then_resumes(temp_dir: Path) -> None:
     reporter = MagicMock()
     reporter.run_dir = temp_dir
 
+    from bnnr.console import ConsoleReporter
     from bnnr.core import BNNRTrainer
 
     trainer = object.__new__(BNNRTrainer)
     trainer.reporter = reporter
     trainer.config = MagicMock()
     trainer.config.verbose = False
+    trainer.console = ConsoleReporter(False)
     trainer.logger = MagicMock()
 
     pause_file = temp_dir / PAUSE_SIGNAL_FILENAME
