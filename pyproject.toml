@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bnnr"
-version = "0.6.0"
+version = "0.6.1"
 description = "BNNR: XAI-driven augmentation & diagnostics for PyTorch vision - find model failures, fix with saliency-guided augmentation (ICD/AICD), prove with auditable reports."
 readme = "README.pypi.md"
 license = { text = "MIT" }

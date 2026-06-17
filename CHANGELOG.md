@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/bnnr-team/bnnr/compare/v0.6.0...v0.6.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* **deps:** require starlette&gt;=1.3.1 to patch four CVEs ([#323](https://github.com/bnnr-team/bnnr/issues/323)) ([22cbad2](https://github.com/bnnr-team/bnnr/commit/22cbad2c9ee1f998b0c109b0acb1cdfc046aba6d))
+
 ## [0.6.0](https://github.com/bnnr-team/bnnr/compare/v0.5.7...v0.6.0) (2026-06-16)
 
 
