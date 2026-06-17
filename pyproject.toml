@@ -72,6 +72,7 @@ ultralytics = [
 ]
 dashboard = [
   "fastapi>=0.115.0",
+  "starlette>=1.3.1",  # security floor: CVE-2026-48817/48818/54282/54283 (transitive via fastapi)
   "uvicorn>=0.30.0",
   "websockets>=12.0",
   "qrcode>=7.0",
@@ -107,6 +108,7 @@ constraint-dependencies = [
   "filelock>=3.20.3",
   "pygments>=2.20.0",
   "pillow>=12.2.0",
+  "starlette>=1.3.1",  # CVE-2026-48817/48818/54282/54283 via fastapi[dashboard]
 ]
 
 # Default sdist respects .gitignore; UI build output must still land in the tarball.
