@@ -4,6 +4,19 @@
 
 Recommended entry point for **single-label image classification** in PyTorch.
 
+## CLI quickstart
+
+Curious about BNNR, but not ready to wire up models, dataloaders, and configs? Install the dashboard extra and run `python -m bnnr quickstart` for a guided, zero-YAML demo with a live dashboard and terminal QR code for phones on the same Wi-Fi. By default it uses CIFAR-10, the light preset, and small sample limits (128 train / 64 val), which is enough to see the full BNNR workflow in about a minute.
+
+```bash
+pip install "bnnr[dashboard]"
+python -m bnnr quickstart
+```
+
+## Python quickstart
+
+`quick_run()` is the shortest path from an existing PyTorch workflow to BNNR training: pass one model, one train dataloader, and one validation dataloader. BNNR builds the `SimpleTorchAdapter` for you, infers sensible XAI layers when it can, and auto-selects augmentations when you do not provide them, making it a good fit for notebooks, smoke tests, proofs of concept, team demos, and starting simple before a deeper integration.
+
 ## Minimal example
 
 ```python
