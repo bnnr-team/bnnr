@@ -35,7 +35,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,dashboard]"
+          # numpy 2.5.0 ships PEP 695 `type` statements in its stubs, which mypy
+          # rejects under our python_version = "3.10" target ("Type statement is
+          # only supported in Python 3.12 and greater"). Cap numpy here, in the
+          # type-check job only, so the test matrix still runs against numpy 2.5.
+          pip install -e ".[dev,dashboard]" "numpy<2.5"
 
       - name: Lint with ruff
         run: ruff check src/ tests/
