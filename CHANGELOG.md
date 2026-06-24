@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/bnnr-team/bnnr/compare/v0.6.1...v0.6.2) (2026-06-24)
+
+
+### Bug Fixes
+
+* **deps:** floor msgpack&gt;=1.2.1 to patch GHSA-6v7p-g79w-8964 ([#353](https://github.com/bnnr-team/bnnr/issues/353)) ([1d90684](https://github.com/bnnr-team/bnnr/commit/1d906847dc952887a837ac8cfcf869db525f7b1b))
+
 ## [0.6.1](https://github.com/bnnr-team/bnnr/compare/v0.6.0...v0.6.1) (2026-06-17)
 
 
