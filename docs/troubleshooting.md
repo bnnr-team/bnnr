@@ -246,3 +246,31 @@ Cause:
 Fix:
 
 - Use `UltralyticsDetectionAdapter` from `bnnr.detection_adapter` for Ultralytics YOLO training. That adapter implements `predict_detection_dicts` so detection XAI (activation / occlusion) and probe snapshots work with `xai_enabled=True`.
+
+## 18) Mypy syntax error with NumPy on modern Python versions
+
+Symptom:
+
+- Running `mypy src` results in a syntax error pointing to `numpy/__init__.pyi`: `Type statement is only supported in Python 3.12 and greater`.
+
+Cause:
+
+- A configuration conflict occurs when `mypy` evaluates external dependencies (like `numpy`) using a strict local target version (e.g., Python 3.10), while the host environment runs on a newer release like Python 3.14.
+
+Fix:
+
+- Explicitly pass your current Python version to override the default configuration target: `mypy src --python-version 3.14`
+
+## 19) PyTorch / CUDA device mismatch during pytest on WSL
+
+Symptom:
+
+- Running a standard `pytest` command on WSL with a GPU available fails multiple tests with a `RuntimeError: Input type (torch.FloatTensor) and weight type (torch.cuda.FloatTensor) should be the same`.
+
+Cause:
+
+- The BNNR test suite forces a `device="cpu"` configuration for mock training runs, but PyTorch automatically detects and initializes certain operations or backend weights on the host GPU exposed via WSL. This creates a mismatch when CPU tensors interact with CUDA layers.
+
+Fix:
+
+- Force PyTorch to execute the entire test suite on the CPU by hiding the GPU devices using the `CUDA_VISIBLE_DEVICES` environment variable: `CUDA_VISIBLE_DEVICES="" pytest`
