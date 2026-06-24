@@ -1,6 +1,6 @@
 # Product roadmap
 
-**Updated:** 2026-06-09 · **Current release:** v0.6.1 <!-- x-release-please-version -->
+**Updated:** 2026-06-09 · **Current release:** v0.6.2 <!-- x-release-please-version -->
 
 BNNR is a PyTorch vision toolkit focused on **model diagnostics first** (`bnnr analyze`), then saliency-guided augmentations (ICD/AICD), with optional training and detection adapters.
 
