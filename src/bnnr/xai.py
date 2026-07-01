@@ -154,11 +154,15 @@ class OptiCAMExplainer(BaseExplainer):
         if not target_layers:
             raise ValueError("OptiCAMExplainer requires at least one target layer")
 
+        # Honor the device the caller already placed the model/inputs on. We
+        # must not promote an explicit device="cpu" run to CUDA just because a
+        # GPU is visible: model.to() is in-place, so that would silently move
+        # the caller's shared model to CUDA and break subsequent CPU steps with
+        # a FloatTensor/cuda.FloatTensor mismatch (see issue #356). The
+        # use_cuda flag is retained for backward-compatible construction but no
+        # longer overrides the caller's device choice.
         device = images.device
-        if self.use_cuda and torch.cuda.is_available():
-            device = torch.device("cuda")
         model = model.to(device)
-        images = images.to(device)
         batch, _, height, width = images.shape
 
         targets = torch.as_tensor(

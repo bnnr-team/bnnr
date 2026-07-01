@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+import os
+
+# Force CPU-only test runs regardless of host GPU visibility (e.g. WSL2 with
+# CUDA passthrough or a GPU CI runner). This must run before torch initializes
+# its CUDA context so torch.cuda.is_available() reports False and the suite is
+# deterministic without any manual env var (see issue #356). setdefault keeps
+# an explicit CUDA_VISIBLE_DEVICES override intact for anyone who wants it.
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+
 from pathlib import Path
 
 import pytest

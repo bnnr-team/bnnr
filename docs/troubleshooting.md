@@ -261,7 +261,12 @@ Fix:
 
 - Explicitly pass your current Python version to override the default configuration target: `mypy src --python-version 3.14`
 
-## 19) PyTorch / CUDA device mismatch during pytest on WSL
+## 19) (Historical) PyTorch / CUDA device mismatch during pytest on WSL
+
+This is fixed as of issue #356: `tests/conftest.py` now hides the GPU for the
+test session automatically, and the OptiCAM explainer no longer promotes an
+explicit `device="cpu"` run to CUDA. A plain `pytest` works on a GPU-visible
+host with no manual env var. The notes below are kept as background.
 
 Symptom:
 
@@ -273,4 +278,4 @@ Cause:
 
 Fix:
 
-- Force PyTorch to execute the entire test suite on the CPU by hiding the GPU devices using the `CUDA_VISIBLE_DEVICES` environment variable: `CUDA_VISIBLE_DEVICES="" pytest`
+- Update to a release that includes the issue #356 fix. If you are on an older checkout, force PyTorch to execute the entire test suite on the CPU by hiding the GPU devices using the `CUDA_VISIBLE_DEVICES` environment variable: `CUDA_VISIBLE_DEVICES="" pytest`
