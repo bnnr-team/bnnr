@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.3](https://github.com/bnnr-team/bnnr/compare/v0.6.2...v0.6.3) (2026-07-01)
+
+
+### Bug Fixes
+
+* **xai:** honor explicit device on GPU hosts, enforce CPU-only tests ([#358](https://github.com/bnnr-team/bnnr/issues/358)) ([7f82a17](https://github.com/bnnr-team/bnnr/commit/7f82a176252d0a4f982635bcd37bb6ec5db364b8)), closes [#356](https://github.com/bnnr-team/bnnr/issues/356)
+
+
+### Documentation
+
+* add description for quickstart ([#351](https://github.com/bnnr-team/bnnr/issues/351)) ([2549e7d](https://github.com/bnnr-team/bnnr/commit/2549e7ddde32e6218a494fb300a5cec8cf339396))
+* add troubleshooting entries for mypy and cuda ([#354](https://github.com/bnnr-team/bnnr/issues/354)) ([75ce420](https://github.com/bnnr-team/bnnr/commit/75ce420661116c299711c29a61cb61ec876286af))
+
 ## [0.6.2](https://github.com/bnnr-team/bnnr/compare/v0.6.1...v0.6.2) (2026-06-24)
 
 
