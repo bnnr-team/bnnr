@@ -169,7 +169,7 @@ class TestReportCommand:
 
 
 class TestAnalyzeMissingCheckpoint:
-    """`bnnr analyze` should give an actionable error when --model is missing."""
+    """`bnnr analyze` should give an actionable error when --model points to a missing checkpoint."""
 
     def test_nonexistent_model_gives_actionable_error(self, tmp_path):
         result = runner.invoke(
@@ -185,9 +185,9 @@ class TestAnalyzeMissingCheckpoint:
             ],
         )
         assert result.exit_code == 1
-        assert "--model checkpoint not found" in result.output
-        assert ".pt" in result.output
-        assert "bnnr train" in result.output
+        assert "--model checkpoint not found" in result.stderr
+        assert ".pt" in result.stderr
+        assert "bnnr train" in result.stderr
 
 
 class TestXaiPresets:
