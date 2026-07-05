@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4](https://github.com/bnnr-team/bnnr/compare/v0.6.3...v0.6.4) (2026-07-05)
+
+
+### Bug Fixes
+
+* **cli:** give actionable error when analyze --model is missing ([#360](https://github.com/bnnr-team/bnnr/issues/360)) ([880ab68](https://github.com/bnnr-team/bnnr/commit/880ab68422e276a8caf6e817935e38a28f8aec16))
+
 ## [0.6.3](https://github.com/bnnr-team/bnnr/compare/v0.6.2...v0.6.3) (2026-07-01)
 
 
