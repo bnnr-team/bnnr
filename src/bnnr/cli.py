@@ -632,7 +632,13 @@ def analyze_command(
     from bnnr.analyze import analyze_model
 
     if not model.exists():
-        typer.echo(f"Error: Model path does not exist: {model}", err=True)
+        typer.echo(
+            f"Error: --model checkpoint not found: {model}\n"
+            "Pass --model with the path to a trained checkpoint (.pt) file, e.g.:\n"
+            "  bnnr analyze --model checkpoints/model.pt --data cifar10 --output analysis/\n"
+            "If you have not trained a model yet, run bnnr train first.",
+            err=True,
+        )
         raise typer.Exit(code=1)
 
     task = task.strip()
