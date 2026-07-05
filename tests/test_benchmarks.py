@@ -20,6 +20,7 @@ def fixture_benchmark_results() -> dict:
         if path.is_file():
             return json.loads(path.read_text(encoding="utf-8"))
     pytest.skip("no local results.json or results_resnet50.json — run benchmarks first")
+    raise AssertionError("unreachable: pytest.skip always raises")
 
 
 def test_results_json_has_runs_for_all_conditions(benchmark_results: dict) -> None:

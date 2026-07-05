@@ -168,6 +168,28 @@ class TestReportCommand:
         assert result.exit_code == 1
 
 
+class TestAnalyzeMissingCheckpoint:
+    """`bnnr analyze` should give an actionable error when --model points to a missing checkpoint."""
+
+    def test_nonexistent_model_gives_actionable_error(self, tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "analyze",
+                "--model",
+                str(tmp_path / "does_not_exist.pt"),
+                "--data",
+                "cifar10",
+                "--output",
+                str(tmp_path / "out"),
+            ],
+        )
+        assert result.exit_code == 1
+        assert "--model checkpoint not found" in result.stderr
+        assert ".pt" in result.stderr
+        assert "bnnr train" in result.stderr
+
+
 class TestXaiPresets:
     """Tests for XAI preset helpers in config.py."""
 
