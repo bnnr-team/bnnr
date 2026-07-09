@@ -1,0 +1,335 @@
+Script started on 2026-07-01 12:54:05+00:00 [TERM="screen" TTY="/dev/pts/1" COLUMNS="121" LINES="36"]
+[?2004h[01;34m/content/bnnr[00m# [200~python benchmarks/run_grand_benchmark.py --dataset imagewoof --smoke[201~[3mpython benchmarks/run_grand_benchmark.py --dataset imagewoof --smoke[23m [C[C[C[C[C[C[C[C[C[C[C[C[C[C[Cpython benchmarks/run_grand_benchmark.py --dataset imagewoof --smoke ----ddeevviiccee  ccppuu
+[?2004lGrand Benchmark — BNNR cross-dataset ablation (paper-quality)
+  dataset=imagewoof  regime=scratch  arch=resnet18
+  pretrained=False  img_size=64
+  num_classes=10  train_per_class=5
+  seeds=[42, 43]  conditions=['no_aug', 'bnnr_xai']
+  budget=4 epochs  epochs_per_phase=1  N_candidates=3  device=cpu
+  ~0.3h wall-clock estimate (2 conditions x 2 seeds, cpu, budget=4)
+  results -> /content/bnnr/benchmarks/results_imagewoof_scratch.json
+
+>>> dataset=imagewoof  condition=no_aug  seed=42  regime=scratch
+
+============================================================
+  NO_AUG (grand benchmark)
+  dataset=imagewoof  policy=base  batch_augs=none
+  budget=4 epochs  seed=42  device=cpu
+============================================================
+  epoch 1/4 — accuracy=0.1018  loss=2.3302
+  epoch 2/4 — accuracy=0.1069  loss=2.4741
+  epoch 3/4 — accuracy=0.1124  loss=2.7635
+  epoch 4/4 — accuracy=0.1069  loss=2.8052
+    no_aug seed=42: val_metric(held_out)=0.1079
+
+>>> dataset=imagewoof  condition=bnnr_xai  seed=42  regime=scratch
+
+============================================================
+  BNNR XAI (grand benchmark, equal-compute)
+  dataset=imagewoof  budget=4  epochs_per_phase=1
+  N_CANDIDATES=3  total_gpu_epochs=4
+  seed=42  device=cpu
+============================================================
+  [Phase 0/baseline] 1 epochs (no extra aug)...
+  [baseline] epoch 1/1 — accuracy=0.1018  loss=2.3302
+  [Phase 0] baseline selection_val accuracy=0.1018
+  [XAI cache] Pre-computing saliency maps...
+Precomputing XAI cache: 0it [00:00, ?it/s]Precomputing XAI cache: 1it [00:53, 53.34s/it]                                                [XAI cache] 50 maps cached to /content/bnnr/benchmarks/runs_grand/imagewoof_scratch/20260701_125546_bnnr_xai_s42/xai_cache
+  [Phase 1/3 — ICD] 1 epochs...
+  [ICD] epoch 1/1 — accuracy=0.1165  loss=2.4627
+  [ICD] selection_val accuracy=0.1165
+  [Phase 2/3 — AICD] 1 epochs...
+  [AICD] epoch 1/1 — accuracy=0.1084  loss=2.5188
+  [AICD] selection_val accuracy=0.1084
+  [Phase 3/3 — ChurchNoise] 1 epochs...
+  [ChurchNoise] epoch 1/1 — accuracy=0.1076  loss=2.4763
+  [ChurchNoise] selection_val accuracy=0.1076
+  [XAI selection] best=ICD  score=0.1165
+  [held_out_test] accuracy=0.1126  elapsed=112.5s
+    bnnr_xai seed=42: val_metric(held_out)=0.1126
+
+>>> dataset=imagewoof  condition=no_aug  seed=43  regime=scratch
+
+============================================================
+  NO_AUG (grand benchmark)
+  dataset=imagewoof  policy=base  batch_augs=none
+  budget=4 epochs  seed=43  device=cpu
+============================================================
+  epoch 1/4 — accuracy=0.0615  loss=2.9494
+  epoch 2/4 — accuracy=0.0565  loss=4.5739
+  epoch 3/4 — accuracy=0.0675  loss=3.9840
+  epoch 4/4 — accuracy=0.0796  loss=3.3354
+    no_aug seed=43: val_metric(held_out)=0.0822
+
+>>> dataset=imagewoof  condition=bnnr_xai  seed=43  regime=scratch
+
+============================================================
+  BNNR XAI (grand benchmark, equal-compute)
+  dataset=imagewoof  budget=4  epochs_per_phase=1
+  N_CANDIDATES=3  total_gpu_epochs=4
+  seed=43  device=cpu
+============================================================
+  [Phase 0/baseline] 1 epochs (no extra aug)...
+  [baseline] epoch 1/1 — accuracy=0.0615  loss=2.9494
+  [Phase 0] baseline selection_val accuracy=0.0615
+  [XAI cache] Pre-computing saliency maps...
+Precomputing XAI cache: 0it [00:00, ?it/s]Precomputing XAI cache: 1it [00:50, 50.90s/it]                                                [XAI cache] 50 maps cached to /content/bnnr/benchmarks/runs_grand/imagewoof_scratch/20260701_125932_bnnr_xai_s43/xai_cache
+  [Phase 1/3 — ICD] 1 epochs...
+  [ICD] epoch 1/1 — accuracy=0.0625  loss=2.4620
+  [ICD] selection_val accuracy=0.0625
+  [Phase 2/3 — AICD] 1 epochs...
+  [AICD] epoch 1/1 — accuracy=0.0781  loss=2.4735
+  [AICD] selection_val accuracy=0.0781
+  [Phase 3/3 — ChurchNoise] 1 epochs...
+  [ChurchNoise] epoch 1/1 — accuracy=0.0625  loss=2.4292
+  [ChurchNoise] selection_val accuracy=0.0625
+  [XAI selection] best=AICD  score=0.0781
+  [held_out_test] accuracy=0.0806  elapsed=108.1s
+    bnnr_xai seed=43: val_metric(held_out)=0.0806
+
+Done. 4 valid run records in /content/bnnr/benchmarks/results_imagewoof_scratch.json
+Summarize: python benchmarks/summarize_grand.py --results-dir benchmarks/ --datasets imagewoof
+[?2004h[01;34m/content/bnnr[00m# nnvviiddiiaa--ssmmii
+[?2004lWed Jul  1 13:02:16 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.82.07              Driver Version: 580.82.07      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla T4                       Off |   00000000:00:04.0 Off |                    0 |
+| N/A   55C    P8             14W /   70W |       0MiB /  15360MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+[?2004h[01;34m/content/bnnr[00m# [200~python benchmarks/run_grand_benchmark.py --dataset eurosat --device cuda --seeds 67 --conditions no_aug,bnnr_xai[201~[3mpython benchmarks/run_grand_benchmark.py --dataset eurosat --device cuda --seeds 67 --conditions no_aug,bn[23m[3mn[23m[3mr_xai[23mM[01;34m/content/bnnr[00m# python benchmarks/run_grand_benchmark.py --dataset eurosat --device cuda --seeds 67 --conditions no_aug,bnnr_xai
+[?2004lGrand Benchmark — BNNR cross-dataset ablation (paper-quality)
+  dataset=eurosat  regime=scratch  arch=resnet18
+  pretrained=False  img_size=64
+  num_classes=10  train_per_class=100
+  seeds=[67]  conditions=['no_aug', 'bnnr_xai']
+  budget=40 epochs  epochs_per_phase=10  N_candidates=3  device=cuda
+  ~0.2h wall-clock estimate (2 conditions x 1 seeds, cuda, budget=40)
+  results -> /content/bnnr/benchmarks/results_eurosat_scratch.json
+
+>>> dataset=eurosat  condition=no_aug  seed=67  regime=scratch
+
+============================================================
+  NO_AUG (grand benchmark)
+  dataset=eurosat  policy=base  batch_augs=none
+  budget=40 epochs  seed=67  device=cuda
+============================================================
+  epoch 1/40 — accuracy=0.1088  loss=30.4302
+  epoch 2/40 — accuracy=0.1209  loss=57.1866
+  epoch 3/40 — accuracy=0.2683  loss=8.9870
+  epoch 4/40 — accuracy=0.3843  loss=1.7308
+  epoch 5/40 — accuracy=0.4512  loss=1.8884
+  epoch 6/40 — accuracy=0.3826  loss=2.1028
+  epoch 7/40 — accuracy=0.5658  loss=1.2276
+  epoch 8/40 — accuracy=0.3244  loss=3.5604
+  epoch 9/40 — accuracy=0.6287  loss=1.0734
+  epoch 10/40 — accuracy=0.6177  loss=1.0859
+  epoch 11/40 — accuracy=0.6026  loss=1.1420
+  epoch 12/40 — accuracy=0.5296  loss=1.4103
+  epoch 13/40 — accuracy=0.3932  loss=2.7714
+  epoch 14/40 — accuracy=0.4023  loss=1.8475
+  epoch 15/40 — accuracy=0.5891  loss=1.3953
+  epoch 16/40 — accuracy=0.5658  loss=1.4213
+  epoch 17/40 — accuracy=0.6451  loss=1.0508
+  epoch 18/40 — accuracy=0.7144  loss=0.8206
+  epoch 19/40 — accuracy=0.5610  loss=1.4072
+  epoch 20/40 — accuracy=0.7206  loss=0.8106
+  epoch 21/40 — accuracy=0.6557  loss=0.9876
+  epoch 22/40 — accuracy=0.5895  loss=1.2706
+  epoch 23/40 — accuracy=0.6346  loss=1.1078
+  epoch 24/40 — accuracy=0.6994  loss=0.9284
+  epoch 25/40 — accuracy=0.6438  loss=1.1665
+  epoch 26/40 — accuracy=0.7500  loss=0.7290
+  epoch 27/40 — accuracy=0.6958  loss=0.8989
+  epoch 28/40 — accuracy=0.6965  loss=0.9381
+  epoch 29/40 — accuracy=0.6560  loss=1.1084
+  epoch 30/40 — accuracy=0.7306  loss=0.8111
+  epoch 31/40 — accuracy=0.6985  loss=0.9328
+  epoch 32/40 — accuracy=0.7373  loss=0.7981
+  epoch 33/40 — accuracy=0.7464  loss=0.7808
+  epoch 34/40 — accuracy=0.7535  loss=0.7736
+  epoch 35/40 — accuracy=0.7259  loss=0.8701
+  epoch 36/40 — accuracy=0.7505  loss=0.7787
+  epoch 37/40 — accuracy=0.7583  loss=0.7718
+  epoch 38/40 — accuracy=0.7531  loss=0.7870
+  epoch 39/40 — accuracy=0.7590  loss=0.7735
+  epoch 40/40 — accuracy=0.7619  loss=0.7511
+    no_aug seed=67: val_metric(held_out)=0.7658
+
+>>> dataset=eurosat  condition=bnnr_xai  seed=67  regime=scratch
+
+============================================================
+  BNNR XAI (grand benchmark, equal-compute)
+  dataset=eurosat  budget=40  epochs_per_phase=10
+  N_CANDIDATES=3  total_gpu_epochs=40
+  seed=67  device=cuda
+============================================================
+  [Phase 0/baseline] 10 epochs (no extra aug)...
+  [baseline] epoch 1/10 — accuracy=0.1088  loss=30.4302
+  [baseline] epoch 2/10 — accuracy=0.1783  loss=35.6142
+  [baseline] epoch 3/10 — accuracy=0.2931  loss=2.5134
+^CTraceback (most recent call last):
+  File "/content/bnnr/benchmarks/run_grand_benchmark.py", line 1595, in <module>
+    main()
+  File "/content/bnnr/benchmarks/run_grand_benchmark.py", line 1558, in main
+    entry = run_condition(
+            ^^^^^^^^^^^^^^
+  File "/content/bnnr/benchmarks/run_grand_benchmark.py", line 1225, in run_condition
+    return _run_bnnr_equal_compute(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/bnnr/benchmarks/run_grand_benchmark.py", line 1008, in _run_bnnr_equal_compute
+    baseline_val, _, _ = _run_epochs_on_loader(
+                         ^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/bnnr/benchmarks/run_grand_benchmark.py", line 383, in _run_epochs_on_loader
+    train_epoch(trainer, train_loader, augmentations=augmentations if augmentations else None)
+  File "/content/bnnr/src/bnnr/training/loop.py", line 75, in train_epoch
+    metrics = trainer.model.train_step(batch)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/bnnr/src/bnnr/adapter.py", line 94, in train_step
+    logits = self.model(images)
+             ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/bnnr/benchmarks/run_grand_benchmark.py", line 293, in forward
+    return self.backbone(x)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torchvision/models/resnet.py", line 285, in forward
+    return self._forward_impl(x)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torchvision/models/resnet.py", line 275, in _forward_impl
+    x = self.layer3(x)
+        ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torchvision/models/resnet.py", line 92, in forward
+    out = self.conv1(x)
+          ^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/conv.py", line 553, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/conv.py", line 548, in _conv_forward
+    return F.conv2d(
+           ^^^^^^^^^
+KeyboardInterrupt
+[?2004h[01;34m/content/bnnr[00m# !!!!
+[?2004lpython benchmarks/run_grand_benchmark.py --dataset eurosat --device cuda --seeds 67 --conditions no_aug,bnnr_xai
+Grand Benchmark — BNNR cross-dataset ablation (paper-quality)
+  dataset=eurosat  regime=scratch  arch=resnet18
+  pretrained=False  img_size=64
+  num_classes=10  train_per_class=100
+  seeds=[67]  conditions=['no_aug', 'bnnr_xai']
+  budget=40 epochs  epochs_per_phase=10  N_candidates=3  device=cuda
+  ~0.2h wall-clock estimate (2 conditions x 1 seeds, cuda, budget=40)
+  results -> /content/bnnr/benchmarks/results_eurosat_scratch.json
+SKIP no_aug seed=67 regime=scratch (already done)
+
+>>> dataset=eurosat  condition=bnnr_xai  seed=67  regime=scratch
+
+============================================================
+  BNNR XAI (grand benchmark, equal-compute)
+  dataset=eurosat  budget=40  epochs_per_phase=10
+  N_CANDIDATES=3  total_gpu_epochs=40
+  seed=67  device=cuda
+============================================================
+  [Phase 0/baseline] 10 epochs (no extra aug)...
+  [baseline] epoch 1/10 — accuracy=0.1088  loss=30.4302
+  [baseline] epoch 2/10 — accuracy=0.1783  loss=35.6142
+  [baseline] epoch 3/10 — accuracy=0.2931  loss=2.5134
+  [baseline] epoch 4/10 — accuracy=0.4439  loss=1.8685
+  [baseline] epoch 5/10 — accuracy=0.4671  loss=1.7961
+  [baseline] epoch 6/10 — accuracy=0.5443  loss=1.4473
+  [baseline] epoch 7/10 — accuracy=0.6643  loss=0.9327
+  [baseline] epoch 8/10 — accuracy=0.5637  loss=1.1730
+  [baseline] epoch 9/10 — accuracy=0.6404  loss=0.9844
+  [baseline] epoch 10/10 — accuracy=0.6678  loss=0.9302
+  [Phase 0] baseline selection_val accuracy=0.6678
+  [XAI cache] Pre-computing saliency maps...
+Precomputing XAI cache: 0it [00:00, ?it/s]Precomputing XAI cache: 1it [00:02,  2.74s/it]Precomputing XAI cache: 65it [00:05, 15.27it/s]Precomputing XAI cache: 129it [00:07, 20.60it/s]Precomputing XAI cache: 193it [00:09, 23.20it/s]Precomputing XAI cache: 257it [00:12, 24.62it/s]Precomputing XAI cache: 321it [00:14, 25.51it/s]Precomputing XAI cache: 385it [00:16, 26.06it/s]Precomputing XAI cache: 449it [00:19, 26.43it/s]Precomputing XAI cache: 513it [00:21, 26.46it/s]Precomputing XAI cache: 577it [00:23, 26.72it/s]Precomputing XAI cache: 641it [00:26, 26.94it/s]Precomputing XAI cache: 705it [00:28, 27.12it/s]Precomputing XAI cache: 769it [00:30, 27.28it/s]Precomputing XAI cache: 833it [00:33, 27.35it/s]Precomputing XAI cache: 897it [00:35, 27.44it/s]Precomputing XAI cache: 961it [00:37, 29.80it/s]                                                  [XAI cache] 1000 maps cached to /content/bnnr/benchmarks/runs_grand/eurosat_scratch/20260701_130904_bnnr_xai_s67/xai_cache
+  [Phase 1/3 — ICD] 10 epochs...
+  [ICD] epoch 1/10 — accuracy=0.5619  loss=1.5146
+  [ICD] epoch 2/10 — accuracy=0.4409  loss=1.7326
+  [ICD] epoch 3/10 — accuracy=0.4819  loss=1.5427
+  [ICD] epoch 4/10 — accuracy=0.4077  loss=2.3113
+  [ICD] epoch 5/10 — accuracy=0.5923  loss=1.1211
+  [ICD] epoch 6/10 — accuracy=0.5938  loss=1.1477
+  [ICD] epoch 7/10 — accuracy=0.6316  loss=1.0469
+  [ICD] epoch 8/10 — accuracy=0.5296  loss=1.3809
+  [ICD] epoch 9/10 — accuracy=0.6742  loss=0.9126
+  [ICD] epoch 10/10 — accuracy=0.7118  loss=0.8573
+  [ICD] selection_val accuracy=0.7118
+  [Phase 2/3 — AICD] 10 epochs...
+  [AICD] epoch 1/10 — accuracy=0.5576  loss=1.2434
+  [AICD] epoch 2/10 — accuracy=0.4667  loss=1.9567
+  [AICD] epoch 3/10 — accuracy=0.5144  loss=1.3389
+  [AICD] epoch 4/10 — accuracy=0.4642  loss=1.9913
+  [AICD] epoch 5/10 — accuracy=0.5286  loss=1.5109
+  [AICD] epoch 6/10 — accuracy=0.4653  loss=1.7970
+  [AICD] epoch 7/10 — accuracy=0.6446  loss=1.1291
+  [AICD] epoch 8/10 — accuracy=0.6601  loss=0.9431
+  [AICD] epoch 9/10 — accuracy=0.6582  loss=1.0295
+  [AICD] epoch 10/10 — accuracy=0.7283  loss=0.8155
+  [AICD] selection_val accuracy=0.7283
+  [Phase 3/3 — ChurchNoise] 10 epochs...
+  [ChurchNoise] epoch 1/10 — accuracy=0.5496  loss=1.2906
+  [ChurchNoise] epoch 2/10 — accuracy=0.3558  loss=2.9300
+  [ChurchNoise] epoch 3/10 — accuracy=0.5703  loss=1.3363
+  [ChurchNoise] epoch 4/10 — accuracy=0.3735  loss=2.8747
+  [ChurchNoise] epoch 5/10 — accuracy=0.4529  loss=2.7023
+  [ChurchNoise] epoch 6/10 — accuracy=0.5767  loss=1.1399
+  [ChurchNoise] epoch 7/10 — accuracy=0.6985  loss=0.8242
+  [ChurchNoise] epoch 8/10 — accuracy=0.7034  loss=0.8382
+  [ChurchNoise] epoch 9/10 — accuracy=0.6760  loss=0.8917
+  [ChurchNoise] epoch 10/10 — accuracy=0.7325  loss=0.7518
+  [ChurchNoise] selection_val accuracy=0.7325
+  [XAI selection] best=ChurchNoise  score=0.7325
+  [held_out_test] accuracy=0.7309  elapsed=385.4s
+    bnnr_xai seed=67: val_metric(held_out)=0.7309
+
+Done. 2 valid run records in /content/bnnr/benchmarks/results_eurosat_scratch.json
+Summarize: python benchmarks/summarize_grand.py --results-dir benchmarks/ --datasets eurosat
+[?2004h[01;34m/content/bnnr[00m# eexxiitt
+[?2004lexit
+
+Script done on 2026-07-01 13:15:52+00:00 [COMMAND_EXIT_CODE="0"]

@@ -1,0 +1,306 @@
+{
+  "benchmark_id": "grand_benchmark_imagewoof_scratch",
+  "model": "resnet18 (torchvision, pretrained=False)",
+  "dataset": "imagewoof",
+  "batch_size": 64,
+  "optimizer": "SGD(lr=0.05, momentum=0.9, wd=5e-4)",
+  "scheduler": "CosineAnnealingLR",
+  "primary_metric": "held_out_test accuracy (best epoch within each phase)",
+  "attention_method": "OptiCAM overlays on fixed held_out_test indices",
+  "shared_config": "benchmarks/config.yaml",
+  "comparisons": [
+    {
+      "id": "bnnr_vs_no_aug",
+      "label": "BNNR branch search vs no augmentation",
+      "conditions": [
+        "bnnr_branch_search",
+        "no_bnnr"
+      ],
+      "metrics": [
+        "val_accuracy",
+        "attention_coverage",
+        "attention_edge_ratio"
+      ]
+    },
+    {
+      "id": "bnnr_vs_randaugment",
+      "label": "BNNR branch search vs RandAugment",
+      "conditions": [
+        "bnnr_branch_search",
+        "randaugment"
+      ],
+      "metrics": [
+        "val_accuracy",
+        "attention_coverage",
+        "attention_edge_ratio"
+      ]
+    },
+    {
+      "id": "attention_maps",
+      "label": "Where the model looks (OptiCAM on shared val images)",
+      "conditions": [
+        "no_bnnr",
+        "randaugment",
+        "bnnr_branch_search"
+      ],
+      "artifacts": [
+        "xai_overlays"
+      ]
+    }
+  ],
+  "conditions": {
+    "no_aug": {
+      "label": "Without augmentation (crop + flip only)",
+      "strategy": "plain_training",
+      "max_iterations": 0,
+      "augmentations": [],
+      "description": "Standard from-scratch training: RandomResizedCrop + RandomHorizontalFlip. No extra augmentation, no branch search. Trained for B epochs straight."
+    },
+    "randaugment": {
+      "label": "RandAugment (torchvision)",
+      "strategy": "randaugment",
+      "max_iterations": 0,
+      "augmentations": [
+        "RandAugment"
+      ],
+      "description": "External baseline: base crop+flip + torchvision RandAugment. Policy-based random augmentation, no saliency guidance. B epochs straight."
+    },
+    "trivialaugment": {
+      "label": "TrivialAugmentWide (torchvision)",
+      "strategy": "trivialaugment",
+      "max_iterations": 0,
+      "augmentations": [
+        "TrivialAugmentWide"
+      ],
+      "description": "External baseline: base crop+flip + TrivialAugmentWide. Parameter-free random augmentation. B epochs straight."
+    },
+    "autoaugment": {
+      "label": "AutoAugment ImageNet (torchvision)",
+      "strategy": "plain_training",
+      "max_iterations": 0,
+      "augmentations": [
+        "AutoAugment"
+      ],
+      "description": "External baseline: base crop+flip + AutoAugment (ImageNet policy). Searched augmentation policy. B epochs straight."
+    },
+    "churchnoise_only": {
+      "label": "ChurchNoise only (non-XAI ablation)",
+      "strategy": "plain_training",
+      "max_iterations": 0,
+      "augmentations": [
+        "ChurchNoise"
+      ],
+      "description": "Ablation: ChurchNoise as always-on batch augmentation for B epochs. Isolates the non-XAI BNNR component."
+    },
+    "icd_only": {
+      "label": "ICD only (saliency ablation)",
+      "strategy": "plain_training",
+      "max_iterations": 0,
+      "augmentations": [
+        "ICD"
+      ],
+      "description": "Ablation: ICD as always-on batch augmentation for B epochs. Masks high-saliency regions. No branch search."
+    },
+    "aicd_only": {
+      "label": "AICD only (saliency ablation)",
+      "strategy": "plain_training",
+      "max_iterations": 0,
+      "augmentations": [
+        "AICD"
+      ],
+      "description": "Ablation: AICD as always-on batch augmentation for B epochs. Masks background (low-saliency) regions. No branch search."
+    },
+    "icd_aicd_fixed": {
+      "label": "ICD+AICD fixed (no search)",
+      "strategy": "plain_training",
+      "max_iterations": 0,
+      "augmentations": [
+        "ICD",
+        "AICD"
+      ],
+      "description": "Ablation: ICD and AICD together as always-on batch augmentation. No branch search \u2014 isolates search contribution."
+    },
+    "bnnr_xai": {
+      "label": "BNNR XAI-guided (equal compute)",
+      "strategy": "bnnr_branch_search",
+      "max_iterations": 3,
+      "augmentations": [
+        "ICD",
+        "AICD",
+        "ChurchNoise"
+      ],
+      "description": "BNNR branch search with XAI-guided candidate selection. Equal compute: B epochs total split into (1 + N_candidates) phases. Candidate with highest selection_val score is chosen."
+    },
+    "bnnr_random": {
+      "label": "BNNR random selection (XAI ablation)",
+      "strategy": "bnnr_branch_search",
+      "max_iterations": 3,
+      "augmentations": [
+        "ICD",
+        "AICD",
+        "ChurchNoise"
+      ],
+      "description": "BNNR branch search with RANDOM candidate selection (seed-controlled). Identical compute and augmentation pool as bnnr_xai. bnnr_xai vs bnnr_random isolates XAI-guided selection contribution."
+    }
+  },
+  "hardware": {
+    "pytorch_version": "2.11.0+cpu",
+    "gpu": "cpu",
+    "platform": "Linux-6.6.122+-x86_64-with-glibc2.35"
+  },
+  "runs": [
+    {
+      "condition": "no_aug",
+      "strategy": "plain_training",
+      "dataset": "imagewoof",
+      "seed": 14,
+      "max_iterations": 0,
+      "m_epochs": 4,
+      "selection_metric": "accuracy",
+      "val_metric": 0.09778225806451613,
+      "f1_macro": 0.05787900587390733,
+      "loss": 4.263331430573618,
+      "best_epoch": 2,
+      "baseline_val_metric": null,
+      "gain_vs_within_run_baseline_pp": null,
+      "best_path": "plain:base:none",
+      "augmentation_names": [],
+      "selected_augmentations": [],
+      "attention_coverage": 0.7157,
+      "attention_edge_ratio": 0.4834,
+      "xai_dir": "benchmarks/runs_grand/imagewoof_scratch/20260702_111952_no_aug_s14/xai",
+      "xai_overlays": [
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_111952_no_aug_s14/xai/attention_0.png",
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_111952_no_aug_s14/xai/attention_1.png",
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_111952_no_aug_s14/xai/attention_2.png",
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_111952_no_aug_s14/xai/attention_3.png",
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_111952_no_aug_s14/xai/attention_4.png",
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_111952_no_aug_s14/xai/attention_5.png"
+      ],
+      "wall_clock_s": 116.1,
+      "report_json": "benchmarks/runs_grand/imagewoof_scratch/20260702_111952_no_aug_s14/run_summary.json",
+      "run_dir": "benchmarks/runs_grand/imagewoof_scratch/20260702_111952_no_aug_s14",
+      "total_gpu_epochs": 4,
+      "epochs_per_phase": 4,
+      "selection_mode": "fixed",
+      "selected_candidate": null,
+      "selection_val_metric": 0.09778225806451613,
+      "held_out_test_metric": 0.09778225806451613,
+      "git_head": "82df6e84336db35db552a4506cb8036f70921d02",
+      "hardware": {
+        "pytorch_version": "2.11.0+cpu",
+        "gpu": "cpu",
+        "platform": "Linux-6.6.122+-x86_64-with-glibc2.35"
+      },
+      "test_accuracy": 0.09862735129639044,
+      "test_f1_macro": 0.033445800418668535,
+      "test_top5_accuracy": 0.47890188103711234,
+      "test_cohen_kappa": -0.005325427923818169,
+      "test_ece": 0.3060899327135535,
+      "xai_edge_ratio": 0.48339844160074336,
+      "xai_coverage": 0.7156575520833334,
+      "xai_gini": 0.26287693926318284,
+      "xai_entropy": 11.756756464640299,
+      "xai_center_bias": 0.24999999646074386,
+      "model": "resnet18",
+      "img_size": 64,
+      "pretrained": false,
+      "regime": "scratch"
+    },
+    {
+      "condition": "bnnr_xai",
+      "strategy": "bnnr_branch_search",
+      "dataset": "imagewoof",
+      "seed": 14,
+      "max_iterations": 3,
+      "m_epochs": 1,
+      "selection_metric": "accuracy",
+      "val_metric": 0.109375,
+      "f1_macro": 0.06765186731059354,
+      "loss": 2.6539911531632945,
+      "best_epoch": null,
+      "baseline_val_metric": null,
+      "gain_vs_within_run_baseline_pp": null,
+      "best_path": "bnnr_xai:ChurchNoise",
+      "augmentation_names": [
+        "ICD",
+        "AICD",
+        "ChurchNoise"
+      ],
+      "selected_augmentations": [
+        "ICD",
+        "AICD",
+        "ChurchNoise"
+      ],
+      "attention_coverage": 0.6898,
+      "attention_edge_ratio": 0.4834,
+      "xai_dir": "benchmarks/runs_grand/imagewoof_scratch/20260702_112248_bnnr_xai_s14/xai",
+      "xai_overlays": [
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_112248_bnnr_xai_s14/xai/attention_0.png",
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_112248_bnnr_xai_s14/xai/attention_1.png",
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_112248_bnnr_xai_s14/xai/attention_2.png",
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_112248_bnnr_xai_s14/xai/attention_3.png",
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_112248_bnnr_xai_s14/xai/attention_4.png",
+        "benchmarks/runs_grand/imagewoof_scratch/20260702_112248_bnnr_xai_s14/xai/attention_5.png"
+      ],
+      "wall_clock_s": 223.1,
+      "report_json": "benchmarks/runs_grand/imagewoof_scratch/20260702_112248_bnnr_xai_s14/run_summary.json",
+      "run_dir": "benchmarks/runs_grand/imagewoof_scratch/20260702_112248_bnnr_xai_s14",
+      "total_gpu_epochs": 4,
+      "epochs_per_phase": 1,
+      "selection_mode": "xai",
+      "selected_candidate": "ChurchNoise",
+      "selection_val_metric": 0.109375,
+      "held_out_test_metric": 0.109375,
+      "baseline_score": 0.09274193548387097,
+      "candidate_scores": {
+        "ICD": 0.10836693548387097,
+        "AICD": 0.10383064516129033,
+        "ChurchNoise": 0.109375
+      },
+      "git_head": "82df6e84336db35db552a4506cb8036f70921d02",
+      "hardware": {
+        "pytorch_version": "2.11.0+cpu",
+        "gpu": "cpu",
+        "platform": "Linux-6.6.122+-x86_64-with-glibc2.35"
+      },
+      "test_accuracy": 0.1103202846975089,
+      "test_f1_macro": 0.02394531551710821,
+      "test_top5_accuracy": 0.5048296898830706,
+      "test_cohen_kappa": 0.0013110829301296487,
+      "test_ece": 0.18288460113278607,
+      "xai_edge_ratio": 0.48339844414378647,
+      "xai_coverage": 0.6898193359375,
+      "xai_gini": 0.26104898751186006,
+      "xai_entropy": 11.773562590281168,
+      "xai_center_bias": 0.2499999993794668,
+      "model": "resnet18",
+      "img_size": 64,
+      "pretrained": false,
+      "regime": "scratch"
+    }
+  ],
+  "benchmark_version": "grand_v1",
+  "num_classes": 10,
+  "img_size": 64,
+  "budget_epochs_total": 4,
+  "epochs_per_phase": 1,
+  "n_candidates": 3,
+  "candidate_names": [
+    "ICD",
+    "AICD",
+    "ChurchNoise"
+  ],
+  "normalization": "ImageNet mean/std applied inside the model",
+  "target_layer": "backbone.layer4[-1]",
+  "regime": "scratch",
+  "protocol_caveats": [
+    "Equal total GPU-epoch budget B for all conditions.",
+    "BNNR trains B//(1+N_candidates) = 1 epochs per phase.",
+    "All conditions select their best epoch on selection_val; the held-out test set is evaluated exactly once for final reporting.",
+    "bnnr_random provides a compute-matched baseline for bnnr_xai.",
+    "Epoch-budget asymmetry: under equal total compute, the bnnr_xai/bnnr_random final model is trained for 2 phases (baseline + chosen candidate = 2 epochs) while single-aug and baseline conditions train the full B epochs on one model. The compute is matched, the per-model epoch count is not; this is conservative for the 'branch search > best single aug' claim."
+  ],
+  "git_head": "82df6e84336db35db552a4506cb8036f70921d02",
+  "generated_at": "2026-07-02T11:19:51.824815+00:00"
+}
