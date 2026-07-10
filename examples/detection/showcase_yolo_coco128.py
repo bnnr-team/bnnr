@@ -1,3 +1,4 @@
+
 """
 YOLO COCO128 detection showcase for BNNR with live dashboard support.
 
@@ -251,6 +252,7 @@ def main() -> None:
         "max_iterations": args.decisions,
         "event_log_enabled": args.with_dashboard,
         "device": resolved_device,
+		"lr": 1e-4,
     }
     if names_with_bg is not None:
         overrides["detection_class_names"] = names_with_bg
