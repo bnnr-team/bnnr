@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.5](https://github.com/bnnr-team/bnnr/compare/v0.6.4...v0.6.5) (2026-07-10)
+
+
+### Documentation
+
+* add Windows SSL troubleshooting for CIFAR-10 ([#364](https://github.com/bnnr-team/bnnr/issues/364)) ([c573d9c](https://github.com/bnnr-team/bnnr/commit/c573d9c9d628c7fd43091e95d3f1e47d84220552))
+
 ## [0.6.4](https://github.com/bnnr-team/bnnr/compare/v0.6.3...v0.6.4) (2026-07-05)
 
 
