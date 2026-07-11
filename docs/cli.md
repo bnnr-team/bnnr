@@ -43,20 +43,40 @@ Options: `--dashboard-port`, `--no-auto-open`.
 ## `train`
 
 ```bash
-python3 -m bnnr train [OPTIONS]
+python -m bnnr train [OPTIONS]
 ```
 
-Omit `--config` to use built-in quickstart defaults (`m_epochs=3`, `max_iterations=2`, `device=auto`, etc.).
+Run BNNR augmentation search training.
+
+### Options
+
+- `--config -c` PATH (optional YAML config. Omit for built-in quickstart defaults),
+- `--dataset` TEXT (dataset: `mnist`, `fashion_mnist`, `cifar10`, `stl10`, `imagefolder`, `coco_mini`, `yolo`) [default: cifar10],
+- `--data-dir` PATH (directory for dataset download/storage) [default: data],
+- `--datta-path` PATH (custom data path (`imagefolder`/`coco_mini`/`yolo`)),
+- `--outpu -o` PATH (output directory for checkpoints and reports),
+- `--device -d` TEXT (device: `cuda`, `cpu`, `auto`),
+- `--epochs -e` INTEGER (number of epochs per candidate),
+- `--seed -s` INTEGER (random seed),
+- `--no-xai` (disable XAI generation),
+- `--augmentation-preset, --preset` TEXT (augmentation preset: `auto`, `light`, `standard`, `aggressive`, `gpu`, `icd`, `none`) [default: auto],
+	- `icd` = saliency-guided ICD + AICD candidates (model/target layers supplied by the pipeline).
+- `--with-dashboard / --without-dashboard` (enable dashboard: starts server, logs events, opens browser) [default: with-dashboard],
+- `--dashboard-port` INTEGER (dashboard server port) [default: 8080],
+- `--no-auto-open` (don't auto-open browser when dashboard starts),
+- `--token` TEXT (token to protect dashboard control endpoints (pause/resume). Also configurable via `BNNR_DASHBOARD_TOKEN` env var),
+- `--batch-size` INTEGER (training batch size) [default: 64],
+- `--max-train-samples` INTEGER (limit training samples),
+- `--max-val-samples` INTEGER (limit validation samples),
+- `--num-classes` INTEGER (number of classes (for `imagefolder`)),
+- `--dry-run` (build the pipeline, print the summary + config warnings, then exit without training),
+- `--help` (show this message and exit).
 
 ### Supported datasets
 
 **Classification (built-in single-label demos):**
 
-- `mnist`
-- `fashion_mnist`
-- `cifar10`
-- `stl10`
-- `imagefolder`
+- `mnist`, `fashion_mnist`, `cifar10`, `stl10`, `imagefolder`
 
 **Object detection (requires `task: detection` in your YAML and a matching config; see [detection.md](detection.md)):**
 
@@ -65,85 +85,74 @@ Omit `--config` to use built-in quickstart defaults (`m_epochs=3`, `max_iteratio
 
 ### Multi-label classification
 
-`bnnr train` with **mnist**, **fashion_mnist**, **cifar10**, **stl10**, or **imagefolder** always builds **single-label** pipelines (`CrossEntropyLoss`, one class index per sample). Setting `task: multilabel` in your config YAML **does not** change that behavior. For multi-label, use the Python API ([golden_path.md](golden_path.md)) or the scripts under `examples/multilabel/` ([examples.md](examples.md)).
-
-### Main options
-
-- `--config, -c` (optional YAML; omit for built-in defaults)
-- `--dataset`
-- `--data-dir`
-- `--data-path` (required for `imagefolder`, `coco_mini`, and `yolo`)
-- `--output, -o`
-- `--device, -d` (`cuda`, `cpu`, `auto`)
-- `--epochs, -e`
-- `--seed, -s`
-- `--no-xai`
-- `--augmentation-preset, --preset` (`auto`, `light`, `standard`, `aggressive`, `gpu`, `icd`, `none`; unknown names fall back to `auto` with a warning). `icd` = saliency-guided ICD + AICD candidates (model/target layers supplied by the pipeline).
-- `--with-dashboard / --without-dashboard`
-- `--dashboard-port` (if busy, the dashboard auto-falls back to the next free port in `port..port+9` and prints the actual port)
-- `--no-auto-open`
-- `--token`
-- `--batch-size`
-- `--max-train-samples`
-- `--max-val-samples`
-- `--num-classes` (for `imagefolder`)
-- `--dry-run` (build the pipeline, print the summary and any config warnings, then exit 0 without training)
-
-### Behavior notes
-
-- `--with-dashboard` (default): starts live dashboard server and keeps process alive.
-- `--without-dashboard`: no live server; good for one-shot runs.
-- CLI keeps event logging enabled so `dashboard export` works after training.
+- `bnnr train` with **mnist**, **fashion_mnist**, **cifar10**, **stl10**, or **imagefolder** always builds **single-label** pipelines (`CrossEntropyLoss`, one class index per sample). Setting `task: multilabel` in your config YAML **does not** change that behavior. For multi-label, use the Python API ([golden_path.md](golden_path.md)) or the scripts under `examples/multilabel/` ([examples.md](examples.md)).
 
 ### Examples
 
 ```bash
-# Zero-config CIFAR-10 (built-in defaults)
-python3 -m bnnr train --dataset cifar10 --preset light --with-dashboard
+# Zera-config quickstart (built-in defaults)
+python -m bnnr train --dataset cifar10 --preset light --with-dashboard
 
-# CIFAR-10 with custom YAML
+# Custom YAML config
+python -m bnnr train \
+  -c config.yaml \
+  --dataset mnist \
+  --max-train-samples 1000 \
+  -e 2
+
+# CIFAR-10 with GPU augmentations
 python3 -m bnnr train \
-  --config examples/configs/classification/cifar10_example.yaml \
+  -c config.yaml \
   --dataset cifar10 \
-  --preset light \
-  --without-dashboard
-
-# ImageFolder
-python3 -m bnnr train \
-  --config examples/configs/classification/imagefolder_example.yaml \
-  --dataset imagefolder \
-  --data-path /path/to/dataset
+  --preset gpu \
+  --device cuda
 ```
 
 ## `analyze`
 
 ```bash
-python3 -m bnnr analyze --model PATH --data PATH_OR_DATASET --output DIR [OPTIONS]
+python -m bnnr analyze [OPTIONS]
 ```
 
-Run standalone diagnostics on a trained model (no training): metrics, XAI, data quality, failure analysis, patterns, recommendations. Writes `analysis_report.json` and `report.html` under `--output`.
+Run model analysis: metrics, XAI, data quality, failure patterns, recommendations.
 
-Required: `--model` (checkpoint `.pt`), `--data` (directory or dataset name: `mnist`, `fashion_mnist`, `cifar10`, `stl10`), `--output`.
+### Arguments (required)
 
-Options: `--task` (classification or multilabel only; detection is not supported by analyze), `--config`, `--max-worst`, `--no-xai`, `--no-data-quality`, `--device`, `--batch-size`, `--cv-folds`, `--xai-samples`, `--summary/--no-summary`.
+- `--model -m` PATH (path to model checkpoint (`.pt`) or state dict),
+- `--data` PATH (path to data directory (ImageFolder) or dataset name (e.g. `mnist`, `cifar10`),
+- `--output -o` PATH (output directory for `analysis_report.json` and `report.html`).
 
-On Windows terminals with encoding issues, set `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8` before running `bnnr analyze`.
+### Options
 
-See `analyze.md` for details and examples.
+- `--task -t` TEXT (task: classification or multilabel only (detection is not supported by analyze yet)) [default: classification],
+- `--config -c` PATH (optional YAML config (overrides defaults)),
+- `--max-worst` INTEGER (number of worst predictions to include) [default: 20],
+- `--no-xai` (disable XAI analysis),
+- `--no-data-quality` (disable data quality checks),
+- `--device -d` TEXT (device: cude, cpu, auto),
+- `--batch-size` INTEGER (batch size for evaluation) [default: 64],
+- `--summary/--no-summary` (print executive summary and top findings/recommendations to stdout) [default: summary],
+- `--cv-folds` INTEGER (optional number of folds for lightweight cross-validation (0 to disable)) [default: 0],
+- `--xai-samples` INTEGER (number of sample for XAI probe set (more = more accurate, slower)) [default: 500],
+- `--help` (show this message and exit).
 
 ## `report`
 
 ```bash
-python3 -m bnnr report path/to/report.json --format summary
-python3 -m bnnr report path/to/report.json --format json
-python3 -m bnnr report path/to/report.json --format json --output report_payload.json
+python -m bnnr report [OPTIONS]
 ```
 
-Notes:
+View or export a BNNR training report.
 
-- `--format html` is intentionally rejected in current CLI.
-- `--output` writes rendered report output to file (summary text or JSON payload).
-- Use dashboard export for static HTML output.
+### Arguments (required)
+
+- `report_path` PATH
+
+### Options
+
+ - `--format -f` TEXT (output format: `summary`, `json`) [default: summary],
+ - `--output -o` PATH,
+ - `--help` (show this message and exit).
 
 ## Dashboard commands
 
