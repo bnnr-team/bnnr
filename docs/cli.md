@@ -43,26 +43,28 @@ Options: `--dashboard-port`, `--no-auto-open`.
 ## `train`
 
 ```bash
-python -m bnnr train [OPTIONS]
+python3 -m bnnr train [OPTIONS]
 ```
 
 Run BNNR augmentation search training.
+
+### Arguments (required)
 
 ### Options
 
 - `--config -c` PATH (optional YAML config. Omit for built-in quickstart defaults),
 - `--dataset` TEXT (dataset: `mnist`, `fashion_mnist`, `cifar10`, `stl10`, `imagefolder`, `coco_mini`, `yolo`) [default: cifar10],
 - `--data-dir` PATH (directory for dataset download/storage) [default: data],
-- `--datta-path` PATH (custom data path (`imagefolder`/`coco_mini`/`yolo`)),
-- `--outpu -o` PATH (output directory for checkpoints and reports),
+- `--data-path` PATH (custom data path (required for the `imagefolder`/`coco_mini`/`yolo`)),
+- `--output -o` PATH (output directory for checkpoints and reports),
 - `--device -d` TEXT (device: `cuda`, `cpu`, `auto`),
 - `--epochs -e` INTEGER (number of epochs per candidate),
 - `--seed -s` INTEGER (random seed),
 - `--no-xai` (disable XAI generation),
-- `--augmentation-preset, --preset` TEXT (augmentation preset: `auto`, `light`, `standard`, `aggressive`, `gpu`, `icd`, `none`) [default: auto],
+- `--augmentation-preset, --preset` TEXT (augmentation preset: `auto`, `light`, `standard`, `aggressive`, `gpu`, `icd`, `none`; unknown names fall back to `auto` with a warning). `icd` = saliency-guided ICD + AICD candidates (model/target layers supplied by the pipeline).) [default: auto],
 	- `icd` = saliency-guided ICD + AICD candidates (model/target layers supplied by the pipeline).
 - `--with-dashboard / --without-dashboard` (enable dashboard: starts server, logs events, opens browser) [default: with-dashboard],
-- `--dashboard-port` INTEGER (dashboard server port) [default: 8080],
+- `--dashboard-port` INTEGER (dashboard server port; if busy, the dashboard auto-falls back to the next free port in `port..port+9` and prints the actual port) [default: 8080],
 - `--no-auto-open` (don't auto-open browser when dashboard starts),
 - `--token` TEXT (token to protect dashboard control endpoints (pause/resume). Also configurable via `BNNR_DASHBOARD_TOKEN` env var),
 - `--batch-size` INTEGER (training batch size) [default: 64],
@@ -85,24 +87,30 @@ Run BNNR augmentation search training.
 
 ### Multi-label classification
 
-- `bnnr train` with **mnist**, **fashion_mnist**, **cifar10**, **stl10**, or **imagefolder** always builds **single-label** pipelines (`CrossEntropyLoss`, one class index per sample). Setting `task: multilabel` in your config YAML **does not** change that behavior. For multi-label, use the Python API ([golden_path.md](golden_path.md)) or the scripts under `examples/multilabel/` ([examples.md](examples.md)).
+`bnnr train` with **mnist**, **fashion_mnist**, **cifar10**, **stl10**, or **imagefolder** always builds **single-label** pipelines (`CrossEntropyLoss`, one class index per sample). Setting `task: multilabel` in your config YAML **does not** change that behavior. For multi-label, use the Python API ([golden_path.md](golden_path.md)) or the scripts under `examples/multilabel/` ([examples.md](examples.md)).
+
+### Behavior notes
+
+- `--with-dashboard` (default): starts live dashboard server and keeps process alive.
+- `--without-dashboard`: no live server; good for one-shot runs.
+- CLI keeps event logging enabled so `dashboard export` works after training.
 
 ### Examples
 
 ```bash
-# Zera-config quickstart (built-in defaults)
-python -m bnnr train --dataset cifar10 --preset light --with-dashboard
+# Zero-config quickstart (built-in defaults)
+python3 -m bnnr train --dataset cifar10 --preset light --with-dashboard
 
 # Custom YAML config
-python -m bnnr train \
-  -c config.yaml \
+python3 -m bnnr train \
+  -c examples/configs/classification/mnist_example.yaml \
   --dataset mnist \
   --max-train-samples 1000 \
   -e 2
 
 # CIFAR-10 with GPU augmentations
 python3 -m bnnr train \
-  -c config.yaml \
+  -c examples/configs/classification/cifar10_example.yaml \
   --dataset cifar10 \
   --preset gpu \
   --device cuda
@@ -111,10 +119,14 @@ python3 -m bnnr train \
 ## `analyze`
 
 ```bash
-python -m bnnr analyze [OPTIONS]
+python3 -m bnnr analyze [OPTIONS]
 ```
 
 Run model analysis: metrics, XAI, data quality, failure patterns, recommendations.
+
+On Windows terminals with encoding issues, set `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8` before running `bnnr analyze`.
+
+See `analyze.md` for details and examples.
 
 ### Arguments (required)
 
@@ -129,17 +141,17 @@ Run model analysis: metrics, XAI, data quality, failure patterns, recommendation
 - `--max-worst` INTEGER (number of worst predictions to include) [default: 20],
 - `--no-xai` (disable XAI analysis),
 - `--no-data-quality` (disable data quality checks),
-- `--device -d` TEXT (device: cude, cpu, auto),
+- `--device -d` TEXT (device: cuda, cpu, auto),
 - `--batch-size` INTEGER (batch size for evaluation) [default: 64],
 - `--summary/--no-summary` (print executive summary and top findings/recommendations to stdout) [default: summary],
 - `--cv-folds` INTEGER (optional number of folds for lightweight cross-validation (0 to disable)) [default: 0],
-- `--xai-samples` INTEGER (number of sample for XAI probe set (more = more accurate, slower)) [default: 500],
+- `--xai-samples` INTEGER (number of samples for XAI probe set (more = more accurate, slower)) [default: 500],
 - `--help` (show this message and exit).
 
 ## `report`
 
 ```bash
-python -m bnnr report [OPTIONS]
+python3 -m bnnr report [OPTIONS]
 ```
 
 View or export a BNNR training report.
