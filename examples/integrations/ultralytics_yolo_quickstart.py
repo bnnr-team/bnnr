@@ -1,3 +1,4 @@
+
 """BNNR + Ultralytics YOLOv8 quickstart on COCO128 (UltralyticsDetectionAdapter).
 
 This uses BNNR's Python API — not the ``yolo train`` CLI. Images stay in [0, 1] float.
@@ -32,6 +33,7 @@ from coco128_ultralytics_dataset import (  # noqa: E402
 )
 
 try:
+    import ultralytics
     from bnnr import BNNRConfig, BNNRTrainer, start_dashboard
     from bnnr.detection_adapter import UltralyticsDetectionAdapter
     from bnnr.detection_augmentations import DetectionHorizontalFlip, DetectionRandomScale

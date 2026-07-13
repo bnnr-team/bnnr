@@ -1,6 +1,6 @@
 # Citing BNNR
 
-If you use BNNR in research, a report, or a downstream integration guide, cite the appropriate entry below. Pin a [release tag](https://github.com/bnnr-team/bnnr/releases) (for example `v0.6.4`) when you need a fixed software version. <!-- x-release-please-version -->
+If you use BNNR in research, a report, or a downstream integration guide, cite the appropriate entry below. Pin a [release tag](https://github.com/bnnr-team/bnnr/releases) (for example `v0.6.5`) when you need a fixed software version. <!-- x-release-please-version -->
 
 Authors (software): Mateusz Walo, Diana Morzhak, Dominika Zydorczyk, Zuzanna Saczuk ([team record](../AUTHORS.md)).
 
