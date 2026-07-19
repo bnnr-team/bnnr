@@ -261,7 +261,12 @@ Fix:
 
 - Explicitly pass your current Python version to override the default configuration target: `mypy src --python-version 3.14`
 
-## 19) PyTorch / CUDA device mismatch during pytest on WSL
+## 19) (Historical) PyTorch / CUDA device mismatch during pytest on WSL
+
+This is fixed as of issue #356: `tests/conftest.py` now hides the GPU for the
+test session automatically, and the OptiCAM explainer no longer promotes an
+explicit `device="cpu"` run to CUDA. A plain `pytest` works on a GPU-visible
+host with no manual env var. The notes below are kept as background.
 
 Symptom:
 
@@ -273,4 +278,23 @@ Cause:
 
 Fix:
 
-- Force PyTorch to execute the entire test suite on the CPU by hiding the GPU devices using the `CUDA_VISIBLE_DEVICES` environment variable: `CUDA_VISIBLE_DEVICES="" pytest`
+- Update to a release that includes the issue #356 fix. If you are on an older checkout, force PyTorch to execute the entire test suite on the CPU by hiding the GPU devices using the `CUDA_VISIBLE_DEVICES` environment variable: `CUDA_VISIBLE_DEVICES="" pytest`
+
+## 20) CERTIFICATE_VERIFY_FAILED: certificate has expired when running `bnnr demo` (Windows)
+
+Symptom:
+
+- When running the zero-config demo on Windows, the script crashes during the CIFAR-10 dataset download with: `SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: certificate has expired`.
+
+Cause:
+
+- The official University of Toronto server (`cs.toronto.edu`), where `torchvision` fetches CIFAR-10, periodically serves an expired TLS certificate. Python's `urllib` strictly enforces SSL validation and drops the connection on any platform — this is a server-side issue, not a problem with your local certificate store or Windows specifically.
+
+Fix:
+
+- Bypass the python downloader by fetching the dataset manually using the native Windows `curl` utility with TLS verification temporarily ignored (`-k` flag). Run these commands in your project root:
+
+```powershell
+New-Item -ItemType Directory -Force -Path data
+curl.exe -k -L -o data\cifar-10-python.tar.gz https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
+```

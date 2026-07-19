@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.6.5](https://github.com/bnnr-team/bnnr/compare/v0.6.4...v0.6.5) (2026-07-10)
+
+
+### Documentation
+
+* add Windows SSL troubleshooting for CIFAR-10 ([#364](https://github.com/bnnr-team/bnnr/issues/364)) ([c573d9c](https://github.com/bnnr-team/bnnr/commit/c573d9c9d628c7fd43091e95d3f1e47d84220552))
+
+## [0.6.4](https://github.com/bnnr-team/bnnr/compare/v0.6.3...v0.6.4) (2026-07-05)
+
+
+### Bug Fixes
+
+* **cli:** give actionable error when analyze --model is missing ([#360](https://github.com/bnnr-team/bnnr/issues/360)) ([880ab68](https://github.com/bnnr-team/bnnr/commit/880ab68422e276a8caf6e817935e38a28f8aec16))
+
+## [0.6.3](https://github.com/bnnr-team/bnnr/compare/v0.6.2...v0.6.3) (2026-07-01)
+
+
+### Bug Fixes
+
+* **xai:** honor explicit device on GPU hosts, enforce CPU-only tests ([#358](https://github.com/bnnr-team/bnnr/issues/358)) ([7f82a17](https://github.com/bnnr-team/bnnr/commit/7f82a176252d0a4f982635bcd37bb6ec5db364b8)), closes [#356](https://github.com/bnnr-team/bnnr/issues/356)
+
+
+### Documentation
+
+* add description for quickstart ([#351](https://github.com/bnnr-team/bnnr/issues/351)) ([2549e7d](https://github.com/bnnr-team/bnnr/commit/2549e7ddde32e6218a494fb300a5cec8cf339396))
+* add troubleshooting entries for mypy and cuda ([#354](https://github.com/bnnr-team/bnnr/issues/354)) ([75ce420](https://github.com/bnnr-team/bnnr/commit/75ce420661116c299711c29a61cb61ec876286af))
+
 ## [0.6.2](https://github.com/bnnr-team/bnnr/compare/v0.6.1...v0.6.2) (2026-06-24)
 
 
