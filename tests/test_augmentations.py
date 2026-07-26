@@ -172,3 +172,14 @@ def test_torchvision_augmentation() -> None:
     assert out.shape == image.shape
     assert out.dtype == np.uint8
     assert aug.name == "pil_blur"
+
+def test_apply_tensor_cpu_fallback_roundtrip_preserves_image() -> None:
+    """apply_tensor's CPU-fallback path must round-trip
+    a tensor through numpy/uint8 and back without corrupting pixel values."""
+    aug = _DummyAug(probability=1.0, random_state=1)
+    images = torch.full((2, 3, 4, 4), 0.5)
+
+    out = aug.apply_tensor(images)
+
+    assert out.shape == images.shape
+    assert torch.allclose(out, images, atol=1 / 255)
