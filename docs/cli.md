@@ -48,31 +48,28 @@ python3 -m bnnr train [OPTIONS]
 
 Run BNNR augmentation search training.
 
-### Arguments (required)
-
 ### Options
 
-- `--config -c` PATH (optional YAML config. Omit for built-in quickstart defaults),
-- `--dataset` TEXT (dataset: `mnist`, `fashion_mnist`, `cifar10`, `stl10`, `imagefolder`, `coco_mini`, `yolo`) [default: cifar10],
-- `--data-dir` PATH (directory for dataset download/storage) [default: data],
-- `--data-path` PATH (custom data path (required for the `imagefolder`/`coco_mini`/`yolo`)),
-- `--output -o` PATH (output directory for checkpoints and reports),
-- `--device -d` TEXT (device: `cuda`, `cpu`, `auto`),
-- `--epochs -e` INTEGER (number of epochs per candidate),
-- `--seed -s` INTEGER (random seed),
-- `--no-xai` (disable XAI generation),
-- `--augmentation-preset, --preset` TEXT (augmentation preset: `auto`, `light`, `standard`, `aggressive`, `gpu`, `icd`, `none`; unknown names fall back to `auto` with a warning). `icd` = saliency-guided ICD + AICD candidates (model/target layers supplied by the pipeline).) [default: auto],
-	- `icd` = saliency-guided ICD + AICD candidates (model/target layers supplied by the pipeline).
-- `--with-dashboard / --without-dashboard` (enable dashboard: starts server, logs events, opens browser) [default: with-dashboard],
-- `--dashboard-port` INTEGER (dashboard server port; if busy, the dashboard auto-falls back to the next free port in `port..port+9` and prints the actual port) [default: 8080],
-- `--no-auto-open` (don't auto-open browser when dashboard starts),
-- `--token` TEXT (token to protect dashboard control endpoints (pause/resume). Also configurable via `BNNR_DASHBOARD_TOKEN` env var),
-- `--batch-size` INTEGER (training batch size) [default: 64],
-- `--max-train-samples` INTEGER (limit training samples),
-- `--max-val-samples` INTEGER (limit validation samples),
-- `--num-classes` INTEGER (number of classes (for `imagefolder`)),
-- `--dry-run` (build the pipeline, print the summary + config warnings, then exit without training),
-- `--help` (show this message and exit).
+- `--config -c` PATH (optional YAML config. Omit for built-in quickstart defaults)
+- `--dataset` TEXT (dataset: `mnist`, `fashion_mnist`, `cifar10`, `stl10`, `imagefolder`, `coco_mini`, `yolo`) [default: cifar10]
+- `--data-dir` PATH (directory for dataset download/storage) [default: data]
+- `--data-path` PATH (custom data path (required for the `imagefolder`/`coco_mini`/`yolo`))
+- `--output -o` PATH (output directory for checkpoints and reports)
+- `--device -d` TEXT (device: `cuda`, `cpu`, `auto`)
+- `--epochs -e` INTEGER (number of epochs per candidate)
+- `--seed -s` INTEGER (random seed)
+- `--no-xai` (disable XAI generation)
+- `--augmentation-preset, --preset` TEXT (augmentation preset: `auto`, `light`, `standard`, `aggressive`, `gpu`, `icd`, `none`; unknown names fall back to `auto` with a warning). `icd` = saliency-guided ICD + AICD candidates (model/target layers supplied by the pipeline) [default: auto]
+- `--with-dashboard / --without-dashboard` (enable dashboard: starts server, logs events, opens browser) [default: with-dashboard]
+- `--dashboard-port` INTEGER (dashboard server port; if busy, the dashboard auto-falls back to the next free port in `port..port+9` and prints the actual port) [default: 8080]
+- `--no-auto-open` (don't auto-open browser when dashboard starts)
+- `--token` TEXT (token to protect dashboard control endpoints (pause/resume). Also configurable via `BNNR_DASHBOARD_TOKEN` env var)
+- `--batch-size` INTEGER (training batch size) [default: 64]
+- `--max-train-samples` INTEGER (limit training samples)
+- `--max-val-samples` INTEGER (limit validation samples)
+- `--num-classes` INTEGER (number of classes (for `imagefolder`))
+- `--dry-run` (build the pipeline, print the summary + config warnings, then exit without training)
+- `--help` (show this message and exit)
 
 ### Supported datasets
 
@@ -130,23 +127,23 @@ See `analyze.md` for details and examples.
 
 ### Arguments (required)
 
-- `--model -m` PATH (path to model checkpoint (`.pt`) or state dict),
-- `--data` PATH (path to data directory (ImageFolder) or dataset name (e.g. `mnist`, `cifar10`),
-- `--output -o` PATH (output directory for `analysis_report.json` and `report.html`).
+- `--model -m` PATH (path to model checkpoint (`.pt`) or state dict)
+- `--data` PATH (path to data directory (ImageFolder) or dataset name (e.g. `mnist`, `cifar10`))
+- `--output -o` PATH (output directory for `analysis_report.json` and `report.html`)
 
 ### Options
 
-- `--task -t` TEXT (task: classification or multilabel only (detection is not supported by analyze yet)) [default: classification],
-- `--config -c` PATH (optional YAML config (overrides defaults)),
-- `--max-worst` INTEGER (number of worst predictions to include) [default: 20],
-- `--no-xai` (disable XAI analysis),
-- `--no-data-quality` (disable data quality checks),
-- `--device -d` TEXT (device: cuda, cpu, auto),
-- `--batch-size` INTEGER (batch size for evaluation) [default: 64],
-- `--summary/--no-summary` (print executive summary and top findings/recommendations to stdout) [default: summary],
-- `--cv-folds` INTEGER (optional number of folds for lightweight cross-validation (0 to disable)) [default: 0],
-- `--xai-samples` INTEGER (number of samples for XAI probe set (more = more accurate, slower)) [default: 500],
-- `--help` (show this message and exit).
+- `--task -t` TEXT (task: classification or multilabel only (detection is not supported by analyze yet)) [default: classification]
+- `--config -c` PATH (optional YAML config (overrides defaults))
+- `--max-worst` INTEGER (number of worst predictions to include) [default: 20]
+- `--no-xai` (disable XAI analysis)
+- `--no-data-quality` (disable data quality checks)
+- `--device -d` TEXT (device: cuda, cpu, auto)
+- `--batch-size` INTEGER (batch size for evaluation) [default: 64]
+- `--summary/--no-summary` (print executive summary and top findings/recommendations to stdout) [default: summary]
+- `--cv-folds` INTEGER (optional number of folds for lightweight cross-validation (0 to disable)) [default: 0]
+- `--xai-samples` INTEGER (number of samples for XAI probe set (more = more accurate, slower)) [default: 500]
+- `--help` (show this message and exit)
 
 ## `report`
 
@@ -162,9 +159,9 @@ View or export a BNNR training report.
 
 ### Options
 
- - `--format -f` TEXT (output format: `summary`, `json`) [default: summary],
- - `--output -o` PATH,
- - `--help` (show this message and exit).
+- `--format -f` TEXT (output format: `summary`, `json`) [default: summary]
+- `--output -o` PATH
+- `--help` (show this message and exit)
 
 ## Dashboard commands
 
