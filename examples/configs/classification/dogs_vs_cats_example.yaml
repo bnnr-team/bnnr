@@ -1,0 +1,41 @@
+# BNNR config for custom image classification (Dogs vs Cats example)
+# Usage: bnnr train -c examples/configs/classification/dogs_vs_cats_example.yaml --dataset imagefolder --data-path data/dogs_vs_cats
+#
+# Before running, ensure your dataset directory looks like this:
+#   data/dogs_vs_cats/
+#   ├── train/
+#   │   ├── cats/
+#   │   └── dogs/
+#   └── val/
+#       ├── cats/
+#       └── dogs/
+
+m_epochs: 5
+max_iterations: 4
+metrics:
+  - accuracy
+  - f1_macro
+  - loss
+selection_metric: accuracy
+selection_mode: max
+
+checkpoint_dir: checkpoints
+report_dir: reports
+
+xai_enabled: true
+xai_samples: 4
+xai_method: opticam
+device: auto
+seed: 42
+
+save_checkpoints: true
+verbose: true
+early_stopping_patience: 2
+
+event_log_enabled: true
+event_sample_every_epochs: 2
+event_xai_every_epochs: 2
+
+candidate_pruning_enabled: true
+candidate_pruning_relative_threshold: 0.8
+candidate_pruning_warmup_epochs: 2
