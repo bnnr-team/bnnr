@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.0](https://github.com/bnnr-team/bnnr/compare/v0.6.5...v0.7.0) (2026-08-09)
+
+
+### Features
+
+* **benchmarks:** expose --fill-strategy sweep and fill-ranking in grand benchmark - T13 ([#377](https://github.com/bnnr-team/bnnr/issues/377)) ([e055902](https://github.com/bnnr-team/bnnr/commit/e055902197f0232380378dd2926a4f5085382567))
+
+
+### Documentation
+
+* clarify demo shutdown and report dir, linkify next pages ([#381](https://github.com/bnnr-team/bnnr/issues/381)) ([40ec3eb](https://github.com/bnnr-team/bnnr/commit/40ec3ebc766869c8643843baca6778b9ea4cc5b6))
+* **examples:** add dogs_vs_cats classification config ([4819bc6](https://github.com/bnnr-team/bnnr/commit/4819bc6f60e8da03b5642e709f5d138f43145b33))
+* sync CLI docs with current help output ([#372](https://github.com/bnnr-team/bnnr/issues/372)) ([bd43a0b](https://github.com/bnnr-team/bnnr/commit/bd43a0bd3ede5887479a3db71f060393a5f1d55e))
+
 ## [0.6.5](https://github.com/bnnr-team/bnnr/compare/v0.6.4...v0.6.5) (2026-07-10)
 
 
