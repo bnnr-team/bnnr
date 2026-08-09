@@ -85,6 +85,8 @@ _IMAGENET_STD = (0.229, 0.224, 0.225)
 N_CANDIDATES = 3
 _CANDIDATE_NAMES = ["ICD", "AICD", "ChurchNoise"]
 
+VALID_FILL_STRATEGIES = ["gaussian_blur", "local_mean", "global_mean", "noise", "solid"]
+
 # Indices into held_out_test loader for XAI overlay export
 _XAI_SAMPLE_INDICES = [0, 50, 100, 150, 200, 250]
 
@@ -247,6 +249,9 @@ CONDITIONS: dict[str, ConditionSpec] = {
         max_iterations=N_CANDIDATES,
     ),
 }
+
+FILL_USING_CONDITIONS = {"icd_only", "aicd_only", "icd_aicd_fixed", "bnnr_random", "bnnr_xai"}
+
 
 _POLICY_BY_CONDITION = {
     "no_aug": "base",
@@ -415,6 +420,7 @@ def _stamp(
     img_size: int,
     pretrained: bool,
     regime: str,
+    fill_strategy: str,
 ) -> dict[str, Any]:
     """Override CIFAR-10 defaults baked into lib._result_entry."""
     entry["dataset"] = dataset
@@ -422,6 +428,7 @@ def _stamp(
     entry["img_size"] = img_size
     entry["pretrained"] = pretrained
     entry["regime"] = regime
+    entry["fill_strategy"] = fill_strategy
     return entry
 
 
@@ -643,6 +650,7 @@ def _run_plain_condition(
         img_size=args.img_size,
         pretrained=args.pretrained,
         regime=args.regime,
+        fill_strategy=args.fill_strategy,
     )
 
 
@@ -777,19 +785,23 @@ def _run_xai_aug_warmup_condition(
     if aug_type == "icd":
         augmentations = [ICD(model=_model, target_layers=_layers,
                              threshold_percentile=75.0, probability=0.5,
-                             random_state=seed, cache=_cache)]
+                             random_state=seed, cache=_cache,
+                             fill_strategy=args.fill_strategy)]
     elif aug_type == "aicd":
         augmentations = [AICD(model=_model, target_layers=_layers,
                               threshold_percentile=75.0, probability=0.5,
-                              random_state=seed + 1, cache=_cache)]
+                              random_state=seed + 1, cache=_cache,
+                              fill_strategy=args.fill_strategy)]
     elif aug_type == "icd_aicd":
         augmentations = [
             ICD(model=_model, target_layers=_layers,
                 threshold_percentile=75.0, probability=0.5,
-                random_state=seed, cache=_cache),
+                random_state=seed, cache=_cache,
+                fill_strategy=args.fill_strategy),
             AICD(model=_model, target_layers=_layers,
                  threshold_percentile=75.0, probability=0.5,
-                 random_state=seed + 1, cache=_cache),
+                 random_state=seed + 1, cache=_cache,
+                 fill_strategy=args.fill_strategy),
         ]
     else:
         raise ValueError(f"Unknown aug_type {aug_type!r}")
@@ -889,6 +901,7 @@ def _run_xai_aug_warmup_condition(
         img_size=args.img_size,
         pretrained=args.pretrained,
         regime=args.regime,
+        fill_strategy=args.fill_strategy,
     )
 
 
@@ -1061,10 +1074,12 @@ def _run_bnnr_equal_compute(
         phase_candidates = [
             ICD(model=_cand_model, target_layers=_cand_layers,
                 threshold_percentile=75.0, probability=0.5,
-                random_state=seed, cache=xai_cache),
+                random_state=seed, cache=xai_cache,
+                fill_strategy=args.fill_strategy),
             AICD(model=_cand_model, target_layers=_cand_layers,
                  threshold_percentile=75.0, probability=0.5,
-                 random_state=seed + 1, cache=xai_cache),
+                 random_state=seed + 1, cache=xai_cache,
+                 fill_strategy=args.fill_strategy),
             ChurchNoise(probability=0.5, intensity=0.5,
                         noise_strength_range=(3.0, 8.0), random_state=seed + 2),
         ]
@@ -1203,6 +1218,7 @@ def _run_bnnr_equal_compute(
         img_size=args.img_size,
         pretrained=args.pretrained,
         regime=args.regime,
+        fill_strategy=args.fill_strategy
     )
 
 
@@ -1221,15 +1237,20 @@ def run_condition(
 ) -> dict[str, Any]:
     spec = CONDITIONS[condition_id]
 
+    if condition_id in FILL_USING_CONDITIONS:
+        run_output_root = output_root / f"fill_{args.fill_strategy}"
+    else:
+        run_output_root = output_root
+
     if condition_id == "bnnr_xai":
         return _run_bnnr_equal_compute(
             condition=spec, seed=seed, args=args,
-            output_root=output_root, selection_mode="xai", num_classes=num_classes,
+            output_root=run_output_root, selection_mode="xai", num_classes=num_classes,
         )
     if condition_id == "bnnr_random":
         return _run_bnnr_equal_compute(
             condition=spec, seed=seed, args=args,
-            output_root=output_root, selection_mode="random", num_classes=num_classes,
+            output_root=run_output_root, selection_mode="random", num_classes=num_classes,
         )
 
     # ICD/AICD conditions use warmup+aug design so saliency comes from a
@@ -1238,17 +1259,17 @@ def run_condition(
     if condition_id == "icd_only":
         return _run_xai_aug_warmup_condition(
             condition=spec, aug_type="icd", seed=seed, args=args,
-            output_root=output_root, num_classes=num_classes,
+            output_root=run_output_root, num_classes=num_classes,
         )
     if condition_id == "aicd_only":
         return _run_xai_aug_warmup_condition(
             condition=spec, aug_type="aicd", seed=seed, args=args,
-            output_root=output_root, num_classes=num_classes,
+            output_root=run_output_root, num_classes=num_classes,
         )
     if condition_id == "icd_aicd_fixed":
         return _run_xai_aug_warmup_condition(
             condition=spec, aug_type="icd_aicd", seed=seed, args=args,
-            output_root=output_root, num_classes=num_classes,
+            output_root=run_output_root, num_classes=num_classes,
         )
 
     policy = _POLICY_BY_CONDITION[condition_id]
@@ -1330,20 +1351,23 @@ def _benchmark_document(args: argparse.Namespace, num_classes: int) -> dict[str,
 # ---------------------------------------------------------------------------
 
 
-def _estimate(args: argparse.Namespace, n_seeds: int, conds: list[str]) -> str:
-    bnnr_conds = {"bnnr_xai", "bnnr_random"}
-    bnnr_count = sum(1 for c in conds if c in bnnr_conds)
-    plain_count = len(conds) - bnnr_count
-    plain_epochs_total = plain_count * args.budget * n_seeds
-    bnnr_epochs_total = bnnr_count * args.budget * n_seeds
-    total_epoch_minutes = (plain_epochs_total + bnnr_epochs_total) * 1.0
+def _estimate(args: argparse.Namespace, n_seeds: int, conds: list[str], n_strategies: int = 1) -> str:
+    # Fill-using conditions run once per strategy; fill-independent run once total.
+    fill_using_count = sum(1 for c in conds if c in FILL_USING_CONDITIONS)
+    fill_indep_count = len(conds) - fill_using_count
+    fill_using_runs = fill_using_count * n_seeds * n_strategies
+    fill_indep_runs = fill_indep_count * n_seeds
+    total_runs = fill_using_runs + fill_indep_runs
+    total_epoch_minutes = total_runs * args.budget * 1.0
     if args.device != "cpu":
         total_epoch_minutes *= 0.15
+    sweep = f" x {n_strategies} strategies" if n_strategies > 1 else ""
     return (
         f"~{total_epoch_minutes/60:.1f}h wall-clock estimate "
-        f"({len(conds)} conditions x {n_seeds} seeds, {args.device}, "
+        f"({len(conds)} conditions x {n_seeds} seeds{sweep}, {args.device}, "
         f"budget={args.budget})"
     )
+
 
 
 # ---------------------------------------------------------------------------
@@ -1389,6 +1413,12 @@ def main() -> None:
         help="Comma-separated seeds (default: dataset-specific)",
     )
     parser.add_argument("--arch", default="resnet18", choices=["resnet18", "resnet50"])
+    parser.add_argument(
+        "--fill-strategy", "--fill-strategies",
+        dest="fill_strategy",
+        default="gaussian_blur",
+        help="Single fill strategy or comma-separated strategies for ICD/AICD masked regions (default: gaussian_blur)"
+    )
     parser.add_argument(
         "--img-size",
         type=int,
@@ -1502,6 +1532,22 @@ def main() -> None:
         if c not in CONDITIONS:
             parser.error(f"Unknown condition {c!r}. Available: {', '.join(CONDITIONS)}")
 
+    # ---- Fill strategies ----
+    requested = [s.strip() for s in args.fill_strategy.split(",") if s.strip()]
+    if not requested:
+        parser.error("--fill-strategy must name at least one strategy")
+    for s in requested:
+        if s not in VALID_FILL_STRATEGIES:
+            parser.error(
+                f"Unknown fill strategy {s!r}. "
+                f"Available: {', '.join(VALID_FILL_STRATEGIES)}"
+            )
+    fill_strategies: list[str] = []
+    for s in requested:
+        if s not in fill_strategies:
+            fill_strategies.append(s)
+    args.fill_strategies = fill_strategies
+
     # ---- Device ----
     if not hasattr(args, "device"):
         args.device = "auto"
@@ -1520,11 +1566,15 @@ def main() -> None:
     print(f"  pretrained={args.pretrained}  img_size={args.img_size}")
     print(f"  num_classes={num_classes}  train_per_class={args.train_per_class}")
     print(f"  seeds={seeds}  conditions={conds}")
+    if len(fill_strategies) == 1:
+        print(f"  fill_strategy={fill_strategies[0]}")
+    else:
+        print(f"  fill_strategies (sweep of {len(fill_strategies)})={fill_strategies}")
     print(
         f"  budget={args.budget} epochs  epochs_per_phase={epochs_per_phase}  "
         f"N_candidates={N_CANDIDATES}  device={args.device}"
     )
-    print(f"  {_estimate(args, len(seeds), conds)}")
+    print(f"  {_estimate(args, len(seeds), conds, len(fill_strategies))}")
     print(f"  results -> {args.results}")
 
     if args.dry_run:
@@ -1542,46 +1592,65 @@ def main() -> None:
 
     # Resume safety
     done = {
-        (r["condition"], r["seed"], r.get("regime", "scratch"))
+        (r["condition"], r["seed"], r.get("regime", "scratch"), r.get("fill_strategy", "none"))
         for r in data["runs"]
         if "val_metric" in r and "error" not in r
     }
+    # Partition conditions: fill-using vary per strategy; fill-independent run once.
+    fill_using = [c for c in conds if c in FILL_USING_CONDITIONS]
+    fill_indep = [c for c in conds if c not in FILL_USING_CONDITIONS]
 
+    def _execute(cid: str, seed: int) -> None:
+        strategy = args.fill_strategy  # set per block by the caller ("none" or a real strategy)
+        key = (cid, seed, args.regime, strategy)
+        if key in done:
+            print(f"SKIP {cid} seed={seed} regime={args.regime} fill={strategy} (already done)")
+            return
+        print(f"\n>>> dataset={args.dataset}  condition={cid}  seed={seed}  regime={args.regime}  fill={strategy}")
+        try:
+            entry = run_condition(
+                condition_id=cid,
+                seed=seed,
+                args=args,
+                output_root=args.output_root,
+                num_classes=num_classes,
+            )
+        except Exception as exc:  # noqa: BLE001
+            import traceback
+            print(f"    FAILED ({cid}, seed={seed}, fill={strategy}): {exc}", file=sys.stderr)
+            traceback.print_exc()
+            entry = {
+                "condition": cid,
+                "seed": seed,
+                "regime": args.regime,
+                "dataset": args.dataset,
+                "model": args.arch,
+                "fill_strategy": args.fill_strategy,
+                "error": str(exc),
+            }
+        data["runs"].append(entry)
+        save_results(args.results, data)  # checkpoint after every run
+        if "error" not in entry:
+            done.add(key)  # in-invocation guard: never redo a completed cell
+        val = entry.get("val_metric")
+        held = entry.get("held_out_test_metric")
+        if val is not None:
+            print(f"    {cid} seed={seed} fill={strategy}: val_metric(held_out)={val:.4f}")
+        elif held is not None:
+            print(f"    {cid} seed={seed} fill={strategy}: held_out_test_accuracy={held:.4f}")
+
+    # ---- Block A: fill-independent methods — evaluated once, tagged "none", reused across strategies ----
+    args.fill_strategy = "none"
     for seed in seeds:
-        for cid in conds:
-            key = (cid, seed, args.regime)
-            if key in done:
-                print(f"SKIP {cid} seed={seed} regime={args.regime} (already done)")
-                continue
-            print(f"\n>>> dataset={args.dataset}  condition={cid}  seed={seed}  regime={args.regime}")
-            try:
-                entry = run_condition(
-                    condition_id=cid,
-                    seed=seed,
-                    args=args,
-                    output_root=args.output_root,
-                    num_classes=num_classes,
-                )
-            except Exception as exc:  # noqa: BLE001
-                import traceback
-                print(f"    FAILED ({cid}, seed={seed}): {exc}", file=sys.stderr)
-                traceback.print_exc()
-                entry = {
-                    "condition": cid,
-                    "seed": seed,
-                    "regime": args.regime,
-                    "dataset": args.dataset,
-                    "model": args.arch,
-                    "error": str(exc),
-                }
-            data["runs"].append(entry)
-            save_results(args.results, data)  # checkpoint after every run
-            val = entry.get("val_metric")
-            held = entry.get("held_out_test_metric")
-            if val is not None:
-                print(f"    {cid} seed={seed}: val_metric(held_out)={val:.4f}")
-            elif held is not None:
-                print(f"    {cid} seed={seed}: held_out_test_accuracy={held:.4f}")
+        for cid in fill_indep:
+            _execute(cid, seed)
+
+    # ---- Block B: fill-using methods — evaluated once per strategy ----
+    for strategy in fill_strategies:
+        args.fill_strategy = strategy  # downstream ICD/AICD constructors read args.fill_strategy
+        for seed in seeds:
+            for cid in fill_using:
+                _execute(cid, seed)
 
     n_valid = sum(1 for r in data["runs"] if "val_metric" in r and "error" not in r)
     print(f"\nDone. {n_valid} valid run records in {args.results}")
