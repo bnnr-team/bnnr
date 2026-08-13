@@ -147,27 +147,49 @@ This is the largest open question in the whole programme, and Part IV Proposal D
 
 # Part IV — How to make `bnnr_xai` actually work
 
-Seven proposals, ordered by expected value per unit of implementation cost. Each is falsifiable on the benchmarks as built. **A constraint applies throughout:** BNNR's structural advantage is that it needs no group labels (III.6). Any fix that consumes group labels moves it into DFR's assumption class and forfeits that, so proposals are marked **[no group labels]** or **[needs group labels]**.
+Seven proposals, ordered by expected value per unit of implementation cost. Each is falsifiable on the benchmarks as built.
 
-## Proposal A — Condition the intervention on the diagnosis, not on validation accuracy **[no group labels]**
+**A constraint applies throughout, and it is the point of the section.** BNNR's structural advantage is that it asks the user for nothing beyond images and labels (III.6). Every method it is compared against consumes something extra: DFR needs a group-labelled, group-*balanced* held-out set — you must know in advance which groups exist and have enough of each to balance them, which is a much stronger demand than it first sounds; Group DRO needs group labels during training; JTT and CnC need them for tuning. A fix that quietly acquires that supervision does not improve BNNR, it converts BNNR into one of those methods.
+
+**Masks are not a cheap substitute for group labels.** A group label is one integer per image; a segmentation mask is a per-pixel annotation. Anyone who can supply masks can almost certainly supply group labels, so "needs masks, not group labels" is not a weaker assumption — it is a *different* one, and in most settings a heavier one. This document's earlier drafts blurred that, so the proposals are now split by what they actually require:
+
+| tier | what the user must supply | proposals |
+|---|---|---|
+| **Tier 1 — deployable** | nothing beyond images and labels | A, B, E, F |
+| **Tier 2 — research, or mask-rich domains only** | ground-truth object masks | C, D |
+| **Tier 3 — reporting** | nothing | G |
+
+**Tier 1 is the main line.** It is what a BNNR user can actually run, and it addresses both defects the two benchmarks identified: a selection criterion that measures the wrong thing, and an epoch split that costs the deployed model two thirds of its budget. Tier 2 is worth doing, but as *studies that tell us how much headroom exists* — and, secondarily, for the domains where masks already exist as a by-product (medical imaging, remote sensing, industrial inspection). Neither Tier 2 proposal should ship as a default feature.
+
+Proposal H turns this table from documentation into behaviour: rather than asking the user which tier applies to them, BNNR detects what supervision the dataset carries and takes the strongest applicable path, with the label-free one as the default and the reference.
+
+## Proposal A — Condition the intervention on the diagnosis, not on validation accuracy **[Tier 1]**
 
 *The cheapest high-value change, and it follows directly from III.2 and III.3.*
 
-The harness already computes, before any repair begins, everything needed to choose: saliency-on-object (EBPG), the average-minus-worst gap, per-group accuracies. Today this is used only as a gate and then discarded. Make it steer.
+The choice between ICD and AICD depends on **where the model is already looking**, because the two are opposite operations on its attention (III.3). A method that picks between them by validation accuracy is answering a different question from the one that determines which is appropriate. So make the diagnosis choose.
 
-A concrete, falsifiable rule:
+The diagnosis has to be built from what BNNR already has, not from masks. **BNNR computes saliency maps for every image as part of its normal operation** — that is what ICD and AICD consume. Those maps can be characterised without knowing where the object is:
 
-- **Attention off the object** (low EBPG) **with a large robustness gap** → **ICD**. The region to destroy is the one the model is relying on. This is the Waterbirds case, and ICD is indeed the WGA winner there.
-- **Attention already on the object** (high EBPG) **but poor robustness to context** → **AICD**. The region to destroy is the surrounding context, and on such a model the low-saliency region *is* the context — the situation the README's description silently assumes.
-- **No usable saliency signal** (diffuse maps, EBPG near the uniform-map baseline) → **ChurchNoise** or plain training; saliency-guided masking has nothing to guide it.
+- **How concentrated is the saliency?** Entropy or Gini over the map. A model relying on one strong cue produces a peaked map; a model spreading evidence produces a flat one.
+- **Where does the mass sit?** The existing `edge_ratio` — the fraction of saliency mass in the outer border — separates "attends the frame or context" from "attends something central". T20 established that `edge_ratio` does not predict accuracy (ρ = 0.017), but it was never tested as a *switch between augmentations*, which is a different and much weaker demand.
+- **How stable is it across augmentation?** If saliency moves when the background changes but not when the object is occluded, the model is keying on the background. This needs no annotation at all — only two forward passes.
 
-Without group labels the "robustness gap" term needs a proxy — accuracy on the highest-loss validation quantile is the obvious candidate. Cost: one branch. Payoff: it turns BNNR from "train three, keep whichever scored highest" into a method that diagnoses and then chooses, which is what the name promises.
+A concrete, falsifiable rule expressed only in those terms:
 
-## Proposal B — Combine ICD and AICD instead of selecting between them **[no group labels]**
+- **Diffuse saliency with mass at the border, unstable under background perturbation** → **ICD**. Destroy what the model is leaning on. This is the Waterbirds situation, and ICD is indeed the worst-group-accuracy winner there.
+- **Concentrated, centrally located, stable saliency but poor robustness to context shift** → **AICD**. The low-saliency region really is the context for such a model, which is the case the README's description silently assumes.
+- **No usable structure in the maps** → **ChurchNoise** or plain training. Saliency-guided masking has nothing to guide it, and forcing it is worse than not using it.
+
+The "poor robustness" term also needs a label-free proxy: accuracy on the highest-loss validation quantile, in the spirit of JTT's group inference. Cost: one branch plus a saliency-statistics helper. Payoff: BNNR stops being "train three, keep whichever scored highest" and becomes a method that diagnoses and then chooses — which is what the name has always promised.
+
+*Note on validation.* On SpuriousBench we can check this rule against ground-truth masks, because they are available there. That is the benchmark's job. The rule itself must not consume them, or it stops being deployable — and this document's earlier draft made exactly that mistake by writing the rule in terms of EBPG.
+
+## Proposal B — Combine ICD and AICD instead of selecting between them **[Tier 1]**
 
 Since III.3 shows they improve *different* axes, a schedule or mixture may dominate either alone on the joint objective: ICD first to break the shortcut, then AICD to concentrate attention; or stochastic per-batch mixing. This is the natural constructive response to a trade-off, and it is cheap — a new candidate type in an existing harness. Note `icd_aicd_fixed` already exists on Imagewoof and landed mid-pack (33.24%), but that is a fixed combination in a regime with no engineered shortcut and no faithfulness measurement; the ordered, diagnosis-aware version on Waterbirds is untested.
 
-## Proposal C — Saliency-regularised last-layer retraining: DFR with a faithfulness penalty **[needs masks, not group labels]**
+## Proposal C — Saliency-regularised last-layer retraining: DFR with a faithfulness penalty **[Tier 2 — needs masks]**
 
 *The strongest novel idea, and the one the DFR authors themselves name as future work.*
 
@@ -179,15 +201,17 @@ The concrete method: keep DFR's structure — frozen backbone, retrain only the 
 L(w) = CrossEntropy(w) − λ · EBPG(w)
 ```
 
-on a small reweighting set that carries object masks. This needs **masks, not group labels** — a different and arguably more available form of supervision, and one BNNR's own philosophy already assumes access to via saliency. It keeps DFR's cost profile (minutes on one GPU after embeddings are extracted) and directly targets the axis DFR provably cannot move.
+on a small reweighting set that carries object masks.
+
+**Be clear about what this costs the user.** It needs masks, and masks are *heavier* supervision than the group labels DFR asks for, not lighter — per-pixel annotation versus one integer per image. So this is not a way to keep BNNR's assumption-class advantage; it is a different method that happens to reuse BNNR's machinery. It is worth building for two reasons: as a **study** of whether attention can be steered from the last layer at all, which is a question the field has not answered; and for the domains where segmentation already exists as a by-product of the workflow — medical imaging, remote sensing, industrial inspection. It should not ship as a BNNR default.
 
 Two implementation notes. First, OptiCAM optimises its weights with Adam and is not a closed-form linear CAM, so use a differentiable surrogate (linear CAM or Grad-CAM) for the training penalty and keep OptiCAM as the frozen evaluation metric — separating the training surrogate from the reported metric is standard and avoids optimising the metric directly. Second, sweep λ and report the trade-off curve rather than a single point; III.3 predicts a frontier, not a winner.
 
 **Falsifiable prediction:** this should beat plain DFR on faithfulness at equal or near-equal worst-group accuracy. If it does not, the claim that attention can be steered from the last layer is wrong, which is itself worth knowing.
 
-## Proposal D — The oracle-mask ceiling: how much is BNNR limited by saliency quality? **[needs masks]**
+## Proposal D — The oracle-mask ceiling: how much is BNNR limited by saliency quality? **[Tier 2 — needs masks]**
 
-*The experiment that bounds everything else, and the answer to III.7.*
+*The experiment that bounds everything else, and the answer to III.7. This is a diagnostic run, not a method — nobody would ship it, because if you had the masks you would not need the saliency.*
 
 BNNR masks by saliency. On a broken model the saliency is on the wrong thing — which is exactly why ICD works here (it happens to hit the shortcut) and why AICD masks the bird. If ground-truth masks are available, one can skip the explainer entirely and mask the complement of the object directly.
 
@@ -195,21 +219,49 @@ Run an `oracle_mask` condition on Waterbirds: same harness, same budget, same ev
 
 The result is decisive either way. If oracle-mask augmentation still fails to beat `erm_continue`, the limitation is the augmentation approach and no amount of better explanation will rescue it. If it succeeds substantially, then **saliency quality is the binding constraint**, and the lever is the explainer — a completely different research programme from tuning the selector. Cost is one condition, and it is the single most informative run available.
 
-## Proposal E — Stop paying the search tax **[no group labels]**
+## Proposal E — Stop paying the search tax **[Tier 1]**
 
 III.5 shows the three-way split costs the deployed model two-thirds of its budget, worth roughly 2.6 pp on Waterbirds and 4.4 pp on Imagewoof. If Proposal A works, the search becomes unnecessary: **one diagnosed candidate trained for the full budget B** fixes the selection criterion and the epoch split simultaneously. That combination — A plus E — is the headline recommendation of this document, because it addresses both problems the two benchmarks identified with a single design change.
 
 If some search must be retained, allocate it adaptively: successive halving over the three candidates so that poor branches die after one or two epochs and the winner receives most of the budget, rather than a flat `B/3` each.
 
-## Proposal F — If a selector must be scored, score it on the objective **[proxy: no group labels]**
+## Proposal F — If a selector must be scored, score it on the objective **[Tier 1]**
 
 Worst-group validation accuracy is the obvious criterion and would almost certainly work — but it requires group labels and forfeits III.6. The interesting version is group-label-free: balanced accuracy over an *inferred* partition of the validation set, or accuracy restricted to the highest-loss quantile — the JTT/EIIL family of group-inference ideas applied to *arbitration* rather than to training. This preserves the weaker assumptions while replacing a criterion shown to be nearly orthogonal to the target.
 
 A cleanly separable variant worth running for its scientific value: **select on ΔEBPG** on a masked held-out probe — the "true XAI selection" that `selection_mode="xai"` is not. Our data makes a sharp prediction: on Waterbirds it would systematically choose AICD and would therefore *lose* on worst-group accuracy. Confirming that establishes that selecting for faithfulness and selecting for robustness are different rules with different winners — a more useful result than another attempt to beat random on one axis.
 
-## Proposal G — Report a frontier, not a winner **[free]**
+## Proposal G — Report a frontier, not a winner **[Tier 3]**
 
 Given III.3 and III.4, "the best augmentation" is not well defined. The honest deliverable for a library is the trade-off surface over (worst-group accuracy, faithfulness, calibration) together with the diagnosis that indicates where on it a given user should sit. Concretely for the repo: promote ECE into the grand-benchmark headline table — it is already recorded and it reverses the ranking — and ship the diagnosis output as a first-class artifact rather than a gate.
+
+## Proposal H — Let the supervision available decide the path, not the user **[architecture; spans all tiers]**
+
+*Filip's proposal, and the right shape for the tiering above.* The table in this section tells a user which proposals they may use. That is documentation solving a problem the code should solve. BNNR already inspects the dataset before training; it can inspect what supervision came with it and pick the strongest applicable strategy, rather than asking the user to read a compatibility matrix.
+
+```
+if ground-truth masks are present:
+    diagnose with EBPG / IoU / Pointing Game against the masks;
+    choose ICD vs AICD from measured saliency-on-object;
+    optionally enable the faithfulness-regularised head (Proposal C)
+elif group labels are present:
+    diagnose with the average-minus-worst gap;
+    choose from measured worst-group behaviour; DFR becomes available as a baseline
+else:                                    # the common case
+    diagnose from saliency statistics alone — concentration, border mass,
+    stability under background perturbation (Proposal A);
+    choose ICD vs AICD from those; no extra supervision required
+```
+
+**Three things this must get right, or it does more harm than good.**
+
+*The chosen path has to be recorded and reported.* If BNNR behaves differently depending on what the dataset carries, then "BNNR vs baseline" is no longer a single number — two runs on two datasets may be testing two different methods under one name. The selected path belongs in every run record and in every results table, exactly as `selected_candidate` and `fill_strategy` already are. Without that, the benchmark silently stops comparing like with like.
+
+*The label-free path must remain the default and the reference.* It is the one almost every user will hit, it is the only one that preserves BNNR's assumption-class advantage (III.6), and it is what any headline claim about the method should be measured on. The richer paths are enhancements for users who happen to have more, not the thing BNNR is.
+
+*Detection must be strict and must fail loudly.* Partial masks, masks for a subset of classes, group labels that do not correspond to the actual spurious attribute — each of these produces a diagnosis that is confidently wrong, which is worse than no diagnosis. The check should verify coverage and consistency, and fall back to the label-free path with a warning rather than proceeding on incomplete supervision.
+
+**Status: none of the three paths is validated yet.** The mask path rests on the ICD/AICD dissociation, which is exploratory (III.3: n = 5 vs 3 under randomised assignment, at the minimum achievable p). The label-free path has never been tested at all — `edge_ratio` was shown not to predict accuracy, but was never tested as a *switch between augmentations*, which is a weaker and different demand. The group-label path is essentially DFR, of which this project ran only a simplified variant. So this is an architecture worth building toward, and each branch needs its own falsification study before it earns a default. The honest order is: validate the label-free rule first, since it is the one that matters for real users, then the richer paths.
 
 ## Infrastructure and documentation fixes (not method changes)
 
@@ -231,10 +283,11 @@ Fix the group-balanced subsampling defect in the DFR baseline. Build a faithfuln
 
 1. **Oracle-mask ceiling** (Proposal D). One condition, decisive either way, and it answers the largest open question in III.7. Highest information per GPU-hour of anything on this list.
 2. **Mask-coverage baseline for EBPG** (III.7). Zero GPU, artifacts already on disk. Should precede any further quantitative faithfulness claim.
-3. **Diagnosis-conditioned selection with full-budget training** (Proposals A + E). The headline method change; testable against the existing matrices with no new baselines needed.
+3. **Diagnosis-conditioned selection with full-budget training** (Proposals A + E, both Tier 1). The headline method change, and the only one on this list that ships to users. Testable against the existing matrices with no new baselines needed. Note the dependency: A's decision rule has to be written in terms of saliency statistics BNNR already computes — concentration, border mass, stability under perturbation — never in terms of mask-derived quantities like EBPG, or it stops being deployable. SpuriousBench's masks are for *validating* the rule, not for running it.
 4. **T21 fill-strategy ablation** on both datasets, already briefed — with the pre-registered prediction that the best fill is *opposite* across the two, since one is removing a shortcut and the other is regularising.
 5. **Saliency-regularised DFR** (Proposal C). The novel-method study; largest scientific upside, largest implementation cost.
-6. **Hard ImageNet** for external validity, whenever ImageNet access allows.
+6. **Supervision-aware path selection** (Proposal H). Worth designing early so the run record carries the chosen path from the start, but it should only be switched on per branch as each branch is validated — an unvalidated automatic path is worse than an explicit flag.
+7. **Hard ImageNet** for external validity, whenever ImageNet access allows.
 
 ---
 
