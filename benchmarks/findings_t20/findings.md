@@ -1,5 +1,8 @@
 # BNNR — Master Findings
 
+**Author.** Filip Rusiecki — benchmark design, experiment runs, statistical
+analysis and source verification.
+
 ## XAI-guided augmentation search across two benchmarks: what works, what does not, and why
 
 **Scope.** This is the combined findings document for T20. It synthesises two studies that are reported in full alongside it: **`findings_imagewoof.md`** — the from-scratch grand benchmark on Imagewoof (10 conditions × 10 seeds, plus an equal-epoch follow-up) — and **`findings_waterbirds.md`** — SpuriousBench, a purpose-built spurious-correlation repair benchmark on Waterbirds (5 conditions × 10 seeds, plus an equal-deployed-epoch extension at n=10 and a candidate-level analysis). Together they cover 190 matrix runs plus follow-ups on one machine, one architecture family, and two regimes — from scratch and repair. Read this document for the argument; read the two companions for the per-study detail, protocol caveats and reproduction commands.
