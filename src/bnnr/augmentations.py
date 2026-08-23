@@ -13,6 +13,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from bnnr.image_scale import BatchScale, detect_batch_scale, from_unit, to_unit
 from bnnr.utils import lazy_cv2 as cv2
 
 AugT = TypeVar("AugT", bound="BaseAugmentation")
@@ -94,21 +95,33 @@ class BaseAugmentation(abc.ABC):
     def apply_tensor_native(self, images: Tensor) -> Tensor:
         raise NotImplementedError("Tensor-native augmentation is not implemented")
 
-    def apply_tensor(self, images: Tensor) -> Tensor:
+    def apply_tensor(self, images: Tensor, *, scale: BatchScale | None = None) -> Tensor:
+        """Apply this augmentation to a BCHW float batch, whatever its convention.
+
+        Implementations only ever see [0, 1] tensors (``apply_tensor_native``)
+        or unnormalised uint8 arrays (``apply_batch``). This method adapts the
+        incoming batch to that and converts the result back, so a normalised or
+        [0, 255] batch is no longer silently truncated on the way in.
+
+        Pass *scale* when the caller already detected the convention, which is
+        also the only way to augment a normalised batch: detecting it here has
+        no access to the denormalisation statistics and raises instead.
+        """
+        if scale is None:
+            scale = detect_batch_scale(images)
+
+        unit = to_unit(images, scale)
+
         if self.device_compatible:
-            return self.apply_tensor_native(images)
+            return from_unit(self.apply_tensor_native(unit), scale)
 
         # Default fallback path for augmentations that do not implement GPU-native variant.
-        np_images = images.detach().cpu().permute(0, 2, 3, 1).numpy()
-        if np_images.max() <= 1.0:
-            np_images = (np_images * 255.0).astype(np.uint8)
-        else:
-            np_images = np_images.astype(np.uint8)
+        np_images = np.clip(
+            unit.detach().cpu().permute(0, 2, 3, 1).numpy() * 255.0, 0.0, 255.0
+        ).astype(np.uint8)
         aug = self.apply_batch(np_images)
         tensor = torch.as_tensor(aug, device=images.device, dtype=images.dtype).permute(0, 3, 1, 2)
-        if images.max() <= 1.0:
-            tensor = tensor / 255.0
-        return tensor
+        return from_unit(tensor / 255.0, scale)
 
     def __repr__(self) -> str:
         parts = f"name={self.name}, probability={self.probability}"

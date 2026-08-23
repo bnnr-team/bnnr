@@ -14,7 +14,6 @@ Tests verify:
 from __future__ import annotations
 
 import copy
-import warnings
 
 import numpy as np
 import pytest
@@ -27,6 +26,7 @@ from bnnr.augmentation_runner import AugmentationRunner
 from bnnr.augmentations import AugmentationRegistry, BaseAugmentation, BasicAugmentation
 from bnnr.config import validate_config
 from bnnr.core import BNNRConfig, BNNRTrainer
+from bnnr.training.image_utils import NormalisedInputError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -270,14 +270,18 @@ class TestAugmentationRunnerRefactor:
 
 
 # ---------------------------------------------------------------------------
-# 5. _tensor_to_uint8 warning is per-instance
+# 5. _tensor_to_uint8 refuses normalized input instead of destroying it
 # ---------------------------------------------------------------------------
 
 
-class TestTensorToUint8Warning:
-    """Warning about normalized inputs should be per-instance, not class-level."""
+class TestTensorToUint8Normalized:
+    """Normalized input used to be clipped into [0, 1], which destroys the image.
 
-    def test_warning_emitted_per_instance(self, tmp_path) -> None:
+    It now raises unless the config carries the denormalization statistics, in
+    which case the normalization is undone and redone around the augmentation.
+    """
+
+    def _trainer(self, tmp_path, **cfg_overrides):
         loader = _fixed_loader(seed=0)
         adapter = _make_adapter(seed=42)
         cfg = BNNRConfig(
@@ -285,26 +289,35 @@ class TestTensorToUint8Warning:
             checkpoint_dir=tmp_path / "ckpt",
             report_dir=tmp_path / "report",
             save_checkpoints=False,
+            **cfg_overrides,
         )
+        return BNNRTrainer(adapter, loader, loader, [], cfg)
 
-        # Create two independent trainer instances
-        trainer1 = BNNRTrainer(adapter, loader, loader, [], cfg)
-        trainer2 = BNNRTrainer(adapter, loader, loader, [], cfg)
-
-        # Simulate normalized data (values outside [0,1])
+    def test_raises_on_every_instance(self, tmp_path) -> None:
+        trainer1 = self._trainer(tmp_path)
+        trainer2 = self._trainer(tmp_path)
         normalized = torch.randn(2, 3, 8, 8)  # mean ~0, std ~1 -> has negatives
 
-        with warnings.catch_warnings(record=True) as w1:
-            warnings.simplefilter("always")
-            trainer1._tensor_to_uint8(normalized)
+        for trainer in (trainer1, trainer2):
+            with pytest.raises(NormalisedInputError, match="Normalize"):
+                trainer._tensor_to_uint8(normalized)
 
-        with warnings.catch_warnings(record=True) as w2:
-            warnings.simplefilter("always")
-            trainer2._tensor_to_uint8(normalized)
+    def test_denormalization_stats_make_it_work(self, tmp_path) -> None:
+        trainer = self._trainer(
+            tmp_path,
+            denormalization_mean=[0.485, 0.456, 0.406],
+            denormalization_std=[0.229, 0.224, 0.225],
+        )
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+        original = torch.rand(2, 3, 8, 8)
+        normalized = (original - mean) / std
 
-        # Both instances should emit the warning (not just the first)
-        assert any("outside [0, 1]" in str(w.message) for w in w1), "First instance should warn"
-        assert any("outside [0, 1]" in str(w.message) for w in w2), "Second instance should also warn"
+        scale = trainer._batch_scale(normalized)
+        as_uint8 = trainer._tensor_to_uint8(normalized, scale=scale)
+        back = trainer._uint8_to_tensor(as_uint8, ref_batch=normalized, scale=scale)
+
+        assert torch.allclose(back * std + mean, original, atol=1.0 / 255.0)
 
 
 # ---------------------------------------------------------------------------

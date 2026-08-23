@@ -8,52 +8,92 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from bnnr.image_scale import (
+    _UNIT_MAX,
+    BatchScale,
+    NormalisedInputError,
+    detect_batch_scale,
+)
+from bnnr.image_scale import (
+    denorm_arrays as _denorm_arrays,
+)
 from bnnr.utils import lazy_cv2 as cv2
+
+__all__ = [
+    "BatchScale",
+    "NormalisedInputError",
+    "det_uint8_batch_to_float01",
+    "detect_batch_scale",
+    "resize_saliency_batch",
+    "tensor_batch_to_preview_uint8",
+    "tensor_to_uint8",
+    "uint8_to_tensor",
+]
 
 
 def tensor_to_uint8(
     images: Tensor,
     *,
+    scale: BatchScale | None = None,
+    denorm_mean: list[float] | tuple[float, ...] | None = None,
+    denorm_std: list[float] | tuple[float, ...] | None = None,
     warn_context: Any | None = None,
 ) -> np.ndarray:
     """Convert a (B, C, H, W) float tensor to a (B, H, W, C) uint8 array.
 
-    *warn_context* is an object on which ``_norm_warning_emitted`` is
-    tracked to emit the normalisation warning at most once.
+    Pass *scale* when the caller also has to invert the conversion, so both
+    directions agree on the convention instead of re-deriving it from data
+    that the augmentation has since changed. When omitted it is detected via
+    :func:`detect_batch_scale`, which raises rather than clipping a batch it
+    cannot represent.
+
+    *warn_context* is accepted for backward compatibility and is unused: the
+    case it used to warn about now raises :class:`NormalisedInputError`.
     """
     np_images = images.detach().cpu().permute(0, 2, 3, 1).numpy()
-    lo, hi = float(np_images.min()), float(np_images.max())
+    if scale is None:
+        scale = detect_batch_scale(np_images, denorm_mean=denorm_mean, denorm_std=denorm_std)
 
-    if lo < -0.01 or (hi > 1.05 and hi < 200):
-        if warn_context is not None and not getattr(warn_context, "_norm_warning_emitted", False):
-            import warnings
+    if scale.kind == "unit":
+        return np.clip(np_images * 255.0, 0.0, 255.0).astype("uint8")  # type: ignore[no-any-return]
+    if scale.kind == "byte":
+        return np.clip(np_images, 0.0, 255.0).astype("uint8")  # type: ignore[no-any-return]
 
-            warnings.warn(
-                "BNNR detected input tensors with values outside [0, 1] "
-                f"(range [{lo:.2f}, {hi:.2f}]). This usually means "
-                "transforms.Normalize() was applied BEFORE BNNR augmentations. "
-                "BNNR augmentations convert images to uint8 internally — "
-                "pre-normalised data will be corrupted. Remove Normalize() "
-                "from your DataLoader transforms and rely on BatchNorm in "
-                "the model instead.",
-                RuntimeWarning,
-                stacklevel=4,
-            )
-            warn_context._norm_warning_emitted = True
-        np_images = np.clip(np_images, 0.0, 1.0)
-
-    if hi <= 1.05:
-        return (np_images * 255.0).astype("uint8")  # type: ignore[no-any-return]
-    return np_images.astype("uint8")  # type: ignore[no-any-return]
+    mean, std = _denorm_arrays(scale, np_images.shape[-1])
+    denormalised = np.clip(np_images * std + mean, 0.0, 1.0)
+    return (denormalised * 255.0).astype("uint8")  # type: ignore[no-any-return]
 
 
-def uint8_to_tensor(np_images: np.ndarray, *, ref_batch: Tensor) -> Tensor:
-    """Convert (B, H, W, C) uint8 back to (B, C, H, W) float tensor."""
+def uint8_to_tensor(
+    np_images: np.ndarray,
+    *,
+    ref_batch: Tensor,
+    scale: BatchScale | None = None,
+) -> Tensor:
+    """Convert (B, H, W, C) uint8 back to (B, C, H, W) float tensor.
+
+    With *scale* the conversion is the exact inverse of :func:`tensor_to_uint8`,
+    including re-applying the normalisation. Without it the legacy heuristic on
+    ``ref_batch`` is used, which cannot express the normalised convention.
+    """
     t = torch.as_tensor(np_images, dtype=ref_batch.dtype, device=ref_batch.device)
     t = t.permute(0, 3, 1, 2)
-    if ref_batch.max() <= 1.05:
-        t = t / 255.0
-    return t
+
+    if scale is None:
+        if ref_batch.max() <= _UNIT_MAX:
+            t = t / 255.0
+        return t
+
+    if scale.kind == "byte":
+        return t
+    t = t / 255.0
+    if scale.kind == "unit":
+        return t
+
+    mean_np, std_np = _denorm_arrays(scale, t.shape[1])
+    mean = torch.as_tensor(mean_np, dtype=t.dtype, device=t.device).view(1, -1, 1, 1)
+    std = torch.as_tensor(std_np, dtype=t.dtype, device=t.device).view(1, -1, 1, 1)
+    return (t - mean) / std
 
 
 def det_uint8_batch_to_float01(np_images: np.ndarray, *, ref_batch: Tensor) -> Tensor:

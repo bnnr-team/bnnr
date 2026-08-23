@@ -13,11 +13,14 @@ from collections.abc import Iterable, Iterator
 from queue import Empty, Queue
 from typing import Any
 
-import numpy as np
-import torch
 from torch import Tensor
 
 from bnnr.augmentations import BaseAugmentation
+from bnnr.image_scale import BatchScale, detect_batch_scale, from_unit, to_unit
+from bnnr.training.image_utils import tensor_to_uint8, uint8_to_tensor
+
+# The convention every tensor-path augmentation implementation expects.
+_UNIT_SCALE = BatchScale("unit")
 
 logger = logging.getLogger("bnnr.augmentation_runner")
 
@@ -45,6 +48,11 @@ class AugmentationRunner:
         If True, CPU-bound augmentations are applied in a background thread.
     prefetch_queue_size : int
         Max number of prefetched batches to keep in memory.
+    denorm_mean, denorm_std : list[float] | None
+        Per-channel normalisation statistics of the incoming batches. Supply
+        them when the DataLoader applies ``transforms.Normalize()``: the runner
+        undoes the normalisation before augmenting and redoes it afterwards.
+        Without them a normalised batch raises instead of being corrupted.
     """
 
     def __init__(
@@ -52,10 +60,14 @@ class AugmentationRunner:
         augmentations: list[BaseAugmentation],
         async_prefetch: bool = True,
         prefetch_queue_size: int = 2,
+        denorm_mean: list[float] | None = None,
+        denorm_std: list[float] | None = None,
     ) -> None:
         self.augmentations = augmentations
         self.async_prefetch = async_prefetch
         self.prefetch_queue_size = prefetch_queue_size
+        self.denorm_mean = denorm_mean
+        self.denorm_std = denorm_std
 
         # Split augmentations into GPU-native and CPU-bound
         self.gpu_augmentations = [a for a in augmentations if a.device_compatible]
@@ -106,9 +118,11 @@ class AugmentationRunner:
         2. ``apply_tensor`` (GPU-native tensor path)
         3. ``apply_batch`` (numpy uint8 fallback)
         """
+        scale: BatchScale | None = None
         for aug in augmentations:
             if hasattr(aug, "apply_batch_with_labels"):
-                np_images = _tensor_to_uint8(images)
+                scale = scale or self._batch_scale(images)
+                np_images = tensor_to_uint8(images, scale=scale)
                 np_labels = labels.detach().cpu().numpy()
                 np_indices = (
                     sample_indices.detach().cpu().numpy()
@@ -118,15 +132,30 @@ class AugmentationRunner:
                 aug_images = aug.apply_batch_with_labels(
                     np_images, np_labels, sample_indices=np_indices
                 )
-                images = _uint8_to_tensor(aug_images, ref_batch=images)
+                images = uint8_to_tensor(aug_images, ref_batch=images, scale=scale)
             else:
+                # Every tensor-path implementation, including third-party ones,
+                # assumes [0, 1]. Hand it that and convert back, so a normalised
+                # or [0, 255] batch is not truncated inside the augmentation.
+                scale = scale or self._batch_scale(images)
+                unit = to_unit(images, scale)
                 try:
-                    images = aug.apply_tensor(images)
+                    # No scale argument: the batch is already in the convention
+                    # apply_tensor would detect, and third-party overrides that
+                    # predate the keyword keep working unchanged.
+                    unit = aug.apply_tensor(unit)
                 except NotImplementedError:
-                    np_images = _tensor_to_uint8(images)
+                    np_images = tensor_to_uint8(unit, scale=_UNIT_SCALE)
                     aug_images = aug.apply_batch(np_images)
-                    images = _uint8_to_tensor(aug_images, ref_batch=images)
+                    unit = uint8_to_tensor(aug_images, ref_batch=unit, scale=_UNIT_SCALE)
+                images = from_unit(unit, scale)
         return images
+
+    def _batch_scale(self, images: Tensor) -> BatchScale:
+        """Detect the batch convention once, before any augmentation changes it."""
+        return detect_batch_scale(
+            images, denorm_mean=self.denorm_mean, denorm_std=self.denorm_std
+        )
 
     def _apply_gpu_augmentations(
         self,
@@ -257,26 +286,12 @@ def _unpack_batch(
     raise ValueError(f"Unexpected batch format: {type(raw_batch)}")
 
 
-def _tensor_to_uint8(images: Tensor) -> np.ndarray:
-    """Convert a (B, C, H, W) float tensor to a (B, H, W, C) uint8 array."""
-    np_images = images.detach().cpu().permute(0, 2, 3, 1).numpy()
-    lo, hi = float(np_images.min()), float(np_images.max())
-
-    if lo < -0.01 or (hi > 1.05 and hi < 200):
-        np_images = np.clip(np_images, 0.0, 1.0)
-
-    if hi <= 1.05:
-        return (np_images * 255.0).astype("uint8")  # type: ignore[no-any-return]
-    return np_images.astype("uint8")  # type: ignore[no-any-return]
-
-
-def _uint8_to_tensor(np_images: np.ndarray, *, ref_batch: Tensor) -> Tensor:
-    """Convert (B, H, W, C) uint8 back to (B, C, H, W) float tensor."""
-    t = torch.as_tensor(np_images, dtype=ref_batch.dtype, device=ref_batch.device)
-    t = t.permute(0, 3, 1, 2)
-    if ref_batch.max() <= 1.05:
-        t = t / 255.0
-    return t
+# Kept as module-private aliases of the shared implementation in
+# bnnr.training.image_utils. The runner used to carry its own copy, which was
+# the copy without the out-of-range check, so a normalised batch was destroyed
+# here with no warning at all.
+_tensor_to_uint8 = tensor_to_uint8
+_uint8_to_tensor = uint8_to_tensor
 
 
 __all__ = ["AugmentationRunner"]

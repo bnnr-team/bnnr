@@ -298,3 +298,24 @@ Fix:
 New-Item -ItemType Directory -Force -Path data
 curl.exe -k -L -o data\cifar-10-python.tar.gz https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
 ```
+## 21) `NormalisedInputError: BNNR received a batch with values in [...]`
+
+Symptom:
+
+- Training stops immediately with `NormalisedInputError` naming a value range such as `[-2.118, 2.640]`.
+
+Cause:
+
+- The DataLoader applies `transforms.Normalize(mean, std)` before BNNR sees the batch. BNNR augmentations operate on unnormalised images, so a normalised batch has to be converted back first. Earlier versions clipped such a batch into `[0, 1]`, which silently destroyed the image and produced a plausible but meaningless run.
+
+Fix, pick one:
+
+- Remove `Normalize()` from the DataLoader transforms and rely on BatchNorm in the model. This is what every built-in BNNR pipeline does.
+- Or tell BNNR what the statistics were, so it can undo and redo the normalisation around each augmentation:
+
+```yaml
+denormalization_mean: [0.485, 0.456, 0.406]
+denormalization_std: [0.229, 0.224, 0.225]
+```
+
+The same error appears for any batch that is neither `[0, 1]` nor `[0, 255]`, including a `[0, 255]` batch whose brightest pixel is below 32, which cannot be told apart from a normalised one by range alone.
