@@ -107,6 +107,7 @@ Backward-compatible — `from bnnr.xai import …`, `from bnnr.xai_cache import 
 - `analyze_xai_batch`, `analyze_xai_batch_rich`, `compute_xai_quality_score`
 - `generate_class_diagnosis`, `generate_class_insight`, `generate_epoch_summary`, `generate_rich_epoch_summary`
 - `XAICache`
+- `IndexedDataset` — wraps a dataset so the DataLoader yields `(image, label, index)`, which is what lets `XAICache` key saliency maps per sample
 
 ## Dashboard helper
 

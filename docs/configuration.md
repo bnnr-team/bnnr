@@ -124,6 +124,8 @@ trainer = BNNRTrainer(
 - `xai_enabled` (default: `true`)
 - `xai_samples` (default: `4`)
 - `xai_method` (`opticam`, `gradcam`, `craft`, `nmf`, `nmf_concepts`, `real_craft`; default: `opticam`)
+The cache is keyed by sample index, so the DataLoader has to yield `(image, label, index)`. Wrap the dataset with `bnnr.IndexedDataset` if it does not. Without indices no map can be persisted and saliency is recomputed every batch; BNNR warns once per run when that happens.
+
 - `xai_cache_dir` (default: `null`): when `null`, the cache lives under the current run directory (`<report_dir>/run_<timestamp>/xai_cache`), so saliency maps are never silently reused across runs. Set an explicit path to share a cache between runs (you own invalidation in that case).
 - `xai_cache_samples` (default: `0` = whole dataset)
 - `xai_cache_max_samples` (default: `50000`)
