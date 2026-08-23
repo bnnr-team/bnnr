@@ -196,6 +196,10 @@ def _line_partitions(height: int, width: int, num_lines: int, rnd: random.Random
     return region_id
 
 
+_NOISE_KINDS = ("white", "gaussian", "pink")
+_NOISE_MODES = frozenset({"regional", "uniform"})
+
+
 def _np_rng(rnd: random.Random) -> np.random.Generator:
     return np.random.default_rng(rnd.randrange(0, 2**32 - 1))  # type: ignore[return-value]
 
@@ -203,60 +207,169 @@ def _np_rng(rnd: random.Random) -> np.random.Generator:
 @AugmentationRegistry.register("augmentation_1")
 @AugmentationRegistry.register("church_noise")
 class ChurchNoise(BaseAugmentation):
-    """Noise augmentation. CPU/GPU paths diverge by design.
+    """Line-partitioned regional noise, identical on the numpy and tensor paths.
 
-    The CPU path (``apply``) adds line-partitioned *regional* noise; the
-    GPU path (``apply_tensor_native``) adds *uniform* full-image Gaussian
-    noise. ``device_compatible=True``, so the runner uses the GPU path
-    whenever a tensor is available, which is a different transform than the
-    numpy fallback. ``num_lines`` only affects the CPU path.
+    ``num_lines`` random straight lines split the image into regions, and each
+    region gets its own noise kind (white, gaussian or pink) and its own
+    standard deviation drawn from ``noise_strength_range``.
+
+    ``noise_mode`` selects the transform, and both paths implement both modes,
+    so the device no longer decides which transform runs:
+
+    ``"regional"`` (default)
+        The transform described above. This is what the numpy path has always
+        done and what the tensor path now does too.
+    ``"uniform"``
+        One Gaussian noise field over the whole image with a single standard
+        deviation. Cheaper, and what the tensor path used to do
+        unconditionally. ``num_lines`` has no effect in this mode.
+
+    Regional noise on the tensor path costs one noise field per region rather
+    than one per image. Pass ``noise_mode="uniform"`` to trade the regional
+    structure back for that, or to reproduce runs made before this change.
     """
 
     device_compatible: bool = True
 
-    def __init__(self, num_lines: int = 3, noise_strength_range: tuple[float, float] = (5.0, 14.0), **kwargs: Any) -> None:
+    def __init__(
+        self,
+        num_lines: int = 3,
+        noise_strength_range: tuple[float, float] = (5.0, 14.0),
+        noise_mode: str = "regional",
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
+        if noise_mode not in _NOISE_MODES:
+            raise ValueError(
+                f"noise_mode must be one of {sorted(_NOISE_MODES)}, got {noise_mode!r}"
+            )
         self.num_lines = num_lines
         self.noise_strength_range = noise_strength_range
+        self.noise_mode = noise_mode
+
+    def __repr__(self) -> str:
+        # Extend, do not replace: the base repr carries probability and intensity.
+        return f"{super().__repr__()[:-1]}, noise_mode={self.noise_mode})"
+
+    # ------------------------------------------------------------------
+    # Shared plan: both paths draw the same regions and the same per-region
+    # parameters from the same RNG, so they are the same transform.
+    # ------------------------------------------------------------------
+
+    def _regional_plan(self, h: int, w: int) -> tuple[np.ndarray, list[tuple[int, float, str]]]:
+        """Draw the region map and the (region, std, kind) triples for one image."""
+        regions = _line_partitions(h, w, max(1, int(self.num_lines)), self._rnd)
+        plan = [
+            (int(region), self._rnd.uniform(*self.noise_strength_range), self._rnd.choice(_NOISE_KINDS))
+            for region in np.unique(regions)
+        ]
+        return regions, plan
+
+    # ------------------------------------------------------------------
+    # Tensor path
+    # ------------------------------------------------------------------
+
+    def _torch_noise(
+        self,
+        kind: str,
+        std: float,
+        h: int,
+        w: int,
+        *,
+        device: torch.device,
+        dtype: torch.dtype,
+        generator: torch.Generator,
+    ) -> Tensor:
+        """One (H, W) noise field of the given kind, scaled to *std*."""
+        if kind == "white":
+            span = std * math.sqrt(3.0)
+            uniform = torch.rand(h, w, device=device, dtype=torch.float32, generator=generator)
+            return ((uniform * 2.0 - 1.0) * span).to(dtype)
+        if kind == "gaussian":
+            normal = torch.randn(h, w, device=device, dtype=torch.float32, generator=generator)
+            return (normal * std).to(dtype)
+
+        # Pink: 1/f spectrum, mirroring the numpy path.
+        real = torch.randn(h, w, device=device, dtype=torch.float32, generator=generator)
+        imag = torch.randn(h, w, device=device, dtype=torch.float32, generator=generator)
+        fy = torch.fft.fftfreq(h, device=device).reshape(-1, 1)
+        fx = torch.fft.fftfreq(w, device=device).reshape(1, -1)
+        radius = torch.sqrt(fx * fx + fy * fy)
+        radius[0, 0] = 1.0
+        pink = torch.fft.ifft2(torch.complex(real, imag) / radius).real
+        pink = (pink - pink.mean()) / (pink.std() + 1e-8)
+        return (pink * std).to(dtype)
 
     def apply_tensor_native(self, images: Tensor) -> Tensor:
-        """GPU-native noise augmentation on BCHW float32 tensors in [0,1]."""
+        """Tensor-native noise on BCHW float32 tensors in [0, 1]."""
         if self._rnd.random() > self.probability:
             return images
-        b, c, h, w = images.shape
-        std = self._rnd.uniform(*self.noise_strength_range) / 255.0  # scale to [0,1]
-        noise = torch.randn(b, 1, h, w, device=images.device, dtype=images.dtype) * std
+        b, _, h, w = images.shape
+        generator = torch.Generator(device=images.device)
+        generator.manual_seed(self._rnd.randrange(0, 2**63 - 1))
+
+        if self.noise_mode == "uniform":
+            std = self._rnd.uniform(*self.noise_strength_range) / 255.0
+            noise = torch.randn(
+                b, 1, h, w, device=images.device, dtype=images.dtype, generator=generator
+            ) * std
+        else:
+            noise = torch.zeros(b, 1, h, w, device=images.device, dtype=images.dtype)
+            for idx in range(b):
+                regions, plan = self._regional_plan(h, w)
+                region_map = torch.as_tensor(regions, device=images.device)
+                for region, std, kind in plan:
+                    sample = self._torch_noise(
+                        kind,
+                        std / 255.0,  # plan is in pixel units, tensors are in [0, 1]
+                        h,
+                        w,
+                        device=images.device,
+                        dtype=images.dtype,
+                        generator=generator,
+                    )
+                    noise[idx, 0] = torch.where(region_map == region, sample, noise[idx, 0])
+
         result = (images + noise).clamp(0.0, 1.0)
         if self.intensity < 1.0:
             result = images * (1.0 - self.intensity) + result * self.intensity
         return result
 
+    # ------------------------------------------------------------------
+    # Numpy path
+    # ------------------------------------------------------------------
+
+    def _np_noise(self, kind: str, std: float, h: int, w: int, np_rng: np.random.Generator) -> np.ndarray:
+        """One (H, W) noise field of the given kind, scaled to *std*."""
+        if kind == "white":
+            return np_rng.uniform(-std * math.sqrt(3), std * math.sqrt(3), size=(h, w)).astype(np.float32)
+        if kind == "gaussian":
+            return np_rng.normal(0.0, std, size=(h, w)).astype(np.float32)
+
+        spectrum = np_rng.normal(size=(h, w)) + 1j * np_rng.normal(size=(h, w))
+        fy = np.fft.fftfreq(h).reshape(-1, 1)
+        fx = np.fft.fftfreq(w).reshape(1, -1)
+        radius = np.sqrt(fx * fx + fy * fy)
+        radius[0, 0] = 1.0
+        pink = np.fft.ifft2(spectrum / radius).real
+        pink = (pink - pink.mean()) / (pink.std() + 1e-8)
+        return (pink * std).astype(np.float32)
+
     def apply(self, image: np.ndarray) -> np.ndarray:
         image = self.validate_input(image)
         h, w, _ = image.shape
-        rnd = self._rnd
-        regions = _line_partitions(h, w, max(1, int(self.num_lines)), rnd)
         out: np.ndarray = image.astype(np.float32).copy()
 
-        for region in np.unique(regions):
-            mask = regions == region
-            std = rnd.uniform(*self.noise_strength_range)
-            noise_kind = rnd.choice(["white", "gaussian", "pink"])
-            np_rng = _np_rng(rnd)
-            if noise_kind == "white":
-                noise = np_rng.uniform(-std * math.sqrt(3), std * math.sqrt(3), size=(h, w)).astype(np.float32)
-            elif noise_kind == "gaussian":
-                noise = np_rng.normal(0.0, std, size=(h, w)).astype(np.float32)
-            else:
-                spectrum = np_rng.normal(size=(h, w)) + 1j * np_rng.normal(size=(h, w))
-                fy = np.fft.fftfreq(h).reshape(-1, 1)
-                fx = np.fft.fftfreq(w).reshape(1, -1)
-                radius = np.sqrt(fx * fx + fy * fy)
-                radius[0, 0] = 1.0
-                pink = np.fft.ifft2(spectrum / radius).real
-                pink = (pink - pink.mean()) / (pink.std() + 1e-8)
-                noise = (pink * std).astype(np.float32)
+        if self.noise_mode == "uniform":
+            std = self._rnd.uniform(*self.noise_strength_range)
+            noise = self._np_noise("gaussian", std, h, w, _np_rng(self._rnd))
+            out = np.clip(out + noise[:, :, None], 0, 255)
+            return out.astype(np.uint8)
 
+        regions, plan = self._regional_plan(h, w)
+        for region, std, kind in plan:
+            mask = regions == region
+            noise = self._np_noise(kind, std, h, w, _np_rng(self._rnd))
             noise3 = np.repeat(noise[:, :, None], 3, axis=2)
             out[mask] = np.clip(out[mask] + noise3[mask], 0, 255)
         return out.astype(np.uint8)
