@@ -98,9 +98,10 @@ class KorniaAugmentation(BaseAugmentation):
             augmented = images * (1.0 - self.intensity) + augmented * self.intensity
         return augmented
 
-    def apply_tensor(self, images: Tensor) -> Tensor:
-        """Override to use GPU-native path directly."""
-        return self.apply_tensor_native(images)
+    # No apply_tensor override: BaseAugmentation already routes a
+    # device_compatible augmentation straight to apply_tensor_native, and doing
+    # it here as well would bypass the batch-convention handling, so a
+    # normalised batch would reach the Kornia transform unconverted.
 
 
 def create_kornia_pipeline(
