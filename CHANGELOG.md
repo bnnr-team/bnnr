@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/bnnr-team/bnnr/compare/v0.7.0...v0.7.1) (2026-08-22)
+
+
+### Documentation
+
+* point Colab badges at bnnr-team/bnnr ([#392](https://github.com/bnnr-team/bnnr/issues/392)) ([30ad12b](https://github.com/bnnr-team/bnnr/commit/30ad12b957e26a26a77df5fb9ea8b3d21487fcd9))
+
 ## [0.7.0](https://github.com/bnnr-team/bnnr/compare/v0.6.5...v0.7.0) (2026-08-09)
 
 
