@@ -286,12 +286,4 @@ def _unpack_batch(
     raise ValueError(f"Unexpected batch format: {type(raw_batch)}")
 
 
-# Kept as module-private aliases of the shared implementation in
-# bnnr.training.image_utils. The runner used to carry its own copy, which was
-# the copy without the out-of-range check, so a normalised batch was destroyed
-# here with no warning at all.
-_tensor_to_uint8 = tensor_to_uint8
-_uint8_to_tensor = uint8_to_tensor
-
-
 __all__ = ["AugmentationRunner"]
