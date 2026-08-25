@@ -551,10 +551,9 @@ def _apply_batch_aug(aug: Any, x: Any, y: Any, idx: Any) -> Any:
     re-implementation. Consumes ``src/bnnr`` but modifies no public API.
 
     Contract: the runner round-trips tensor -> uint8 HWC -> tensor and returns a
-    tensor in the same [0, 1] range it was given (``_uint8_to_tensor`` divides by
-    255 when ``ref_batch.max() <= 1.05``). Feeding it a *normalized* batch would
-    trip ``_tensor_to_uint8``'s negative-clip and silently zero the image; hence
-    this is called BEFORE ``normalize_batch`` in the training loop.
+    tensor in the same [0, 1] range it was given. Feeding it a *normalized* batch
+    raises ``NormalisedInputError`` instead of augmenting it; hence this is called
+    BEFORE ``normalize_batch`` in the training loop.
     """
     from bnnr.augmentation_runner import AugmentationRunner
 

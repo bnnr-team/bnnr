@@ -13,6 +13,7 @@ from bnnr.augmentations import (
     DifPresets,
     ProCAM,
 )
+from bnnr.training.image_utils import NormalisedInputError
 
 
 def _make_batch(b: int = 4, c: int = 3, h: int = 32, w: int = 32) -> torch.Tensor:
@@ -239,3 +240,41 @@ class TestApplyTensorFallback:
         result = aug.apply_tensor(images)
         assert result.shape == images.shape
         assert result.dtype == images.dtype
+
+
+class TestRunnerNormalisedBatches:
+    """The runner used to carry the copy of the converter without any check."""
+
+    MEAN = [0.485, 0.456, 0.406]
+    STD = [0.229, 0.224, 0.225]
+
+    def _normalise(self, images: torch.Tensor) -> torch.Tensor:
+        mean = torch.tensor(self.MEAN).view(1, 3, 1, 1)
+        std = torch.tensor(self.STD).view(1, 3, 1, 1)
+        return (images - mean) / std
+
+    def test_normalised_batch_raises_without_stats(self) -> None:
+        aug = BasicAugmentation(probability=1.0, random_state=0)
+        aug.device_compatible = False  # type: ignore[attr-defined]
+        runner = AugmentationRunner([aug], async_prefetch=False)
+        images = self._normalise(_make_batch())
+
+        with pytest.raises(NormalisedInputError):
+            runner.apply_batch(images, torch.zeros(4, dtype=torch.long))
+
+    def test_normalised_batch_survives_with_stats(self) -> None:
+        """With stats the batch stays in its own convention and keeps its spread."""
+        aug = BasicAugmentation(probability=1.0, random_state=0)
+        aug.device_compatible = False  # type: ignore[attr-defined]
+        runner = AugmentationRunner(
+            [aug], async_prefetch=False, denorm_mean=self.MEAN, denorm_std=self.STD
+        )
+        images = self._normalise(_make_batch())
+
+        out, _ = runner.apply_batch(images, torch.zeros(4, dtype=torch.long))
+
+        assert out.shape == images.shape
+        # Clipping to [0, 1] would have collapsed the normalised range.
+        assert float(out.min()) < -0.5
+        assert float(out.max()) > 0.5
+        assert torch.isfinite(out).all()
