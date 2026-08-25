@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/bnnr-team/bnnr/compare/v0.7.1...v0.7.2) (2026-08-25)
+
+
+### Bug Fixes
+
+* **augmentations:** stop silently destroying normalised batches ([#420](https://github.com/bnnr-team/bnnr/issues/420)) ([170666c](https://github.com/bnnr-team/bnnr/commit/170666c99ed72cb98e1188f7ce2847e62cb9513e))
+
 ## [0.7.1](https://github.com/bnnr-team/bnnr/compare/v0.7.0...v0.7.1) (2026-08-22)
 
 
