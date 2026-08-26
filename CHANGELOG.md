@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.3](https://github.com/bnnr-team/bnnr/compare/v0.7.2...v0.7.3) (2026-08-26)
+
+
+### Bug Fixes
+
+* **xai:** warn when the saliency cache has no sample indices ([#422](https://github.com/bnnr-team/bnnr/issues/422)) ([c8cd7ba](https://github.com/bnnr-team/bnnr/commit/c8cd7ba7f301df4e80c55ea950a57d94cbed60bb)), closes [#395](https://github.com/bnnr-team/bnnr/issues/395)
+
 ## [0.7.2](https://github.com/bnnr-team/bnnr/compare/v0.7.1...v0.7.2) (2026-08-25)
 
 
