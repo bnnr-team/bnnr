@@ -80,18 +80,22 @@ def apply_augmentation_to_batch(
 
     images, labels = batch
     if hasattr(augmentation, "apply_batch_with_labels"):
-        np_images = trainer._tensor_to_uint8(images)
+        # Detect the convention before the augmentation touches the pixels, so
+        # the way back is the exact inverse of the way in.
+        scale = trainer._batch_scale(images)
+        np_images = trainer._tensor_to_uint8(images, scale=scale)
         np_labels = labels.detach().cpu().numpy()
         np_indices = sample_indices.detach().cpu().numpy() if sample_indices is not None else None
         aug_images = augmentation.apply_batch_with_labels(
             np_images, np_labels, sample_indices=np_indices,
         )
-        return trainer._uint8_to_tensor(aug_images, ref_batch=images), labels
+        return trainer._uint8_to_tensor(aug_images, ref_batch=images, scale=scale), labels
 
+    scale = trainer._batch_scale(images)
     try:
-        images = augmentation.apply_tensor(images)
+        images = augmentation.apply_tensor(images, scale=scale)
         return images, labels
     except (NotImplementedError, RuntimeError, TypeError):
-        np_images = trainer._tensor_to_uint8(images)
+        np_images = trainer._tensor_to_uint8(images, scale=scale)
         aug_images = augmentation.apply_batch(np_images)
-        return trainer._uint8_to_tensor(aug_images, ref_batch=images), labels
+        return trainer._uint8_to_tensor(aug_images, ref_batch=images, scale=scale), labels

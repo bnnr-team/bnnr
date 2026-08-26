@@ -55,7 +55,12 @@ def train_epoch(
         return average_metrics(epoch_metrics)
 
     if augmentations:
-        runner = AugmentationRunner(augmentations, async_prefetch=False)
+        runner = AugmentationRunner(
+            augmentations,
+            async_prefetch=False,
+            denorm_mean=trainer.config.denormalization_mean,
+            denorm_std=trainer.config.denormalization_std,
+        )
         for raw_batch in loader:
             if len(raw_batch) == 3:
                 images, labels, sample_indices = raw_batch

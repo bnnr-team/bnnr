@@ -158,6 +158,23 @@ The XAI cache is precomputed **after** the baseline phase, so masks from `ICD`/`
 - `denormalization_mean` (default: `null`)
 - `denormalization_std` (default: `null`)
 
+BNNR augmentations operate on unnormalised images, so a batch that has already
+been through `transforms.Normalize()` has to be converted back before it can be
+augmented. Set both fields to the statistics your DataLoader used and BNNR
+undoes the normalisation before each augmentation and reapplies it afterwards.
+The values are also used for report previews and XAI overlays.
+
+If a batch arrives outside both `[0, 1]` and `[0, 255]` and these fields are not
+set, BNNR raises `NormalisedInputError` rather than clipping the batch into
+`[0, 1]`, which would destroy the image without any visible error. The two ways
+out are to remove `Normalize()` from the DataLoader transforms and rely on
+BatchNorm in the model, which is what the built-in pipelines do, or to set these
+two fields.
+
+Batches that are already in `[0, 1]` or `[0, 255]` are never denormalised, so
+setting these fields for reporting alone does not change how such a batch is
+augmented.
+
 ## Task-specific fields
 
 ### `task: classification` (default)
