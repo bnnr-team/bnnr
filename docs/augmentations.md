@@ -114,7 +114,7 @@ Detection augmentations are bbox-aware — they transform both images and boundi
 ### Detection ICD / AICD
 
 - `DetectionICD` — masks high-saliency tiles (forces context learning)
-- `DetectionAICD` — masks low-saliency tiles (sharpens object focus)
+- `DetectionAICD` — masks the least salient tiles (sharpens object focus, once attention is already on the object)
 
 Both accept `threshold_percentile`, `tile_size`, `fill_strategy`, and `probability`.
 
