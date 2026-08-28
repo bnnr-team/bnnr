@@ -274,10 +274,14 @@ class DetectionICD(_DetectionBaseICD):
 
 
 class DetectionAICD(_DetectionBaseICD):
-    """Detection Anti-ICD — masks low-saliency (background) tiles.
+    """Detection Anti-ICD: masks the tiles the model attends to least.
 
-    Focuses training on object regions by removing distracting
-    background context.
+    Focuses training on the regions the model already considers important by
+    perturbing everything else.
+
+    The least salient tiles are the background only when the detector already
+    attends the objects. When it does not, this masks the objects instead. See
+    :class:`bnnr.AICD` for the same caveat on the classification side.
     """
 
     name: str = "det_aicd"

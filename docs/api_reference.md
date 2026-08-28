@@ -175,7 +175,7 @@ For raw `ultralytics.nn.tasks` modules without this adapter, detection XAI stays
 XAI-driven augmentations:
 
 - `DetectionICD(threshold_percentile=70.0, tile_size=8, fill_strategy="gaussian_blur")` — masks high-saliency (object) tiles
-- `DetectionAICD(threshold_percentile=70.0, tile_size=8, fill_strategy="gaussian_blur")` — masks low-saliency (background) tiles
+- `DetectionAICD(threshold_percentile=70.0, tile_size=8, fill_strategy="gaussian_blur")` — masks the least salient tiles, which are the background only when the model already attends the object
 
 Presets: `from bnnr.detection_augmentations import get_detection_preset` — `name` ∈ `{"light", "standard", "aggressive"}`.
 
