@@ -58,11 +58,15 @@ python benchmarks/run.py --list-conditions
 
 ## BNNR augmentations in this benchmark
 
-| Name | Role |
-|------|------|
-| **ICD** | Masks *high-saliency* regions — forces the model to look beyond the easiest cue |
-| **AICD** | Masks *low-saliency* background — reduces shortcut learning on context |
-| **ChurchNoise** | Lightweight noise aug — non-XAI candidate in the branch pool |
+| Name | What it masks | Right when |
+|------|---------------|------------|
+| **ICD** | The *most* salient tiles, above the threshold percentile | The model leans on a cue you want broken. ICD destroys what it currently relies on |
+| **AICD** | The *least* salient tiles | Attention is already on the object and the surrounding context needs suppressing |
+| **ChurchNoise** | Nothing saliency-guided; regional noise | Non-XAI candidate in the branch pool |
+
+**The least salient tiles are the background only when the model already attends the object.** On a model attending the background, which is the case ICD and AICD exist to help with, AICD masks the object instead. The two are opposite operations on attention, so which one is appropriate depends on where attention already is.
+
+BNNR does not currently diagnose that. It trains both candidates and keeps whichever scored higher on selection-validation accuracy, a criterion the T20 findings showed is close to orthogonal to the objective. Diagnosing the attention regime is bnnr-team/bnnr#403 and acting on it is bnnr-team/bnnr#413.
 
 The branch search keeps augmentations that improve validation accuracy; the winning path is recorded in `results.json` → `best_path`.
 

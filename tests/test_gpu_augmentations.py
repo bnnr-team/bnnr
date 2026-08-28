@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 import torch
 
@@ -13,6 +14,7 @@ from bnnr.augmentations import (
     DifPresets,
     ProCAM,
 )
+from bnnr.training.image_utils import NormalisedInputError
 
 
 def _make_batch(b: int = 4, c: int = 3, h: int = 32, w: int = 32) -> torch.Tensor:
@@ -239,3 +241,140 @@ class TestApplyTensorFallback:
         result = aug.apply_tensor(images)
         assert result.shape == images.shape
         assert result.dtype == images.dtype
+
+
+class TestRunnerNormalisedBatches:
+    """The runner used to carry the copy of the converter without any check."""
+
+    MEAN = [0.485, 0.456, 0.406]
+    STD = [0.229, 0.224, 0.225]
+
+    def _normalise(self, images: torch.Tensor) -> torch.Tensor:
+        mean = torch.tensor(self.MEAN).view(1, 3, 1, 1)
+        std = torch.tensor(self.STD).view(1, 3, 1, 1)
+        return (images - mean) / std
+
+    def test_normalised_batch_raises_without_stats(self) -> None:
+        aug = BasicAugmentation(probability=1.0, random_state=0)
+        aug.device_compatible = False  # type: ignore[attr-defined]
+        runner = AugmentationRunner([aug], async_prefetch=False)
+        images = self._normalise(_make_batch())
+
+        with pytest.raises(NormalisedInputError):
+            runner.apply_batch(images, torch.zeros(4, dtype=torch.long))
+
+    def test_normalised_batch_survives_with_stats(self) -> None:
+        """With stats the batch stays in its own convention and keeps its spread."""
+        aug = BasicAugmentation(probability=1.0, random_state=0)
+        aug.device_compatible = False  # type: ignore[attr-defined]
+        runner = AugmentationRunner(
+            [aug], async_prefetch=False, denorm_mean=self.MEAN, denorm_std=self.STD
+        )
+        images = self._normalise(_make_batch())
+
+        out, _ = runner.apply_batch(images, torch.zeros(4, dtype=torch.long))
+
+        assert out.shape == images.shape
+        # Clipping to [0, 1] would have collapsed the normalised range.
+        assert float(out.min()) < -0.5
+        assert float(out.max()) > 0.5
+        assert torch.isfinite(out).all()
+
+
+class TestChurchNoiseModes:
+    """CPU and tensor paths must run the same transform (FIX-0-3)."""
+
+    @staticmethod
+    def _plan_for(**kwargs):
+        """Redraw the plan a tensor-path call would use for the first image.
+
+        ``apply_tensor_native`` consumes one draw for the probability check and
+        one to seed the torch generator before it asks for a plan, so mirror
+        that here.
+        """
+        aug = ChurchNoise(probability=1.0, **kwargs)
+        aug._rnd.random()
+        aug._rnd.randrange(0, 2**63 - 1)
+        return aug._regional_plan(64, 64)
+
+    def test_regional_is_the_default_on_both_paths(self) -> None:
+        assert ChurchNoise().noise_mode == "regional"
+
+    def test_invalid_mode_rejected(self) -> None:
+        with pytest.raises(ValueError, match="noise_mode"):
+            ChurchNoise(noise_mode="sometimes")
+
+    def test_num_lines_affects_the_tensor_path(self) -> None:
+        """num_lines used to be ignored once a tensor path was available."""
+        _, few = self._plan_for(random_state=7, num_lines=1)
+        _, many = self._plan_for(random_state=7, num_lines=3)
+        assert len(few) == 2
+        assert len(many) > len(few)
+
+    def test_tensor_regional_noise_follows_the_per_region_plan(self) -> None:
+        """Each region gets its own standard deviation, as on the numpy path."""
+        aug = ChurchNoise(probability=1.0, random_state=11, num_lines=1)
+        regions, plan = self._plan_for(random_state=11, num_lines=1)
+
+        images = torch.full((1, 3, 64, 64), 0.5)
+        out = aug.apply_tensor_native(images)
+        diff = (out - images)[0, 0].numpy()
+
+        for region, std, _kind in plan:
+            observed = float(diff[regions == region].std())
+            assert observed == pytest.approx(std / 255.0, rel=0.15)
+
+    def test_numpy_regional_noise_follows_the_per_region_plan(self) -> None:
+        aug = ChurchNoise(probability=1.0, random_state=11, num_lines=1)
+        plan_aug = ChurchNoise(probability=1.0, random_state=11, num_lines=1)
+        regions, plan = plan_aug._regional_plan(64, 64)
+
+        image = np.full((64, 64, 3), 128, dtype=np.uint8)
+        out = aug.apply(image)
+        diff = out.astype(np.float32)[:, :, 0] - 128.0
+
+        for region, std, _kind in plan:
+            observed = float(diff[regions == region].std())
+            assert observed == pytest.approx(std, rel=0.15)
+
+    def test_uniform_mode_has_one_std_everywhere(self) -> None:
+        aug = ChurchNoise(probability=1.0, random_state=3, noise_mode="uniform")
+        images = torch.full((1, 3, 64, 64), 0.5)
+        diff = (aug.apply_tensor_native(images) - images)[0, 0].numpy()
+
+        halves = [float(diff[:32].std()), float(diff[32:].std())]
+        assert halves[0] == pytest.approx(halves[1], rel=0.12)
+
+    def test_regional_mode_varies_across_the_image(self) -> None:
+        """The property uniform mode cannot have, on the path that used to lack it."""
+        aug = ChurchNoise(probability=1.0, random_state=11, num_lines=1)
+        regions, plan = self._plan_for(random_state=11, num_lines=1)
+        stds = sorted(std for _region, std, _kind in plan)
+        planned_ratio = stds[-1] / stds[0]
+        assert planned_ratio > 1.05  # this seed does draw different stds per region
+
+        images = torch.full((1, 3, 64, 64), 0.5)
+        diff = (aug.apply_tensor_native(images) - images)[0, 0].numpy()
+        observed = sorted(float(diff[regions == region].std()) for region, _s, _k in plan)
+        assert observed[-1] / observed[0] == pytest.approx(planned_ratio, rel=0.2)
+
+    def test_tensor_path_is_deterministic_for_a_seed(self) -> None:
+        images = torch.full((2, 3, 32, 32), 0.5)
+        first = ChurchNoise(probability=1.0, random_state=5).apply_tensor_native(images)
+        second = ChurchNoise(probability=1.0, random_state=5).apply_tensor_native(images)
+        assert torch.equal(first, second)
+
+    def test_both_paths_produce_comparable_noise_magnitude(self) -> None:
+        """The two paths are the same transform, so their noise scale matches."""
+        cpu_out = ChurchNoise(probability=1.0, random_state=2, num_lines=3).apply(
+            np.full((96, 96, 3), 128, dtype=np.uint8)
+        )
+        cpu_std = float((cpu_out.astype(np.float32)[:, :, 0] - 128.0).std()) / 255.0
+
+        images = torch.full((1, 3, 96, 96), 0.5)
+        tensor_out = ChurchNoise(
+            probability=1.0, random_state=2, num_lines=3
+        ).apply_tensor_native(images)
+        tensor_std = float((tensor_out - images)[0, 0].numpy().std())
+
+        assert tensor_std == pytest.approx(cpu_std, rel=0.35)

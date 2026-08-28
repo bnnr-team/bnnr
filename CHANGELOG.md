@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.7.3](https://github.com/bnnr-team/bnnr/compare/v0.7.2...v0.7.3) (2026-08-26)
+
+
+### Bug Fixes
+
+* **xai:** warn when the saliency cache has no sample indices ([#422](https://github.com/bnnr-team/bnnr/issues/422)) ([c8cd7ba](https://github.com/bnnr-team/bnnr/commit/c8cd7ba7f301df4e80c55ea950a57d94cbed60bb)), closes [#395](https://github.com/bnnr-team/bnnr/issues/395)
+
+## [0.7.2](https://github.com/bnnr-team/bnnr/compare/v0.7.1...v0.7.2) (2026-08-25)
+
+
+### Bug Fixes
+
+* **augmentations:** stop silently destroying normalised batches ([#420](https://github.com/bnnr-team/bnnr/issues/420)) ([170666c](https://github.com/bnnr-team/bnnr/commit/170666c99ed72cb98e1188f7ce2847e62cb9513e))
+
+## [0.7.1](https://github.com/bnnr-team/bnnr/compare/v0.7.0...v0.7.1) (2026-08-22)
+
+
+### Documentation
+
+* point Colab badges at bnnr-team/bnnr ([#392](https://github.com/bnnr-team/bnnr/issues/392)) ([30ad12b](https://github.com/bnnr-team/bnnr/commit/30ad12b957e26a26a77df5fb9ea8b3d21487fcd9))
+
 ## [0.7.0](https://github.com/bnnr-team/bnnr/compare/v0.6.5...v0.7.0) (2026-08-09)
 
 

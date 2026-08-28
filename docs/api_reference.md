@@ -107,6 +107,7 @@ Backward-compatible — `from bnnr.xai import …`, `from bnnr.xai_cache import 
 - `analyze_xai_batch`, `analyze_xai_batch_rich`, `compute_xai_quality_score`
 - `generate_class_diagnosis`, `generate_class_insight`, `generate_epoch_summary`, `generate_rich_epoch_summary`
 - `XAICache`
+- `IndexedDataset` — wraps a dataset so the DataLoader yields `(image, label, index)`, which is what lets `XAICache` key saliency maps per sample
 
 ## Dashboard helper
 
@@ -174,7 +175,7 @@ For raw `ultralytics.nn.tasks` modules without this adapter, detection XAI stays
 XAI-driven augmentations:
 
 - `DetectionICD(threshold_percentile=70.0, tile_size=8, fill_strategy="gaussian_blur")` — masks high-saliency (object) tiles
-- `DetectionAICD(threshold_percentile=70.0, tile_size=8, fill_strategy="gaussian_blur")` — masks low-saliency (background) tiles
+- `DetectionAICD(threshold_percentile=70.0, tile_size=8, fill_strategy="gaussian_blur")` — masks the least salient tiles, which are the background only when the model already attends the object
 
 Presets: `from bnnr.detection_augmentations import get_detection_preset` — `name` ∈ `{"light", "standard", "aggressive"}`.
 

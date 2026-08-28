@@ -12,6 +12,7 @@ from bnnr.augmentations import BaseAugmentation, BasicAugmentation, ChurchNoise
 from bnnr.core import BNNRConfig, BNNRTrainer
 from bnnr.dashboard.serve import start_dashboard
 from bnnr.icd import AICD, ICD
+from bnnr.pipelines import IndexedDataset
 from bnnr.presets import auto_select_augmentations, get_preset, list_presets
 from bnnr.quick_run import quick_run
 from bnnr.reporting import BNNRRunResult, Reporter, compare_runs, load_report
@@ -43,6 +44,8 @@ __all__ = [
     "auto_select_augmentations",
     "get_preset",
     "list_presets",
+    # Data
+    "IndexedDataset",
     # XAI (essentials)
     "OptiCAMExplainer",
     "GradCAMExplainer",
