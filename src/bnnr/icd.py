@@ -29,6 +29,10 @@ class _BaseICD(BaseAugmentation):
     or least (AICD) salient regions of the image.  The masked area is filled
     with a configurable strategy (blurred original, local mean, noise, etc.)
     instead of a hard black rectangle.
+
+    ICD and AICD are opposite operations on the model's attention, so which one
+    is appropriate depends on where that attention already is. See the
+    subclasses for the condition under which each is the right intervention.
     """
 
     invert_mask: bool = False
@@ -461,14 +465,35 @@ class _BaseICD(BaseAugmentation):
 
 
 class ICD(_BaseICD):
-    """Intelligent Coarse Dropout — masks the most salient tiles."""
+    """Intelligent Coarse Dropout: masks the tiles the model relies on most.
+
+    Masks saliency above ``threshold_percentile``, so it destroys whatever the
+    model is currently leaning on and forces it to find other evidence.
+
+    **Right when** the model leans on a cue you want broken, which includes the
+    shortcut-learning case where saliency sits on the background or the frame.
+    """
 
     name = "icd"
     invert_mask = False
 
 
 class AICD(_BaseICD):
-    """Anti-ICD — masks the least salient tiles (keeps important regions)."""
+    """Anti-ICD: masks the tiles the model attends to least.
+
+    Masks saliency below ``threshold_percentile``, keeping the region the model
+    already considers important and perturbing everything else.
+
+    **Right when** attention is already on the object and the surrounding
+    context needs suppressing.
+
+    The least salient tiles are the background *only when that holds*. On a
+    model attending the background, AICD masks the object instead, which is the
+    opposite of the intended effect. BNNR does not currently diagnose which case
+    a model is in; it trains both candidates and keeps whichever scored higher
+    on selection-validation accuracy. Diagnosing the attention regime is
+    bnnr-team/bnnr#403, and acting on the diagnosis is bnnr-team/bnnr#413.
+    """
 
     name = "aicd"
     invert_mask = True
