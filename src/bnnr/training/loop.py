@@ -19,6 +19,7 @@ from bnnr.training import branching as _branching
 from bnnr.training import callbacks as _callbacks
 from bnnr.training import checkpoint as _ckpt
 from bnnr.training import dataset_profile as _dprofile
+from bnnr.training import hard_quantile as _hard_quantile
 from bnnr.training import metrics as _metrics
 from bnnr.training import probe as _probe
 from bnnr.training import xai_runner as _xai
@@ -83,6 +84,20 @@ def train_epoch(
 
 
 
+def _flatten_labels(labels: torch.Tensor) -> torch.Tensor:
+    """Drop the trailing singleton some datasets carry (MedMNIST returns [B, 1])."""
+    if labels.ndim > 1 and labels.shape[-1] == 1:
+        return labels.squeeze(-1)
+    return labels
+
+
+def _per_sample_loss(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    """Cross-entropy per sample, for ranking validation samples by difficulty."""
+    return torch.nn.functional.cross_entropy(
+        logits.float(), _flatten_labels(labels).long(), reduction="none"
+    )
+
+
 def evaluate(
     trainer: BNNRTrainer,
     loader: DataLoader,
@@ -101,6 +116,13 @@ def evaluate(
     label_rows: list[torch.Tensor] = []
 
     _captured_logits: list[torch.Tensor] = []
+    # Per-sample loss for the hard-quantile metrics. Derived from the logits the
+    # prediction cache already captures, so this costs no second pass over the
+    # loader. It is plain cross-entropy rather than the trainer's criterion:
+    # a weighted or smoothed criterion would rank samples by class frequency as
+    # much as by difficulty, and the ranking is the whole point here.
+    _loss_rows: list[torch.Tensor] = []
+    _correct_rows: list[torch.Tensor] = []
     _hook_handle = None
     if can_cache:
         model_impl = trainer.model.get_model()  # type: ignore[attr-defined]
@@ -139,7 +161,14 @@ def evaluate(
                         (torch.sigmoid(logits) >= trainer.config.multilabel_threshold).int().cpu()
                     )
                 else:
-                    preds_rows.append(torch.argmax(logits, dim=1).cpu())
+                    preds = torch.argmax(logits, dim=1)
+                    preds_rows.append(preds.cpu())
+                    _loss_rows.append(
+                        _per_sample_loss(logits, labels.to(logits.device)).cpu()
+                    )
+                    _correct_rows.append(
+                        (preds.cpu() == _flatten_labels(labels).cpu()).cpu()
+                    )
                 label_rows.append(labels.cpu())
     finally:
         if _hook_handle is not None:
@@ -161,6 +190,15 @@ def evaluate(
         result = avg
     else:
         result = average_metrics(all_metrics)
+
+    if _loss_rows:
+        result.update(
+            _hard_quantile.hard_quantile_metrics(
+                torch.cat(_loss_rows).numpy(),
+                torch.cat(_correct_rows).numpy(),
+                q=trainer.config.hard_quantile_q,
+            )
+        )
 
     if (
         trainer._custom_metrics
