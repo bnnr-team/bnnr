@@ -71,6 +71,12 @@ class BNNRConfig(BaseModel):
     # ── Optional baseline re-evaluation per iteration ──
     reeval_baseline_per_iteration: bool = False
 
+    # ── Hard-quantile robustness proxy (FIX-1-3) ──
+    # Fraction of the validation set treated as "hard", by loss. The diagnosis
+    # reads robustness_gap; q is swept by the threshold calibration study, so it
+    # is a knob rather than a constant.
+    hard_quantile_q: float = 0.2
+
     # ── Multi-label-specific fields (ignored when task!="multilabel") ──
     multilabel_threshold: float = 0.5
 
@@ -87,6 +93,13 @@ class BNNRConfig(BaseModel):
     detection_xai_max_gt_boxes: int = 1
     detection_xai_max_pred_boxes: int = 1
     detection_class_names: Optional[list[str]] = None  # noqa: UP045
+
+    @field_validator("hard_quantile_q")
+    @classmethod
+    def validate_hard_quantile_q(cls, value: float) -> float:
+        if value <= 0.0 or value > 1.0:
+            raise ValueError("hard_quantile_q must be in (0, 1]")
+        return value
 
     @field_validator("multilabel_threshold")
     @classmethod
