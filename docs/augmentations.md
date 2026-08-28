@@ -52,7 +52,12 @@ Main classes used by presets:
 - **Sync path** (`async_prefetch=False`, no CPU augs, or a mixed/interleaved list): augs run inline in list order.
 - **Async prefetch** (`async_prefetch=True`): only engaged when every CPU aug precedes every GPU aug in your list. CPU augs run in a background thread for the next batch while the current batch trains; GPU augs run on the main thread (with `sample_indices` threaded through, so index-aware augs key on the sample index rather than an image hash). If the list interleaves CPU and GPU augs, the runner falls back to the sync path so order is never changed by the split.
 
-**CPU/GPU divergence:** `ChurchNoise`, `DifPresets`, and `ProCAM` are `device_compatible=True` but their GPU and CPU implementations are **different transforms**, not just different precision (e.g. `ChurchNoise` is regional line noise on CPU but uniform Gaussian noise on GPU). On a machine with a GPU tensor path the GPU variant runs; on CPU-only the numpy variant runs. See each class docstring for the specifics.
+**CPU/GPU divergence:** `DifPresets` and `ProCAM` are `device_compatible=True` but their GPU and CPU implementations are **different transforms**, not just different precision. On a machine with a GPU tensor path the GPU variant runs; on CPU-only the numpy variant runs, so the device silently decides which transform you get and results from the two are not comparable. See each class docstring for the specifics.
+
+`ChurchNoise` no longer diverges. Both paths implement both transforms and `noise_mode` selects one:
+
+- `noise_mode="regional"` (default) — `num_lines` random lines split the image into regions, each with its own noise kind (white, gaussian, pink) and standard deviation. This is what the numpy path always did.
+- `noise_mode="uniform"` — one Gaussian field over the whole image with a single standard deviation. Cheaper, and what the tensor path used to do unconditionally; pass it to reproduce runs made before the change. `num_lines` has no effect in this mode.
 
 ## Multi-label note
 
