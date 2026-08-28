@@ -52,12 +52,19 @@ Main classes used by presets:
 - **Sync path** (`async_prefetch=False`, no CPU augs, or a mixed/interleaved list): augs run inline in list order.
 - **Async prefetch** (`async_prefetch=True`): only engaged when every CPU aug precedes every GPU aug in your list. CPU augs run in a background thread for the next batch while the current batch trains; GPU augs run on the main thread (with `sample_indices` threaded through, so index-aware augs key on the sample index rather than an image hash). If the list interleaves CPU and GPU augs, the runner falls back to the sync path so order is never changed by the split.
 
-**CPU/GPU divergence:** `DifPresets` and `ProCAM` are `device_compatible=True` but their GPU and CPU implementations are **different transforms**, not just different precision. On a machine with a GPU tensor path the GPU variant runs; on CPU-only the numpy variant runs, so the device silently decides which transform you get and results from the two are not comparable. See each class docstring for the specifics.
+**CPU/GPU divergence: none left.** `ChurchNoise`, `DifPresets` and `ProCAM` used to run a different transform depending on whether a tensor path was available, so the device decided which augmentation you got and results from two machines were not comparable. All three now implement both of their transforms on both paths, with a mode argument selecting one. The default in every case is the richer behaviour the numpy path always had; the old tensor-path behaviour stays reachable for reproducing earlier runs.
 
-`ChurchNoise` no longer diverges. Both paths implement both transforms and `noise_mode` selects one:
+| aug | argument | default | the other mode |
+|---|---|---|---|
+| `ChurchNoise` | `noise_mode` | `"regional"` — `num_lines` random lines split the image into regions, each with its own noise kind (white, gaussian, pink) and standard deviation | `"uniform"` — one Gaussian field over the whole image with a single standard deviation. Cheaper. `num_lines` has no effect |
+| `DifPresets` | `effect_mode` | `"circles"` — `num_circles_range` feathered circles, each with its own effect from warm, cold, sharpen, blur, vivid, fade | `"global"` — one effect over the whole image, from warm, cold, vivid, fade. Cheaper. `num_circles_range`, `radius_range` and `feather` have no effect |
+| `ProCAM` | `camera_mode` | `"profile"` — one of cheap, smartphone, pro, webcam, darkroom: white balance plus that profile's contrast, saturation or gamma step | `"wb_gamma"` — white balance and gamma only, no profile |
 
-- `noise_mode="regional"` (default) — `num_lines` random lines split the image into regions, each with its own noise kind (white, gaussian, pink) and standard deviation. This is what the numpy path always did.
-- `noise_mode="uniform"` — one Gaussian field over the whole image with a single standard deviation. Cheaper, and what the tensor path used to do unconditionally; pass it to reproduce runs made before the change. `num_lines` has no effect in this mode.
+Both paths of each augmentation draw their parameters from one shared plan, so they are the same transform by construction rather than by inspection. Where the numpy path goes through cv2's uint8 HSV and the tensor path through float HSV, the two agree to within uint8 quantisation rather than exactly.
+
+The richer default costs more on the tensor path: regional noise is one noise field per region rather than per image, and circle mode is one feathered mask and one full-image effect per circle. The other mode buys that back.
+
+**Behaviour change in 0.x:** `DifPresets` and `ProCAM` applied their colour offsets in reversed channel order on the numpy path, adding the blue offset to red and the red offset to blue. `DifPresets` `warm` therefore cooled the image and `cold` warmed it. Both paths now apply offsets in R, G, B order, so numpy-path colour results differ from releases before this change.
 
 ## Multi-label note
 
