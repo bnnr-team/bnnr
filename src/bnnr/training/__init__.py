@@ -19,7 +19,10 @@ from bnnr.training.checkpoint import (
 )
 from bnnr.training.dataset_profile import compute_dataset_profile, count_labels
 from bnnr.training.image_utils import (
+    BatchScale,
+    NormalisedInputError,
     det_uint8_batch_to_float01,
+    detect_batch_scale,
     resize_saliency_batch,
     tensor_batch_to_preview_uint8,
     tensor_to_uint8,
@@ -36,6 +39,8 @@ from bnnr.training.xai_runner import (
 )
 
 __all__ = [
+    "BatchScale",
+    "NormalisedInputError",
     "adapt_icd_thresholds",
     "average_metrics",
     "build_xai_insights",
@@ -45,6 +50,7 @@ __all__ = [
     "copy_state_dict_inplace",
     "count_labels",
     "det_uint8_batch_to_float01",
+    "detect_batch_scale",
     "evaluate",
     "generate_augmentation_previews",
     "generate_xai",

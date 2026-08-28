@@ -47,8 +47,22 @@ def list_datasets() -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-class _IndexedDataset(Dataset):
-    """Wraps a dataset to return (image, label, index) triples."""
+class IndexedDataset(Dataset):
+    """Wraps a dataset so the DataLoader yields ``(image, label, index)`` triples.
+
+    The sample index is what lets :class:`~bnnr.XAICache` key saliency maps to
+    a dataset position. Without it a map cannot be persisted at all, so ICD and
+    AICD recompute saliency for every batch of every epoch and the only visible
+    symptom is that training is slow.
+
+    Wrap the dataset, not the DataLoader, so batch size, sampler and worker
+    settings stay yours::
+
+        from torch.utils.data import DataLoader
+        from bnnr import IndexedDataset
+
+        loader = DataLoader(IndexedDataset(train_ds), batch_size=64, shuffle=True)
+    """
 
     def __init__(self, dataset: Dataset) -> None:
         self.dataset = dataset
@@ -59,6 +73,10 @@ class _IndexedDataset(Dataset):
     def __getitem__(self, index: int) -> tuple[Tensor, int, int]:
         image, label = self.dataset[index]
         return image, label, index
+
+
+# Kept for the benchmarks and any code that reached into the private name.
+_IndexedDataset = IndexedDataset
 
 
 # ---------------------------------------------------------------------------

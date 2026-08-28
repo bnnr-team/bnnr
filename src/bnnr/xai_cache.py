@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -88,10 +89,26 @@ def _model_state_hash(model: nn.Module) -> str:
     return _fast_hash(b"".join(parts))
 
 
+_NO_INDEX_HINT = (
+    "Wrap the dataset so the DataLoader yields (image, label, index) triples:\n"
+    "    from bnnr import IndexedDataset\n"
+    "    loader = DataLoader(IndexedDataset(dataset), batch_size=..., shuffle=...)"
+)
+
+
 class XAICache:
     def __init__(self, cache_dir: Path | str) -> None:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._no_index_warned = False
+
+    def _warn_no_sample_indices(self, detail: str) -> None:
+        """Warn once per cache instance that the cache cannot work by index."""
+        if self._no_index_warned:
+            return
+        self._no_index_warned = True
+        warnings.warn(f"{detail}\n{_NO_INDEX_HINT}", RuntimeWarning, stacklevel=3)
+        logger.warning("%s %s", detail, _NO_INDEX_HINT)
 
     def _hash_image(self, image: np.ndarray) -> str:
         return _fast_hash(image.tobytes())
@@ -169,7 +186,14 @@ class XAICache:
         backward compatibility but is no longer used for persistence.
         """
         if sample_index is None:
-            return  # only index-keyed maps persist (no unbounded hash growth)
+            # Only index-keyed maps persist (no unbounded hash growth). Without
+            # an index nothing is written, so every batch recomputes saliency
+            # and the only symptom the user sees is that training is slow.
+            self._warn_no_sample_indices(
+                "XAI cache received no sample indices, so saliency maps cannot be "
+                "persisted and are recomputed for every batch."
+            )
+            return
         path = self._index_cache_path(sample_index, label)
         np.save(path, saliency.astype(np.float32))
 
@@ -292,6 +316,13 @@ class XAICache:
                 else:
                     images, labels = batch
                     sample_indices = None
+                    self._warn_no_sample_indices(
+                        "XAI cache precompute got a loader without sample indices, so "
+                        "maps are keyed by image content. That key stops matching as "
+                        "soon as the transforms randomise (RandomCrop, "
+                        "RandomHorizontalFlip), so the precomputed cache will not be "
+                        "re-used during training."
+                    )
 
                 batch_size = images.shape[0]
 

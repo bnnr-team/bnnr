@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import warnings
 
 import numpy as np
+import pytest
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
+from bnnr.pipelines import IndexedDataset
 from bnnr.xai_cache import (
     _MANIFEST_SCHEMA,
     XAICache,
@@ -258,3 +261,70 @@ def test_precompute_reuses_on_manifest_match(temp_dir, dummy_model, monkeypatch)
     # Same provenance: nothing recomputed.
     assert second == 0
     assert called["value"] is False
+
+
+# ---------------------------------------------------------------------------
+# Loaders without sample indices (FIX-0-2)
+# ---------------------------------------------------------------------------
+
+
+def test_save_map_without_index_warns_once(temp_dir) -> None:
+    """A dead cache must announce itself, not just make training slow."""
+    cache = XAICache(temp_dir / "xai_cache")
+
+    with pytest.warns(RuntimeWarning, match="recomputed for every batch") as record:
+        for _ in range(5):
+            cache.save_map(np.ones((8, 8), dtype=np.float32), label=0)
+
+    assert len(record) == 1
+    assert "IndexedDataset" in str(record[0].message)
+
+
+def test_save_map_with_index_does_not_warn(temp_dir) -> None:
+    cache = XAICache(temp_dir / "xai_cache")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        cache.save_map(np.ones((8, 8), dtype=np.float32), label=0, sample_index=1)
+
+
+def test_precompute_without_indices_warns(temp_dir, dummy_model, monkeypatch) -> None:
+    """Hash-keyed maps stop matching once the transforms randomise."""
+    monkeypatch.setattr(
+        "bnnr.xai_cache.generate_saliency_maps",
+        lambda *a, **k: np.ones((2, 8, 8), dtype=np.float32),
+    )
+    cache = XAICache(temp_dir / "xai_cache")
+    images = torch.rand(2, 3, 8, 8)
+    labels = torch.zeros(2, dtype=torch.long)
+    loader = DataLoader(TensorDataset(images, labels), batch_size=2)
+
+    with pytest.warns(RuntimeWarning, match="keyed by image content"):
+        cache.precompute_cache(dummy_model, loader, target_layers=[], n_samples=2)
+
+
+def test_precompute_with_indexed_dataset_does_not_warn(
+    temp_dir, dummy_model, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "bnnr.xai_cache.generate_saliency_maps",
+        lambda *a, **k: np.ones((2, 8, 8), dtype=np.float32),
+    )
+    cache = XAICache(temp_dir / "xai_cache")
+    images = torch.rand(2, 3, 8, 8)
+    labels = torch.zeros(2, dtype=torch.long)
+    loader = DataLoader(IndexedDataset(TensorDataset(images, labels)), batch_size=2)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        cache.precompute_cache(dummy_model, loader, target_layers=[], n_samples=2)
+
+    assert cache._index_cache_path(0, 0).exists()
+
+
+def test_indexed_dataset_yields_triples() -> None:
+    base = TensorDataset(torch.rand(3, 3, 8, 8), torch.zeros(3, dtype=torch.long))
+    wrapped = IndexedDataset(base)
+    assert len(wrapped) == 3
+    image, label, index = wrapped[2]
+    assert index == 2
+    assert image.shape == (3, 8, 8)
