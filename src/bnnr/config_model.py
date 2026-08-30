@@ -107,6 +107,10 @@ class BNNRConfig(BaseModel):
     # Which rule picks the winning candidate. "metric_argmax" is what BNNR has
     # always done and stays the default; see bnnr.training.selection.SELECTORS.
     selector: str = "metric_argmax"
+    #: How the candidate budget is spent. "exhaustive" is what BNNR has always
+    #: done and stays the default until the calibration study says otherwise;
+    #: see bnnr.training.search_policy.SEARCH_POLICIES.
+    search_policy: str = "exhaustive"
     #: Cut points for the ``diagnosis`` selector. Unset by design; see
     #: DiagnosisConfig and docs/diagnosis.md.
     diagnosis: DiagnosisConfig = Field(default_factory=DiagnosisConfig)
@@ -282,11 +286,22 @@ class BNNRConfig(BaseModel):
         several epochs in before discovering it cannot decide anything is the
         worst version of this error.
         """
-        if self.selector in _DIAGNOSIS_DRIVEN_SELECTORS:
+        from bnnr.training.search_policy import DIAGNOSIS_DRIVEN_POLICIES
+
+        needs_thresholds = (
+            self.selector in _DIAGNOSIS_DRIVEN_SELECTORS
+            or self.search_policy in DIAGNOSIS_DRIVEN_POLICIES
+        )
+        if needs_thresholds:
+            requested = (
+                f"selector={self.selector!r}"
+                if self.selector in _DIAGNOSIS_DRIVEN_SELECTORS
+                else f"search_policy={self.search_policy!r}"
+            )
             absent = self.diagnosis.missing()
             if absent:
                 raise ValueError(
-                    f"selector={self.selector!r} needs calibrated diagnosis thresholds; "
+                    f"{requested} needs calibrated diagnosis thresholds; "
                     f"{', '.join(absent)} {'is' if len(absent) == 1 else 'are'} unset. "
                     f"There is deliberately no default: an uncalibrated cut point driving "
                     f"selection is the defect this replaces. Supply them under the "
@@ -300,6 +315,17 @@ class BNNRConfig(BaseModel):
     def validate_indistinguishable_confidence(cls, value: float) -> float:
         if not (0.0 < value < 1.0):
             raise ValueError("indistinguishable_confidence must be in (0, 1)")
+        return value
+
+    @field_validator("search_policy")
+    @classmethod
+    def validate_search_policy(cls, value: str) -> str:
+        from bnnr.training.search_policy import SEARCH_POLICIES
+
+        if value not in SEARCH_POLICIES:
+            raise ValueError(
+                f"search_policy must be one of {sorted(SEARCH_POLICIES)}, got {value!r}"
+            )
         return value
 
     @field_validator("selector")

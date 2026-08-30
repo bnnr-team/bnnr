@@ -78,8 +78,12 @@ class RunRecord:
     #: Epochs of training the shipped model received.
     deployed_epochs: int = 0
 
-    #: How candidates were enumerated. Only "exhaustive" exists today (#413).
+    #: How candidates were enumerated: exhaustive, diagnosis_single or
+    #: successive_halving.
     search_policy: str = "exhaustive"
+    #: The rung structure that policy produced, with its epoch accounting.
+    #: ``None`` for a run that never reached the search phase.
+    search_plan: dict[str, Any] | None = None
     #: Which rule picked the winner, from ``config.selector``.
     selector: str = "metric_argmax"
     #: Names the selector chose. A tuple, matching ``SelectionResult.selected``,

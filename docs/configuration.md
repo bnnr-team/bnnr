@@ -52,6 +52,28 @@ seed: 42
 
 Both are gated the same way: whatever a selector picks is discarded unless it beat the baseline on `selection_metric`. That gate is deliberately shared, so a comparison between two selectors is a comparison of their ranking rules and nothing else. A selector that skipped it would look better purely by accepting runs the others reject.
 
+### Search policy
+
+- `search_policy` (default: `exhaustive`)
+
+How the candidate budget is spent. **The default does not change**, and `exhaustive` produces exactly the plan the loop used to hard-code.
+
+| value | what it does |
+|---|---|
+| `exhaustive` (default) | every candidate trains `m_epochs`, then the selector arbitrates |
+| `diagnosis_single` | the diagnosis names one candidate and it trains the whole budget |
+| `successive_halving` | the field halves each rung; weak branches die early |
+
+This addresses both defects the T20 benchmark found at once.
+
+**The selection criterion.** `exhaustive` arbitrates on selection-validation accuracy, which T20 found close to orthogonal to the objective. `diagnosis_single` does not arbitrate: the attention evidence names the arm.
+
+**The epoch split.** Under `exhaustive` with three candidates and `m_epochs: 6`, the run spends 18 epochs and the deployed model receives 6 — while a single-augmentation baseline on the same budget receives all 18. That is what made BNNR look worse than it is; matching deployed epochs closed a 4.46 pp gap to 0.09 pp on Imagewoof. `diagnosis_single` spends the same 18 and gives all of them to one arm. `successive_halving` costs no more than `exhaustive` and hands the eliminated branches' epochs to the survivors.
+
+`diagnosis_single` **refuses to run without calibrated thresholds**, the same gate as `selector: diagnosis`, and refuses again at plan time if no diagnosis was computed or if its recommendation matches no candidate. It does not fall back to argmax: a silent fallback would make a benchmark contrast between the policies measure a blend of them.
+
+The plan, including its rung structure and both epoch numbers, lands in the run record under `search_plan`. Note that the record's `total_gpu_epochs` and `deployed_epochs` are **counted as epochs run**, not read from the plan — candidate pruning can stop a rung early, and the measurement is what matters.
+
 ### Indistinguishability test
 
 - `indistinguishable_resamples` (default: `2000`, validated `>= 100`)

@@ -24,6 +24,7 @@ from bnnr.training import metrics as _metrics
 from bnnr.training import paired as _paired
 from bnnr.training import probe as _probe
 from bnnr.training import run_record as _run_record
+from bnnr.training import search_policy as _search
 from bnnr.training import selection as _selection
 from bnnr.training import shadow as _shadow
 from bnnr.training import xai_runner as _xai
@@ -236,6 +237,7 @@ def run_single_iteration(
     iteration: int = 0,
     candidate_idx: int = 0,
     total_candidates: int = 0,
+    epochs: int | None = None,
     ) -> tuple[dict[str, float], dict[str, Any], int, bool]:
     """Train one candidate augmentation for m_epochs.
 
@@ -257,7 +259,9 @@ def run_single_iteration(
     best_sel_value: float | None = None
 
     pruned = False
-    for epoch_idx in range(1, trainer.config.m_epochs + 1):
+    # The search policy sets the budget; m_epochs is what "exhaustive" asks for.
+    budget = trainer.config.m_epochs if epochs is None else max(1, epochs)
+    for epoch_idx in range(1, budget + 1):
         train_metrics = train_epoch(trainer, trainer.train_loader, augmentations=active)
         epoch_metrics = evaluate(trainer, trainer.val_loader)
 
@@ -290,7 +294,7 @@ def run_single_iteration(
         # Print progress to terminal
         best_marker = " ★" if is_new_best else ""
         trainer.console.print(
-            f"    epoch {epoch_idx}/{trainer.config.m_epochs} "
+            f"    epoch {epoch_idx}/{budget} "
             f"— {sel_m}={sel_v:.4f}  loss={epoch_metrics.get('loss', 0):.4f}"
             f"  (best: e{best_epoch}={best_sel_value:.4f}){best_marker}",
             flush=True,
@@ -652,126 +656,180 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
             per_class_by_candidate: dict[str, dict[str, dict[str, float | int]]] = {}
             xai_scores_by_candidate: dict[str, float] = {}
             candidate_correct: dict[str, Any] = {}
-            for idx, augmentation in enumerate(candidate_bar, start=1):
-                t0 = time.perf_counter()
+            plan = _search.plan_search(
+                tuple(a.name for a in candidates),
+                trainer.config,
+                diagnosis=trainer._last_diagnosis,
+            )
+            trainer._last_search_plan = plan
+            if plan.policy != "exhaustive":
                 trainer.console.print(
-                    f"\n  ▶ [{idx}/{len(candidates)}] {augmentation.name} "
-                    f"(p={augmentation.probability:.2f})",
+                    f"  search_policy={plan.policy}: {len(plan.rungs)} rung(s), "
+                    f"{plan.total_epochs} epochs total, "
+                    f"{plan.deployed_epochs} to a surviving candidate",
                     flush=True,
                 )
-                trainer.model.load_state_dict(trainer._clone_state_dict(best_state))
-                cand_best_metrics, cand_best_state, cand_best_epoch, pruned = run_single_iteration(trainer,
-                    augmentation,
-                    baseline_metrics=baseline_metrics,
-                    iteration=iteration,
-                    candidate_idx=idx,
-                    total_candidates=len(candidates),
+            by_name = {a.name: a for a in candidates}
+            # Rungs let a policy stop paying for a branch that is already
+            # behind. Exhaustive produces exactly one rung holding every
+            # candidate, so this loop runs its old body once per candidate.
+            for rung_idx, rung in enumerate(plan.rungs):
+                alive = [by_name[n] for n in rung.candidates if n in by_name]
+                candidate_bar = tqdm(
+                    alive,
+                    desc=f"Iteration {iteration} rung {rung_idx + 1}/{len(plan.rungs)}",
+                    leave=False,
+                    disable=not trainer.config.verbose,
                 )
-                iteration_results[augmentation.name] = cand_best_metrics
-                # Save this candidate's best-epoch model state (already deep-copied)
-                candidate_states[augmentation.name] = cand_best_state
-                candidate_best_epochs[augmentation.name] = cand_best_epoch
-
-                # Restore best-epoch state to compute per-class details at that point.
-                # Clear cached eval data so _compute_eval_class_details_detection
-                # runs a fresh (single) forward pass with the best-epoch weights.
-                trainer.model.load_state_dict(cand_best_state)
-                if hasattr(trainer.model, "last_eval_preds"):
-                    trainer.model.last_eval_preds = []  # type: ignore[attr-defined]  # duck-typed attr on DetectionAdapter
-                    trainer.model.last_eval_targets = []  # type: ignore[attr-defined]  # duck-typed attr on DetectionAdapter
-                # Invalidate classification prediction cache (state changed)
-                trainer._last_eval_preds = None
-                trainer._last_eval_labels = None
-                per_class_candidate, confusion_candidate = _metrics.compute_eval_class_details(trainer)
-                per_class_by_candidate[augmentation.name] = per_class_candidate
-                # The prediction cache now belongs to this candidate's best
-                # epoch, which is the state its metrics describe.
-                candidate_correct[augmentation.name] = _paired.correctness_vector(
-                    trainer._last_eval_preds, trainer._last_eval_labels
-                )
-
-                # Lightweight XAI probe per candidate (for XAI-aware selection)
-                _, cand_xai_diag, _ = _xai.generate_xai_lightweight(trainer,
-                    iteration, augmentation.name, confusion=confusion_candidate,
-                )
-                _record_shadow(
-                    trainer,
-                    phase="candidate",
-                    iteration=iteration,
-                    candidate=augmentation.name,
-                    metrics=cand_best_metrics,
-                )
-                if cand_xai_diag:
-                    avg_q = float(np.mean([
-                        d.get("quality_score", 0.0) for d in cand_xai_diag.values()
-                    ]))
-                    xai_scores_by_candidate[augmentation.name] = avg_q
-
-                completed_candidates.append(augmentation.name)
-
-                # Emit real-time events per candidate so dashboard updates live
-                branch_id = f"iter_{iteration}:{augmentation.name}"
-                trainer.reporter.log_candidate_evaluated(
-                    iteration=iteration,
-                    branch_id=branch_id,
-                    parent_id=current_branch_id,
-                    augmentation_name=augmentation.name,
-                    metrics=cand_best_metrics,
-                    pruned=pruned,
-                    per_class=per_class_candidate,
-                    confusion=confusion_candidate,
-                    best_epoch=cand_best_epoch,
-                    candidate_idx=idx,
-                    total_candidates=len(candidates),
-                )
-
-                delta = cand_best_metrics.get(sel_m, 0) - base_val
-                delta_str = f"+{delta:.4f}" if delta > 0 else f"{delta:.4f}"
-                status = "PRUNED" if pruned else f"Δ{delta_str}"
-                trainer.console.print(
-                    f"  ◀ [{idx}/{len(candidates)}] {augmentation.name}: "
-                    f"{sel_m}={cand_best_metrics.get(sel_m, 0):.4f} "
-                    f"(best@e{cand_best_epoch}, {status})",
-                    flush=True,
-                )
-
-                elapsed = time.perf_counter() - t0
-                per_candidate_durations.append(elapsed)
-                avg_time = sum(per_candidate_durations) / len(per_candidate_durations)
-                remaining = max(len(candidates) - idx, 0)
-                eta = avg_time * remaining
-                candidate_bar.set_postfix_str(f"avg={avg_time:.2f}s eta={eta:.1f}s")
-
-                if not long_run_warned:
-                    projected = _estimate_remaining_seconds(
-                        avg_time,
-                        len(candidates),
-                        idx,
-                        iteration,
-                        trainer.config.max_iterations,
+                for idx, augmentation in enumerate(candidate_bar, start=1):
+                    t0 = time.perf_counter()
+                    trainer.console.print(
+                        f"\n  ▶ [{idx}/{len(candidates)}] {augmentation.name} "
+                        f"(p={augmentation.probability:.2f})",
+                        flush=True,
                     )
-                    if projected >= _LONG_RUN_WARN_SECONDS:
-                        long_run_warned = True
-                        trainer.console.print(
-                            f"\n  WARNING: branch search may take ~{projected / 3600:.1f}h more "
-                            f"(~{avg_time:.0f}s/candidate over the remaining iterations). "
-                            "Lower --max-iterations or pick a lighter preset to shorten it; "
-                            "training is checkpointed, so Ctrl+C and resume is safe.\n",
-                            flush=True,
+                    # Later rungs continue this candidate rather than restarting
+                    # it: successive halving is about giving survivors *more*
+                    # training, not about repeating the first rung.
+                    resume_from = candidate_states.get(augmentation.name, best_state)
+                    trainer.model.load_state_dict(trainer._clone_state_dict(resume_from))
+                    cand_best_metrics, cand_best_state, cand_best_epoch, pruned = run_single_iteration(trainer,
+                        augmentation,
+                        baseline_metrics=baseline_metrics,
+                        iteration=iteration,
+                        candidate_idx=idx,
+                        total_candidates=len(alive),
+                        epochs=rung.epochs,
+                    )
+                    iteration_results[augmentation.name] = cand_best_metrics
+                    # Save this candidate's best-epoch model state (already deep-copied)
+                    candidate_states[augmentation.name] = cand_best_state
+                    # Accumulate: a survivor's deployed epochs are what it got
+                    # across every rung, not just the last one.
+                    candidate_best_epochs[augmentation.name] = (
+                        candidate_best_epochs.get(augmentation.name, 0) + cand_best_epoch
+                    )
+
+                    # Restore best-epoch state to compute per-class details at that point.
+                    # Clear cached eval data so _compute_eval_class_details_detection
+                    # runs a fresh (single) forward pass with the best-epoch weights.
+                    trainer.model.load_state_dict(cand_best_state)
+                    if hasattr(trainer.model, "last_eval_preds"):
+                        trainer.model.last_eval_preds = []  # type: ignore[attr-defined]  # duck-typed attr on DetectionAdapter
+                        trainer.model.last_eval_targets = []  # type: ignore[attr-defined]  # duck-typed attr on DetectionAdapter
+                    # Invalidate classification prediction cache (state changed)
+                    trainer._last_eval_preds = None
+                    trainer._last_eval_labels = None
+                    per_class_candidate, confusion_candidate = _metrics.compute_eval_class_details(trainer)
+                    per_class_by_candidate[augmentation.name] = per_class_candidate
+                    # The prediction cache now belongs to this candidate's best
+                    # epoch, which is the state its metrics describe.
+                    candidate_correct[augmentation.name] = _paired.correctness_vector(
+                        trainer._last_eval_preds, trainer._last_eval_labels
+                    )
+
+                    # Lightweight XAI probe per candidate (for XAI-aware selection)
+                    _, cand_xai_diag, _ = _xai.generate_xai_lightweight(trainer,
+                        iteration, augmentation.name, confusion=confusion_candidate,
+                    )
+                    _record_shadow(
+                        trainer,
+                        phase="candidate",
+                        iteration=iteration,
+                        candidate=augmentation.name,
+                        metrics=cand_best_metrics,
+                    )
+                    if cand_xai_diag:
+                        avg_q = float(np.mean([
+                            d.get("quality_score", 0.0) for d in cand_xai_diag.values()
+                        ]))
+                        xai_scores_by_candidate[augmentation.name] = avg_q
+
+                    completed_candidates.append(augmentation.name)
+
+                    # Emit real-time events per candidate so dashboard updates live
+                    branch_id = f"iter_{iteration}:{augmentation.name}"
+                    trainer.reporter.log_candidate_evaluated(
+                        iteration=iteration,
+                        branch_id=branch_id,
+                        parent_id=current_branch_id,
+                        augmentation_name=augmentation.name,
+                        metrics=cand_best_metrics,
+                        pruned=pruned,
+                        per_class=per_class_candidate,
+                        confusion=confusion_candidate,
+                        best_epoch=cand_best_epoch,
+                        candidate_idx=idx,
+                        total_candidates=len(candidates),
+                    )
+
+                    delta = cand_best_metrics.get(sel_m, 0) - base_val
+                    delta_str = f"+{delta:.4f}" if delta > 0 else f"{delta:.4f}"
+                    status = "PRUNED" if pruned else f"Δ{delta_str}"
+                    trainer.console.print(
+                        f"  ◀ [{idx}/{len(candidates)}] {augmentation.name}: "
+                        f"{sel_m}={cand_best_metrics.get(sel_m, 0):.4f} "
+                        f"(best@e{cand_best_epoch}, {status})",
+                        flush=True,
+                    )
+
+                    elapsed = time.perf_counter() - t0
+                    per_candidate_durations.append(elapsed)
+                    avg_time = sum(per_candidate_durations) / len(per_candidate_durations)
+                    remaining = max(len(candidates) - idx, 0)
+                    eta = avg_time * remaining
+                    candidate_bar.set_postfix_str(f"avg={avg_time:.2f}s eta={eta:.1f}s")
+
+                    if not long_run_warned:
+                        projected = _estimate_remaining_seconds(
+                            avg_time,
+                            len(candidates),
+                            idx,
+                            iteration,
+                            trainer.config.max_iterations,
+                        )
+                        if projected >= _LONG_RUN_WARN_SECONDS:
+                            long_run_warned = True
+                            trainer.console.print(
+                                f"\n  WARNING: branch search may take ~{projected / 3600:.1f}h more "
+                                f"(~{avg_time:.0f}s/candidate over the remaining iterations). "
+                                "Lower --max-iterations or pick a lighter preset to shorten it; "
+                                "training is checkpointed, so Ctrl+C and resume is safe.\n",
+                                flush=True,
+                            )
+
+                    if trainer.config.save_checkpoints:
+                        _ = _ckpt.save_checkpoint(trainer,
+                            iteration=iteration,
+                            augmentation_name=f"progress_{augmentation.name}",
+                            metrics=cand_best_metrics,
+                            baseline_metrics=baseline_metrics,
+                            completed_candidates=completed_candidates,
+                            current_best_metric=_branching.get_current_best_metric(iteration_results, trainer.config),
+                            iteration_results=iteration_results,
                         )
 
-                if trainer.config.save_checkpoints:
-                    _ = _ckpt.save_checkpoint(trainer,
-                        iteration=iteration,
-                        augmentation_name=f"progress_{augmentation.name}",
-                        metrics=cand_best_metrics,
-                        baseline_metrics=baseline_metrics,
-                        completed_candidates=completed_candidates,
-                        current_best_metric=_branching.get_current_best_metric(iteration_results, trainer.config),
-                        iteration_results=iteration_results,
-                    )
+                    trainer._check_pause()
 
-                trainer._check_pause()
+                if rung_idx < len(plan.rungs) - 1:
+                    survivors = _branching.top_k_candidate_names(
+                        {n: iteration_results[n] for n in rung.candidates
+                         if n in iteration_results},
+                        trainer.config,
+                        k=rung.survivors,
+                    )
+                    plan_rest = plan.rungs[rung_idx + 1]
+                    # A later rung may name candidates this one eliminated;
+                    # intersect rather than trusting the plan, since the plan
+                    # was built before any metric existed.
+                    kept = [n for n in plan_rest.candidates if n in survivors]
+                    plan = _search.SearchPlan(
+                        plan.policy,
+                        plan.rungs[: rung_idx + 1]
+                        + (_search.SearchRung(tuple(kept), plan_rest.epochs,
+                                              survivors=plan_rest.survivors),)
+                        + plan.rungs[rung_idx + 2 :],
+                    )
 
         selection = _selection.run_selector(
             iteration_results,
@@ -1005,18 +1063,12 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
 def _build_run_record(
     trainer: BNNRTrainer, selected_augmentations: list[str]
 ) -> _run_record.RunRecord:
-    """Collect the mandatory record fields at the end of a run.
-
-    ``search_policy`` is hard-coded to ``"exhaustive"`` because that is the only
-    policy that exists; #413 adds the alternatives and reads the config instead.
-    Recording it now rather than then is deliberate: rows written before the
-    feature lands stay distinguishable from rows written after it.
-    """
+    """Collect the mandatory record fields at the end of a run."""
     diagnosis = trainer._last_diagnosis
     return _run_record.RunRecord(
         total_gpu_epochs=trainer._ledger.total_gpu_epochs,
         deployed_epochs=trainer._ledger.deployed_epochs,
-        search_policy="exhaustive",
+        search_policy=trainer.config.search_policy,
         selector=trainer.config.selector,
         selected_candidate=tuple(selected_augmentations),
         diagnosis=diagnosis.to_dict() if diagnosis is not None else None,
@@ -1024,6 +1076,11 @@ def _build_run_record(
         augmentation_modes=_run_record.collect_augmentation_modes(trainer.augmentations),
         selection_reason=(
             trainer._last_selection.reason if trainer._last_selection is not None else None
+        ),
+        search_plan=(
+            trainer._last_search_plan.to_dict()
+            if trainer._last_search_plan is not None
+            else None
         ),
         selection_interval=(
             trainer._last_selection.interval.to_dict()
