@@ -69,6 +69,18 @@ The statistic is the **mean** paired difference, not the median. At sample level
 
 The test runs only when per-sample predictions were cached for both the candidate and the baseline. Without them the raw metric comparison stands, so a caller that never cached predictions behaves exactly as before.
 
+### How the composite scales candidate differences
+
+When `xai_selection_weight > 0` (deprecated, see below), the metric term is scaled by the **binomial standard error** `sqrt(p(1-p)/n)` of the selection metric, where `n` is the validation sample count.
+
+It used to be min-max normalised across the candidates. That stretches whatever spread the candidates happened to have across the full `[0, 1]` range, so a spread of 0.2 pp and a spread of 20 pp both produce a metric term running 0 to 1, and the blending weight means something different in every iteration. On a saturated metric it was applied to scatter rather than to signal.
+
+A normalised difference of `1.0` now means "one standard error better than the weakest candidate", in every iteration. A sub-noise spread produces a term well below 1; a spread of several standard errors exceeds 1 and dominates, which is correct because that difference is real.
+
+The unit falls back to the observed spread when the sample size is unknown or the metric is not a proportion (a loss, say), since the binomial form claims nothing there.
+
+**Standard deviation across the candidates is deliberately not used.** Three points is a poor estimator of anything, and on the runs this was written for it would have been an estimator of the very noise it was supposed to divide out.
+
 ### Deprecated XAI selection knobs
 
 `xai_selection_weight` and `xai_pruning_threshold` are **deprecated as of 0.x**. Both keep working and both emit a `DeprecationWarning` when you set them to a non-zero value.
