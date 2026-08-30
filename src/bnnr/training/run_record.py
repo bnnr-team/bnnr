@@ -103,6 +103,14 @@ class RunRecord:
     #: without this is not reproducible across machines.
     augmentation_modes: dict[str, str] = field(default_factory=dict)
 
+    #: Why the selector landed where it did: ``"improved"``,
+    #: ``"no_improvement"``, ``"indistinguishable"``, ``"no_candidates"``.
+    selection_reason: str | None = None
+    #: The paired bootstrap interval behind that reason, when one was computed.
+    #: Recorded so a decision is auditable after the fact rather than only at
+    #: the moment it was made, which is what T20 had to reconstruct by hand.
+    selection_interval: dict[str, float | int] | None = None
+
     def to_dict(self) -> dict[str, Any]:
         """JSON-ready mapping. ``selected_candidate`` becomes a list."""
         data = asdict(self)

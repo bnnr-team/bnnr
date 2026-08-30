@@ -21,8 +21,10 @@ from bnnr.training import checkpoint as _ckpt
 from bnnr.training import dataset_profile as _dprofile
 from bnnr.training import hard_quantile as _hard_quantile
 from bnnr.training import metrics as _metrics
+from bnnr.training import paired as _paired
 from bnnr.training import probe as _probe
 from bnnr.training import run_record as _run_record
+from bnnr.training import selection as _selection
 from bnnr.training import shadow as _shadow
 from bnnr.training import xai_runner as _xai
 from bnnr.training.metrics import average_metrics
@@ -496,6 +498,12 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
                 flush=True,
             )
         baseline_metrics = evaluate(trainer, trainer.val_loader, cache_predictions=True)
+        # Per-sample correctness of the baseline's best epoch, for the paired
+        # indistinguishability test. Captured here because this is the one
+        # point where the cache belongs to the weights that will be compared.
+        trainer._baseline_correct = _paired.correctness_vector(
+            trainer._last_eval_preds, trainer._last_eval_labels
+        )
         # Overwrite the on-disk baseline checkpoint (per-epoch saves left the
         # last epoch) so resume restores the best baseline, not the last one.
         _ckpt.save_checkpoint(trainer, 0, "baseline", baseline_metrics)
@@ -643,6 +651,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
             per_candidate_durations: list[float] = []
             per_class_by_candidate: dict[str, dict[str, dict[str, float | int]]] = {}
             xai_scores_by_candidate: dict[str, float] = {}
+            candidate_correct: dict[str, Any] = {}
             for idx, augmentation in enumerate(candidate_bar, start=1):
                 t0 = time.perf_counter()
                 trainer.console.print(
@@ -675,6 +684,11 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
                 trainer._last_eval_labels = None
                 per_class_candidate, confusion_candidate = _metrics.compute_eval_class_details(trainer)
                 per_class_by_candidate[augmentation.name] = per_class_candidate
+                # The prediction cache now belongs to this candidate's best
+                # epoch, which is the state its metrics describe.
+                candidate_correct[augmentation.name] = _paired.correctness_vector(
+                    trainer._last_eval_preds, trainer._last_eval_labels
+                )
 
                 # Lightweight XAI probe per candidate (for XAI-aware selection)
                 _, cand_xai_diag, _ = _xai.generate_xai_lightweight(trainer,
@@ -759,11 +773,25 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
 
                 trainer._check_pause()
 
-        selected_name = trainer._select_best_path(
+        selection = _selection.run_selector(
             iteration_results,
             baseline_metrics,
-            xai_scores=xai_scores_by_candidate if candidates else None,
+            trainer.config,
+            xai_scores_by_candidate if candidates else None,
+            per_sample_correct=candidate_correct,
+            baseline_correct=trainer._baseline_correct,
         )
+        selected_name = selection.best
+        trainer._last_selection = selection
+        if selection.reason == "indistinguishable" and selection.interval is not None:
+            trainer.console.print(
+                f"  (candidates indistinguishable from baseline: "
+                f"Δ={selection.interval.difference:+.4f}, "
+                f"{int(selection.interval.confidence * 100)}% CI "
+                f"[{selection.interval.low:+.4f}, {selection.interval.high:+.4f}] "
+                f"— keeping baseline)",
+                flush=True,
+            )
         # Shadow records are only a calibration set once they say which arm won.
         trainer._shadow.mark_selected(iteration, selected_name)
         top_candidate_names = _branching.top_k_candidate_names(iteration_results, trainer.config, k=3)
@@ -990,6 +1018,14 @@ def _build_run_record(
         diagnosis=diagnosis.to_dict() if diagnosis is not None else None,
         hard_quantile_q=trainer.config.hard_quantile_q,
         augmentation_modes=_run_record.collect_augmentation_modes(trainer.augmentations),
+        selection_reason=(
+            trainer._last_selection.reason if trainer._last_selection is not None else None
+        ),
+        selection_interval=(
+            trainer._last_selection.interval.to_dict()
+            if trainer._last_selection is not None and trainer._last_selection.interval is not None
+            else None
+        ),
     )
 
 
