@@ -63,7 +63,7 @@ This is deliberate and it is the whole discipline of the exercise. Guessing them
 
 In a config these live under the `diagnosis:` key, and requesting `selector: diagnosis` with any required one unset fails at construction. See [configuration](configuration.md#diagnosis-thresholds) for the YAML shape and `bnnr.config.load_diagnosis_profile` for loading a calibrated set from file.
 
-**Shadow mode needs none of this.** It records the raw statistics rather than a regime, so it can start collecting calibration samples from every run that was going to happen anyway, at no extra GPU cost, before any threshold exists.
+**Shadow mode needs none of this.** It records the raw statistics rather than a regime, so it can start collecting calibration samples from every run that was going to happen anyway, at no extra GPU cost, before any threshold exists. It is on by default; see [`shadow_records.jsonl`](artifacts.md#shadow_recordsjsonl) for what it writes.
 
 ## Using it as a selector
 

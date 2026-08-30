@@ -342,6 +342,9 @@ def generate_xai(trainer, iteration: int, augmentation_name: str, confusion: dic
         target_layers=trainer.model.get_target_layers(),
         method=trainer.config.xai_method,
     )
+    # Shadow mode reads these where the candidate and its metrics are in scope.
+    # Stashing rather than threading keeps the XAI signatures unchanged.
+    trainer._last_saliency_maps = maps
 
     # Lightweight predictions for insight context (no extra forward pass cost
     # when the model is already in eval mode from generate_saliency_maps).
@@ -418,6 +421,9 @@ def generate_xai_lightweight(trainer, iteration: int, augmentation_name: str, co
         target_layers=trainer.model.get_target_layers(),
         method=trainer.config.xai_method,
     )
+    # Shadow mode reads these where the candidate and its metrics are in scope.
+    # Stashing rather than threading keeps the XAI signatures unchanged.
+    trainer._last_saliency_maps = maps
 
     # For multi-label: XAI maps target one class, so we use dominant (argmax).
     with torch.no_grad():

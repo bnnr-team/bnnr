@@ -103,6 +103,11 @@ class BNNRConfig(BaseModel):
     checkpoint_dir: Path = Path("checkpoints")
     report_dir: Path = Path("reports")
     xai_enabled: bool = True
+    #: Record the attention evidence on every run without letting it decide
+    #: anything, so calibration has something to calibrate on. Costs nothing
+    #: beyond maps the run already produces, hence on by default; it does
+    #: nothing when xai_enabled is False, since there are no maps to read.
+    shadow_mode: bool = True
     xai_samples: int = 4
     xai_method: str = "opticam"
     device: str = "auto"

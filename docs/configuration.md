@@ -52,6 +52,20 @@ seed: 42
 
 Both are gated the same way: whatever a selector picks is discarded unless it beat the baseline on `selection_metric`. That gate is deliberately shared, so a comparison between two selectors is a comparison of their ranking rules and nothing else. A selector that skipped it would look better purely by accepting runs the others reject.
 
+### Shadow mode
+
+- `shadow_mode` (default: `true`)
+
+Records the attention evidence on every run and lets none of it influence selection. For each candidate of each iteration it writes the saliency statistics, the robustness metrics, and whether that candidate was the one the run kept, to `shadow_records.jsonl` in the run directory.
+
+It is on by default because it costs nothing beyond maps the run already produces. It does nothing when `xai_enabled` is `false`, since there are no maps to read.
+
+**Records are raw statistics, never a regime.** Writing a regime would need thresholds, and the thresholds are exactly what these records exist to calibrate. It needs no `diagnosis:` block and guesses nothing.
+
+**Every candidate is recorded, not only the winner.** A calibration set containing only winning arms cannot answer "would the other choice have been better", which is the question the whole exercise turns on.
+
+`perturbation_shift` is deliberately not computed here: it needs a second explainer pass, and shadow mode's claim is that it is free. The three statistics that come from maps the run already made are what get recorded.
+
 ### Diagnosis thresholds
 
 `selector: diagnosis` requires a `diagnosis:` block, and **every field in it starts unset**:
