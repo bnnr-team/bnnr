@@ -92,7 +92,7 @@ class CandidateSelector(Protocol):
         config: BNNRConfig,
     ) -> SelectionResult:
         """Pick from *candidates*, or select nothing."""
-        ...
+        raise NotImplementedError
 
 
 def _resolved_values(candidates: list[CandidateReport], metric: str) -> dict[str, float]:
