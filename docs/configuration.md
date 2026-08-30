@@ -124,6 +124,8 @@ trainer = BNNRTrainer(
 - `xai_enabled` (default: `true`)
 - `xai_samples` (default: `4`)
 - `xai_method` (`opticam`, `gradcam`, `craft`, `nmf`, `nmf_concepts`, `real_craft`; default: `opticam`)
+The cache is keyed by sample index, so the DataLoader has to yield `(image, label, index)`. Wrap the dataset with `bnnr.IndexedDataset` if it does not. Without indices no map can be persisted and saliency is recomputed every batch; BNNR warns once per run when that happens.
+
 - `xai_cache_dir` (default: `null`): when `null`, the cache lives under the current run directory (`<report_dir>/run_<timestamp>/xai_cache`), so saliency maps are never silently reused across runs. Set an explicit path to share a cache between runs (you own invalidation in that case).
 - `xai_cache_samples` (default: `0` = whole dataset)
 - `xai_cache_max_samples` (default: `50000`)
@@ -144,6 +146,24 @@ The XAI cache is precomputed **after** the baseline phase, so masks from `ICD`/`
 - `candidate_pruning_warmup_epochs` (default: `1`, validated `>0`)
 - `reeval_baseline_per_iteration` (default: `false`)
 
+## Hard-quantile robustness fields
+
+- `hard_quantile_q` (default: `0.2`, validated `(0,1]`)
+
+The fraction of the validation set treated as "hard", ranked by per-sample loss. Every evaluation that caches predictions adds three fields to its metrics:
+
+| field | meaning |
+|---|---|
+| `hard_quantile_acc` | accuracy restricted to the highest-loss `hard_quantile_q` fraction |
+| `robustness_gap` | `overall accuracy - hard_quantile_acc` |
+| `hard_quantile_q` | the `q` those two were computed with |
+
+This is a label-free stand-in for "poor robustness to context shift". Group labels would answer the question directly, but consuming them costs the assumption BNNR is built on: images and labels, nothing else. Inferring the hard group from the loss is what the JTT/EIIL family does instead.
+
+A model that is uniformly mediocre has a small gap. A model that is excellent on the majority and fails a minority has a large one, which is the shape of a shortcut. The attention diagnosis reads `robustness_gap`; on its own it is a diagnostic you can watch.
+
+The loss is plain cross-entropy on the logits the prediction cache already captures, so it costs no second pass over the loader. It is deliberately not the trainer's own criterion: a weighted or label-smoothed criterion ranks samples by class frequency as much as by difficulty, and the ranking is the entire point. The three fields are single-label classification only; multilabel and detection runs do not carry them.
+
 ## Event logging fields
 
 - `event_log_enabled` (default: `true`)
@@ -155,6 +175,23 @@ The XAI cache is precomputed **after** the baseline phase, so masks from `ICD`/`
 
 - `denormalization_mean` (default: `null`)
 - `denormalization_std` (default: `null`)
+
+BNNR augmentations operate on unnormalised images, so a batch that has already
+been through `transforms.Normalize()` has to be converted back before it can be
+augmented. Set both fields to the statistics your DataLoader used and BNNR
+undoes the normalisation before each augmentation and reapplies it afterwards.
+The values are also used for report previews and XAI overlays.
+
+If a batch arrives outside both `[0, 1]` and `[0, 255]` and these fields are not
+set, BNNR raises `NormalisedInputError` rather than clipping the batch into
+`[0, 1]`, which would destroy the image without any visible error. The two ways
+out are to remove `Normalize()` from the DataLoader transforms and rely on
+BatchNorm in the model, which is what the built-in pipelines do, or to set these
+two fields.
+
+Batches that are already in `[0, 1]` or `[0, 255]` are never denormalised, so
+setting these fields for reporting alone does not change how such a batch is
+augmented.
 
 ## Task-specific fields
 

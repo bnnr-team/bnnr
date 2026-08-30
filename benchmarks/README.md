@@ -58,11 +58,15 @@ python benchmarks/run.py --list-conditions
 
 ## BNNR augmentations in this benchmark
 
-| Name | Role |
-|------|------|
-| **ICD** | Masks *high-saliency* regions — forces the model to look beyond the easiest cue |
-| **AICD** | Masks *low-saliency* background — reduces shortcut learning on context |
-| **ChurchNoise** | Lightweight noise aug — non-XAI candidate in the branch pool |
+| Name | What it masks | Right when |
+|------|---------------|------------|
+| **ICD** | The *most* salient tiles, above the threshold percentile | The model leans on a cue you want broken. ICD destroys what it currently relies on |
+| **AICD** | The *least* salient tiles | Attention is already on the object and the surrounding context needs suppressing |
+| **ChurchNoise** | Nothing saliency-guided; regional noise | Non-XAI candidate in the branch pool |
+
+**The least salient tiles are the background only when the model already attends the object.** On a model attending the background, which is the case ICD and AICD exist to help with, AICD masks the object instead. The two are opposite operations on attention, so which one is appropriate depends on where attention already is.
+
+BNNR does not currently diagnose that. It trains both candidates and keeps whichever scored higher on selection-validation accuracy, a criterion the T20 findings showed is close to orthogonal to the objective. Diagnosing the attention regime is bnnr-team/bnnr#403 and acting on it is bnnr-team/bnnr#413.
 
 The branch search keeps augmentations that improve validation accuracy; the winning path is recorded in `results.json` → `best_path`.
 
@@ -170,6 +174,7 @@ benchmarks/
 - **Unequal compute by design.** `bnnr_branch_search` runs a baseline phase plus branch search (more epochs of compute than the fixed-epoch baselines). Compare as *"full BNNR product vs fixed-epoch baselines"*, not equal-budget ablation.
 - **Not an ImageNet-SOTA claim.** This is a low-data fine-grained transfer setup for comparing augmentation *strategies*, not a leaderboard entry.
 - **Low-data, from-scratch by design.** A small balanced train subset trained from random init is what surfaces augmentation effects; `--train-per-class`, `--pretrained`, `--epochs`, and `--img-size` tune the regime.
+- **Fill sweeps share baselines and need enough seeds.** Fill-independent conditions run once and are reused across every fill, so a sweep only multiplies the ICD/AICD-using conditions. Ranking many fills is Holm-corrected: with 5 fills the "meaningful" verdict needs **≥ 8 seeds**, and `summarize_grand.py` prints an explicit *underpowered* note when that gate can't fire.
 
 ### Results
 
@@ -191,6 +196,7 @@ The Imagewoof benchmark above compares the **full BNNR product** against fixed-e
 | BNNR beats strong external baselines | vs RandAugment, TrivialAugment, AutoAugment |
 | ICD reduces shortcut learning | XAI metrics: edge ratio, gini, coverage |
 | Results generalize across domains | 6 datasets |
+| Which ICD/AICD fill strategy is best | `icd_only` across `--fill-strategies` |
 
 ### Conditions (10)
 
@@ -206,6 +212,16 @@ The Imagewoof benchmark above compares the **full BNNR product** against fixed-e
 | DTD | 47 | 120 | 224px | Textures |
 | FGVC-Aircraft | 100 | 33 | 224px | Aircraft |
 | EuroSAT | 10 | 100 | 64px | Satellite |
+
+### Fill strategy
+
+| Value | Fill |
+|-------|------|
+| `gaussian_blur` | Blurred copy of the region (**default**) |
+| `local_mean` | Per-region mean color |
+| `global_mean` | Whole-image mean color |
+| `noise` | Random noise (seed-controlled) |
+| `solid` | Constant fill |
 
 ### Protocol caveats (read before quoting numbers)
 
@@ -228,6 +244,11 @@ python benchmarks/run_grand_benchmark.py --dataset pets --device cuda
 
 # Summarize: Wilcoxon signed-rank + bootstrap CI + Holm-Bonferroni
 python benchmarks/summarize_grand.py --results-dir benchmarks/ --markdown
+# Same as above but "does any fill beat gaussian_blur?"
+python benchmarks/summarize_grand.py --results-dir benchmarks/ --markdown --reference-fill gaussian_blur
+
+# Fill-strategy ablation: sweep all five fills for icd_only
+python benchmarks/run_grand_benchmark.py --dataset imagewoof --device cuda --conditions icd_only --fill-strategies gaussian_blur,local_mean,global_mean,noise,solid
 ```
 
 Resume-safe: `results_{dataset}_{regime}.json` is checkpointed after every `(condition, seed)` run. Use `--drive-base-dir` to land results, run logs, and dataset cache under one directory (Colab/Drive).

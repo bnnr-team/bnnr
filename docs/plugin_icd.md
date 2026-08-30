@@ -20,14 +20,21 @@ pip install bnnr
 
 ## Requirements
 
-1. **Indexed batches** — your `DataLoader` should yield `(image, label, index)` so `XAICache` can key saliency maps per sample. Wrap any `(image, label)` dataset (see [minimal example](../examples/classification/icd_plugin_minimal.py)).
+1. **Indexed batches** — your `DataLoader` must yield `(image, label, index)` so `XAICache` can key saliency maps per sample. This is not optional: without the index nothing can be persisted, so ICD and AICD recompute saliency for every batch of every epoch and the only visible symptom is that training is slow. BNNR warns once per run when it detects this. Wrap any `(image, label)` dataset with `IndexedDataset` (see also the [minimal example](../examples/classification/icd_plugin_minimal.py)):
+
+   ```python
+   from torch.utils.data import DataLoader
+   from bnnr import IndexedDataset
+
+   train_loader = DataLoader(IndexedDataset(train_dataset), batch_size=64, shuffle=True)
+   ```
 2. **Images** — tensors in **`[0, 1]`** float `BCHW`, or uint8 converted inside ICD. Do not apply ImageNet `Normalize` before ICD unless you convert back for saliency.
 3. **`target_layers`** — list of `nn.Module` layers for Grad-CAM (typically the last `Conv2d` before the classifier).
 
 ## Minimal loop
 
 1. Build `model` and `target_layers`.
-2. Wrap the dataset with an index (third tuple element).
+2. Wrap the dataset with `IndexedDataset` so batches carry the sample index.
 3. **Precompute** saliency once per training run:
 
    ```python

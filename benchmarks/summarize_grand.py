@@ -7,6 +7,7 @@ Loads all ``results_*.json`` files from a directory and produces:
   3. XAI correlation section (Spearman ρ between edge_ratio and accuracy)
   4. Key comparison section (bnnr_xai vs bnnr_random, per dataset, with p-values)
   5. Compute transparency (total_gpu_epochs per condition)
+  6. Which fill is best (fill-using methods ranked across strategies)
 
 Examples
 --------
@@ -63,6 +64,12 @@ COMPARISON_CONDITIONS = [
     "no_aug", "randaugment", "trivialaugment", "autoaugment",
     "churchnoise_only", "icd_only", "aicd_only", "icd_aicd_fixed", "bnnr_random",
 ]
+
+FILL_STRATEGY_ORDER = ["gaussian_blur", "local_mean", "global_mean", "noise", "solid"]
+FILL_USING_CONDITIONS = [
+    "icd_only", "aicd_only", "icd_aicd_fixed", "bnnr_random", "bnnr_xai",
+]
+
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +283,7 @@ def _load_all_runs(results_dir: Path, regime_filter: str) -> list[dict[str, Any]
             run_regime = r.get("regime", "scratch")
             if regime_filter != "all" and run_regime != regime_filter:
                 continue
+            r.setdefault("fill_strategy", "none")
             runs.append(r)
     return runs
 
@@ -292,6 +300,7 @@ def _analyze_dataset(
     no_bootstrap: bool,
     n_boot: int,
     markdown: bool,
+    strategy: str = "none",
 ) -> None:
     """Print per-dataset condition table with statistics."""
     ds_runs = [r for r in runs if r.get("dataset") == dataset]
@@ -312,7 +321,7 @@ def _analyze_dataset(
             gpu_epochs_by_cond[cid].append(int(ep))
 
     print(f"\n{'='*70}")
-    print(f"  DATASET: {dataset.upper()}")
+    print(f"  DATASET: {dataset.upper()}  |  fill={strategy}")
     print(f"  Conditions found: {', '.join(sorted(by_cond))}")
     print(f"{'='*70}")
 
@@ -504,10 +513,11 @@ def _cross_dataset_table(
     datasets: list[str],
     *,
     markdown: bool,
+    strategy: str = "none",
 ) -> None:
     """Print a condition × dataset accuracy matrix with mean Δ."""
     print("\n" + "=" * 80)
-    print("  CROSS-DATASET SUMMARY  (median held_out_test accuracy per dataset)")
+    print(f"  CROSS-DATASET SUMMARY  (median held_out_test accuracy)  |  fill={strategy}")
     print("=" * 80)
 
     # Collect medians: by_cond_ds[cond][dataset] = median accuracy
@@ -597,10 +607,11 @@ def _xai_correlation_section(
     datasets: list[str],
     *,
     markdown: bool,
+    strategy: str = "none",
 ) -> None:
     """Print Spearman ρ between xai_edge_ratio and test_accuracy per dataset."""
     print("\n" + "=" * 70)
-    print("  XAI ANALYSIS: edge_ratio vs accuracy correlations")
+    print(f"  XAI ANALYSIS: edge_ratio vs accuracy correlations  |  fill={strategy}")
     print("=" * 70)
 
     for ds in datasets:
@@ -651,10 +662,11 @@ def _key_comparison_section(
     no_bootstrap: bool,
     n_boot: int,
     markdown: bool,
+    strategy: str = "none",
 ) -> None:
     """bnnr_xai vs bnnr_random, per dataset, with Wilcoxon p-values."""
     print("\n" + "=" * 70)
-    print("  KEY COMPARISON: bnnr_xai vs bnnr_random (per dataset)")
+    print(f"  KEY COMPARISON: bnnr_xai vs bnnr_random (per dataset)  |  fill={strategy}")
     print("  (Isolates the contribution of XAI-guided selection)")
     print("=" * 70)
 
@@ -760,10 +772,12 @@ def _key_comparison_section(
 def _compute_transparency_section(
     all_runs: list[dict[str, Any]],
     datasets: list[str],
+    *,
+    strategy: str = "none",
 ) -> None:
     """Print median total_gpu_epochs per condition."""
     print("\n" + "=" * 70)
-    print("  COMPUTE TRANSPARENCY: median total_gpu_epochs per condition")
+    print(f"  COMPUTE TRANSPARENCY: median total_gpu_epochs per condition  |  fill={strategy}")
     print("=" * 70)
     for ds in datasets:
         ds_runs = [r for r in all_runs if r.get("dataset") == ds]
@@ -782,6 +796,284 @@ def _compute_transparency_section(
         if parts:
             print(f"  {ds}: {', '.join(parts)}")
     print()
+
+# ---------------------------------------------------------------------------
+# Which fill is best
+# ---------------------------------------------------------------------------
+
+def _meaningful_gate_reachable(n_present: int, n_shared: int) -> tuple[bool, float]:
+    """Can the 'meaningful' verdict fire at all, given #strategies and #seeds?
+
+    (n_present - 1) tests are run against the reference, so Holm multiplies the
+    smallest raw p by (n_present - 1). The smallest a two-sided signed-rank p can
+    be at n_shared paired seeds (all diffs same sign, no ties) is 2 / 2**n_shared.
+    If even that best case times the Holm factor can't clear 0.05, no data can
+    make the gate fire. Returns (reachable, holm_floor); floor is a lower bound,
+    so an "unreachable" result here is definitive.
+    """
+    if n_shared < 2:
+        return False, 1.0
+    m = max(1, n_present - 1)
+    min_raw_p = 2.0 ** (1 - n_shared)  # = 2 / 2**n_shared
+    floor = min(1.0, min_raw_p * m)
+    return floor < 0.05, floor
+
+def _rank_strategies_for_method(
+    by_strat: dict[str, dict[int, float]],
+    strategies: list[str],
+    *,
+    no_bootstrap: bool,
+    n_boot: int,
+    reference: str | None = None,
+) -> dict[str, Any] | None:
+    """Rank fill strategies for one (dataset, method) cell on shared seeds.
+
+    reference=None  -> empirical-best mode: the top strategy by median is the
+                       reference; the verdict asks whether it is separated from
+                       the runner-up (original behaviour).
+    reference=<s>   -> fixed-reference mode: <s> (e.g. the library default) is the
+                       reference; the verdict asks whether any strategy *beats* it
+                       ("should we change the default?"). Falls back to empirical
+                       best, with a flag, if <s> has no data in this cell.
+    """
+    present = [s for s in strategies if by_strat.get(s)]
+    if len(present) < 2:
+        return None
+
+    shared = sorted(set.intersection(*(set(by_strat[s]) for s in present)))
+    if len(shared) < 2:
+        return {"insufficient": True, "present": present, "shared": shared}
+
+    vecs = {s: [by_strat[s][seed] for seed in shared] for s in present}
+    medians = {s: statistics.median(vecs[s]) for s in present}
+
+    order_index = {s: i for i, s in enumerate(FILL_STRATEGY_ORDER)}
+    ranked = sorted(present, key=lambda s: (-medians[s], order_index.get(s, len(order_index))))
+    top = ranked[0]
+
+    reference_missing = bool(reference) and reference not in present
+    if reference and reference in present:
+        ref, mode = reference, "reference"
+    else:
+        ref, mode = top, "best"
+    ref_vec = vecs[ref]
+
+    entries = []
+    for s in ranked:
+        if s == ref:
+            entries.append({"strategy": s, "median": medians[s], "is_ref": True,
+                            "delta": None, "p": None, "p_holm": None, "r": None,
+                            "stars": "—", "ci_lo": float("nan"), "ci_hi": float("nan")})
+            continue
+        wres = _wilcoxon_signed_rank(vecs[s], ref_vec)
+        W, p, r = wres if wres is not None else (None, None, None)
+        ci_lo, ci_hi = float("nan"), float("nan")
+        if wres is not None and not no_bootstrap:
+            # Δ orientation: strategy - ref (positive => strategy is higher).
+            ci_lo, ci_hi = _bootstrap_median_diff_ci(vecs[s], ref_vec, n_boot=n_boot, rng_seed=42)
+        entries.append({"strategy": s, "median": medians[s], "is_ref": False,
+                        "delta": (medians[s] - medians[ref]) * 100,
+                        "p": p, "p_holm": None, "r": r, "stars": _sig_stars(p),
+                        "ci_lo": ci_lo, "ci_hi": ci_hi})
+
+    testable = [e for e in entries if not e["is_ref"] and e["p"] is not None]
+    if testable:
+        for e, p_adj in zip(testable, _holm_bonferroni([e["p"] for e in testable])):
+            e["p_holm"] = p_adj
+            e["stars"] = _sig_stars(p_adj)
+
+    non_ref = [e for e in entries if not e["is_ref"]]
+    challenger = non_ref[0] if non_ref else None  # highest-median non-reference strategy
+
+    def _sig_and_ci(e):
+        if e is None or e["p_holm"] is None:
+            return False
+        ci_excl = (not math.isnan(e["ci_lo"]) and not math.isnan(e["ci_hi"])
+                   and not (e["ci_lo"] <= 0.0 <= e["ci_hi"]))
+        return e["p_holm"] < 0.05 and (no_bootstrap or ci_excl)
+
+    if mode == "reference":
+        meaningful = (challenger is not None and challenger["median"] > medians[ref]
+                      and _sig_and_ci(challenger))
+    else:
+        meaningful = _sig_and_ci(challenger)  # challenger == runner-up in best mode
+
+    gate_reachable, holm_floor = _meaningful_gate_reachable(len(present), len(shared))
+
+    return {"insufficient": False, "mode": mode, "reference": ref,
+            "reference_requested": reference, "reference_missing": reference_missing,
+            "reference_is_top": ref == top, "shared": shared, "best": top,
+            "challenger": challenger["strategy"] if challenger else None,
+            "runner_up": challenger["strategy"] if challenger else None,
+            "entries": entries, "meaningful": meaningful,
+            "gate_reachable": gate_reachable, "holm_floor": holm_floor}
+
+def _which_fill_is_best_section(
+    all_runs: list[dict[str, Any]],
+    datasets: list[str],
+    strategies: list[str],
+    *,
+    no_bootstrap: bool,
+    n_boot: int,
+    markdown: bool,
+    reference: str | None = None,
+) -> None:
+    """Rank fill strategies head-to-head for each fill-using method (Phase 4).
+
+    Runs once over the whole result set (not per-strategy view). For every
+    dataset and fill-using method it compares strategies on shared seeds using
+    the held-out split metric, ranks them, tests best-vs-each with Wilcoxon +
+    bootstrap CI, and states whether the top gap is meaningful. Fill-independent
+    methods are excluded — there is nothing to compare across fills.
+    """
+    print("\n" + "#" * 80)
+    print("#  WHICH FILL IS BEST  (fill-using methods, held-out split)")
+    print("#  Strategies compared on shared seeds, ranked by median held-out accuracy.")
+    if reference:
+        print(f"#  Reference-anchored mode: testing whether any fill beats '{reference}' (the default).")
+    print("#" * 80)
+
+    if len(strategies) < 2:
+        print(
+            "\n  Only one fill strategy present "
+            f"({strategies[0] if strategies else 'none'}); nothing to rank.\n"
+        )
+        return
+
+    any_output = False
+    for ds in datasets:
+        ds_runs = [r for r in all_runs if r.get("dataset") == ds]
+        if not ds_runs:
+            continue
+
+        # method -> strategy -> {seed: held_out_metric}
+        by_method: dict[str, dict[str, dict[int, float]]] = defaultdict(
+            lambda: defaultdict(dict)
+        )
+        for r in ds_runs:
+            cid = r["condition"]
+            if cid not in FILL_USING_CONDITIONS:
+                continue
+            strat = r.get("fill_strategy", "none")
+            if strat == "none":
+                continue  # a fill-using method must carry a real strategy tag
+            metric = float(r.get("held_out_test_metric") or r.get("val_metric") or 0.0)
+            by_method[cid][strat][int(r["seed"])] = metric
+
+        methods_present = [c for c in FILL_USING_CONDITIONS if c in by_method]
+        if not methods_present:
+            continue
+
+        print(f"\n{'='*70}")
+        print(f"  DATASET: {ds.upper()}")
+        print(f"{'='*70}")
+        any_output = True
+
+        for cid in methods_present:
+            result = _rank_strategies_for_method(
+                by_method[cid], strategies,
+                no_bootstrap=no_bootstrap, n_boot=n_boot,
+                reference=reference,
+            )
+            label = DISPLAY_NAMES.get(cid, cid)
+            if result is None:
+                print(f"\n  {label} ({cid}): only one strategy has data — nothing to rank.")
+                continue
+            if result.get("insufficient"):
+                n_sh = len(result["shared"])
+                print(
+                    f"\n  {label} ({cid}): insufficient shared-seed data "
+                    f"(n={n_sh}); need >= 2 seeds common to all strategies."
+                )
+                continue
+
+            if markdown:
+                _print_fill_ranking_markdown(cid, label, result)
+            else:
+                _print_fill_ranking_text(cid, label, result)
+
+    if not any_output:
+        print("\n  No fill-using method has multi-strategy data to rank.\n")
+
+
+def _verdict_line(result: dict[str, Any]) -> str:
+    ref = result["reference"]
+    challenger = result.get("challenger")
+    if result.get("mode") == "reference":
+        if result["meaningful"]:
+            return f"{challenger} beats the reference ({ref}) significantly — candidate to replace the default."
+        if result.get("reference_is_top"):
+            return f"reference ({ref}) has the highest median; no strategy beats it — keep the default."
+        return f"{challenger} leads the reference ({ref}) but not significantly — keep the default (change unjustified)."
+    if result["meaningful"]:
+        return f"best: {ref} — gap to runner-up ({challenger}) is significant (meaningful)."
+    return (f"best: {ref} — but not clearly separated from runner-up ({challenger}); "
+            "treat the ranking as tentative.")
+
+
+def _print_fill_ranking_text(cid: str, label: str, result: dict[str, Any]) -> None:
+    shared = result["shared"]
+    seed_s = ",".join(str(s) for s in shared)
+    ref = result["reference"]
+    tag = "reference" if result.get("mode") == "reference" else "best"
+    print(f"\n  {label} ({cid})  — shared seeds n={len(shared)}: {seed_s}")
+    if result.get("reference_missing"):
+        print(f"    note: requested reference {result.get('reference_requested')!r} "
+              f"has no data here; using empirical best ({ref}).")
+    for i, e in enumerate(result["entries"], start=1):
+        med_s = f"{e['median']*100:.2f}%"
+        if e["is_ref"]:
+            print(f"    {i}. {e['strategy']:<14} {med_s:>8}   ({tag})")
+            continue
+        ci_s = ""
+        if not (math.isnan(e["ci_lo"]) or math.isnan(e["ci_hi"])):
+            ci_s = f"  CI=[{e['ci_lo']*100:+.2f},{e['ci_hi']*100:+.2f}]pp"
+        r_s = f"{e['r']:.2f}" if e["r"] is not None else "—"
+        print(
+            f"    {i}. {e['strategy']:<14} {med_s:>8}   "
+            f"Δ={e['delta']:+.2f}pp vs {ref}  "
+            f"{_p_label(e['p_holm'])} {e['stars']}  r={r_s}{ci_s}"
+        )
+    print(f"    -> {_verdict_line(result)}")
+    if not result.get("gate_reachable", True):
+        n_strat = len(result["entries"])
+        print(
+            f"    note: underpowered — with {n_strat} strategies and n={len(shared)} shared "
+            f"seeds the 'meaningful' gate cannot fire (best-case Holm p>={result['holm_floor']:.4f}); "
+            f"any verdict reads 'tentative'. Increase seeds (>=8 for 5 strategies)."
+        )
+
+
+def _print_fill_ranking_markdown(cid: str, label: str, result: dict[str, Any]) -> None:
+    shared = result["shared"]
+    ref = result["reference"]
+    tag = "reference" if result.get("mode") == "reference" else "best"
+    print(f"\n**{label} (`{cid}`)** — shared seeds n={len(shared)}")
+    if result.get("reference_missing"):
+        print(f"\n> requested reference `{result.get('reference_requested')}` has no data here; "
+              f"using empirical best (`{ref}`).")
+    print("| Rank | Strategy | Median | Δ vs ref | p (Holm) | stars | r | Bootstrap 95% CI |")
+    print("|------|----------|--------|---------|---|-------|---|------------------|")
+    for i, e in enumerate(result["entries"], start=1):
+        med_s = f"{e['median']*100:.2f}%"
+        if e["is_ref"]:
+            print(f"| {i} | {e['strategy']} | {med_s} | ({tag}) | — | — | — | — |")
+            continue
+        ci_s = (f"[{e['ci_lo']*100:+.2f}, {e['ci_hi']*100:+.2f}]pp"
+                if not (math.isnan(e["ci_lo"]) or math.isnan(e["ci_hi"])) else "—")
+        r_s = f"{e['r']:.2f}" if e["r"] is not None else "—"
+        print(
+            f"| {i} | {e['strategy']} | {med_s} | {e['delta']:+.2f}pp | "
+            f"{_p_label(e['p_holm'])} | {e['stars']} | {r_s} | {ci_s} |"
+        )
+    print(f"\n**{_verdict_line(result).capitalize()}**")
+    if not result.get("gate_reachable", True):
+        n_strat = len(result["entries"])
+        print(
+            f"\n> **Underpowered:** {n_strat} strategies, n={len(shared)} shared seeds — "
+            f"the 'meaningful' gate cannot fire (best-case Holm p>={result['holm_floor']:.4f}); "
+            f"any verdict reads 'tentative'. Increase seeds (>=8 for 5 strategies)."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -819,6 +1111,13 @@ def main() -> None:
         default=10_000,
         help="Bootstrap resampling iterations (default 10000)",
     )
+    parser.add_argument(
+        "--reference-fill",
+        default=None,
+        help="Anchor the 'which fill is best' comparison on this fixed strategy "
+             "(e.g. the current library default 'gaussian_blur') and ask whether any "
+             "fill beats it. Default: rank by empirical best and test best-vs-runner-up.",
+    )
     args = parser.parse_args()
 
     if not args.results_dir.exists():
@@ -841,36 +1140,64 @@ def main() -> None:
         if not datasets:
             datasets = found
 
+    real_strategies = {r.get("fill_strategy", "none") for r in all_runs} - {"none"}
+    strategies = [s for s in FILL_STRATEGY_ORDER if s in real_strategies]
+    strategies += sorted(real_strategies - set(FILL_STRATEGY_ORDER))
+    if not strategies:
+        strategies = ["none"]  # baseline-only file: a single unlabelled pass
+
     print(f"\nGrand Benchmark Summary  |  regime={args.regime}")
     print(f"Results dir: {args.results_dir}")
     print(f"Datasets: {', '.join(datasets)}")
+    print(f"Fill strategies: {', '.join(strategies)}")
     print(f"Total valid runs: {len(all_runs)}")
 
-    # 1. Per-dataset tables
-    for ds in datasets:
-        _analyze_dataset(
-            ds, all_runs,
+    for strategy in strategies:
+        # View = this strategy's fill-using results + the shared "none" baselines.
+        view = [
+            r for r in all_runs
+            if r.get("fill_strategy", "none") in (strategy, "none")
+        ]
+
+        print("\n" + "#" * 80)
+        print(f"#  FILL STRATEGY: {strategy}   ({len(view)} runs in view)")
+        print("#" * 80)
+
+        # 1. Per-dataset tables
+        for ds in datasets:
+            _analyze_dataset(
+                ds, view,
+                no_bootstrap=args.no_bootstrap,
+                n_boot=args.bootstrap_n,
+                markdown=args.markdown,
+                strategy=strategy,
+            )
+
+        # 2. Cross-dataset summary table
+        _cross_dataset_table(view, datasets, markdown=args.markdown, strategy=strategy)
+
+        # 3. XAI correlation section
+        _xai_correlation_section(view, datasets, markdown=args.markdown, strategy=strategy)
+
+        # 4. Key comparison: bnnr_xai vs bnnr_random
+        _key_comparison_section(
+            view, datasets,
             no_bootstrap=args.no_bootstrap,
             n_boot=args.bootstrap_n,
             markdown=args.markdown,
+            strategy=strategy,
         )
 
-    # 2. Cross-dataset summary table
-    _cross_dataset_table(all_runs, datasets, markdown=args.markdown)
+        # 5. Compute transparency
+        _compute_transparency_section(view, datasets, strategy=strategy)
 
-    # 3. XAI correlation section
-    _xai_correlation_section(all_runs, datasets, markdown=args.markdown)
-
-    # 4. Key comparison: bnnr_xai vs bnnr_random
-    _key_comparison_section(
-        all_runs, datasets,
+    _which_fill_is_best_section(
+        all_runs, datasets, strategies,
         no_bootstrap=args.no_bootstrap,
         n_boot=args.bootstrap_n,
         markdown=args.markdown,
+        reference=args.reference_fill,
     )
-
-    # 5. Compute transparency
-    _compute_transparency_section(all_runs, datasets)
 
     # Footer
     print(

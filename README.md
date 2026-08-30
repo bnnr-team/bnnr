@@ -50,7 +50,7 @@ Run `bnnr analyze` on a trained model and you get a self-contained HTML report: 
 - **My augmentations are guesswork.** → ICD/AICD condition augmentation on saliency maps, then a branch search keeps only the augmentations that measurably improve your validation metric.
 - **I need to prove model quality to stakeholders or compliance.** → A portable `report.html` plus a structured JSON audit artifact you can attach to a review.
 
-<sub>BNNR also ships a training pipeline (`bnnr train`), a live dashboard, multi-label support, and object detection (YOLO / COCO-mini). Single-label classification is the focus for `analyze`. Supported tasks in **v0.6.5**: single-label classification, multi-label classification, object detection. Full docs: [docs/README.md](docs/README.md) ([analyze](docs/analyze.md) · [detection](docs/detection.md) · [benchmarks](docs/benchmarks.md)).</sub><!-- x-release-please-version -->
+<sub>BNNR also ships a training pipeline (`bnnr train`), a live dashboard, multi-label support, and object detection (YOLO / COCO-mini). Single-label classification is the focus for `analyze`. Supported tasks in **v0.7.3**: single-label classification, multi-label classification, object detection. Full docs: [docs/README.md](docs/README.md) ([analyze](docs/analyze.md) · [detection](docs/detection.md) · [benchmarks](docs/benchmarks.md)).</sub><!-- x-release-please-version -->
 
 ---
 
@@ -101,7 +101,7 @@ Advanced: pass `--config path.yaml` to override defaults.
 
 ## XAI-driven augmentations (ICD & AICD)
 
-BNNR uses saliency maps to guide augmentation, not random flips and crops. One Grad-CAM map yields two targeted augmentations: **ICD** hides the most salient region (so the model cannot lean on a shortcut), **AICD** hides the background (so it focuses on the object).
+BNNR uses saliency maps to guide augmentation, not random flips and crops. One Grad-CAM map yields two opposite augmentations: **ICD** hides the most salient tiles, so the model cannot lean on whatever it currently relies on; **AICD** hides the least salient tiles, which suppresses the surrounding context once attention is already on the object.
 
 <p align="center">
   <img src="docs/assets/icd-aicd-comparison.png" alt="One saliency map, two augmentations (ICD and AICD) on dog, cat, espresso, and car" width="760">

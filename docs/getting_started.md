@@ -104,6 +104,8 @@ python -m bnnr demo
 
 This downloads CIFAR-10 if needed, trains a small demo CNN with the **`demo`** augmentation preset (ICD + ChurchNoise), opens the live dashboard, and prints paths to your report and XAI heatmaps when finished.
 
+The demo keeps the dashboard running after training finishes. Press `Ctrl+C` to exit once you've seen the report paths.
+
 ## 5) Python quickstart (`quick_run`)
 
 If you already have a PyTorch model and dataloaders:
@@ -226,6 +228,8 @@ python -m bnnr dashboard serve --run-dir reports_quickstart --port 8080 --token 
 
 ## 10) Read the generated report
 
+Steps 10-12 assume you trained with the sample config from step 6, which writes to `reports_quickstart/`. If you used a default command instead (`python -m bnnr demo`, or `train` without `--config`), your runs are under `reports/`, so substitute that directory below.
+
 ```bash
 RUN_DIR=$(ls -1dt reports_quickstart/run_* | head -n 1)
 python -m bnnr report "$RUN_DIR/report.json" --format summary
@@ -289,12 +293,12 @@ See [troubleshooting.md](troubleshooting.md) section 13 for details on checkpoin
 
 ## 15) Next pages
 
-- `analyze.md` — full `bnnr analyze` guide (Python API, custom datasets, torchvision models, multi-label)
-- `dashboard.md`
-- `detection.md`
-- `examples.md`
-- `notebooks.md`
-- `configuration.md`
-- `cli.md`
-- `api_reference.md`
-- `troubleshooting.md`
+- [analyze.md](analyze.md) — full `bnnr analyze` guide (Python API, custom datasets, torchvision models, multi-label)
+- [dashboard.md](dashboard.md)
+- [detection.md](detection.md)
+- [examples.md](examples.md)
+- [notebooks.md](notebooks.md)
+- [configuration.md](configuration.md)
+- [cli.md](cli.md)
+- [api_reference.md](api_reference.md)
+- [troubleshooting.md](troubleshooting.md)

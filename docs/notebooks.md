@@ -97,7 +97,7 @@ python3 scripts/validate_user_notebooks.py
 
 ## Quality notes from notebook audit
 During B11 notebook hardening, the following were normalized:
-- valid Colab links to `mateuszwalo/BNNR`,
+- valid Colab links to `bnnr-team/bnnr`,
 - modern CLI examples (`python3 -m bnnr ...`, no legacy `bnnr.cli`),
 - kernelspec metadata set to `python3`,
 - dashboard cells aligned for local + Colab + optional mobile flow,

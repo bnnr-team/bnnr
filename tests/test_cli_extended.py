@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -305,3 +306,129 @@ class TestPrintPipelineSummary:
             preset="light",
             custom_data_path=Path("/fake/path"),
         )
+
+
+class TestQuickstartCommand:
+    """Run CI smoke for 'bnnr quickstart'"""
+    def test_quickstart_command(self):
+        result = runner.invoke(
+            app, ["quickstart"],
+            input="mnist\n\n\nn\n"
+        )
+
+        assert result.exit_code == 0
+        assert "TRAINING COMPLETE" in result.stdout
+
+
+class TestDashboardCommand:
+    """Smoke tests for the dashboard CLI subcommands."""
+
+    def test_dashboard_serve(self, tmp_path):
+        run_dir = tmp_path / "reports"
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch("uvicorn.run") as run:
+            result = runner.invoke(
+                app,
+                [
+                    "dashboard",
+                    "serve",
+                    "--run-dir",
+                    str(run_dir),
+                    "--port",
+                    "9090"
+                ],
+            )
+
+        assert result.exit_code == 0
+        run.assert_called_once()
+
+    def test_dashboard_export(self, monkeypatch, tmp_path):
+        run_dir = tmp_path / "run_1"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "events.jsonl").write_text(
+            json.dumps(
+                {
+                    "schema_version": "2.1",
+                    "sequence": 1,
+                    "run_id": "run_1",
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "type": "run_started",
+                    "payload": {"run_name": "run_1"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        artifacts_dir = run_dir / "artifacts"
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        (artifacts_dir / "a.txt").write_text("artifact", encoding="utf-8")
+        out_dir = tmp_path / "exported"
+
+        frontend_dist = tmp_path / "frontend_dist"
+        frontend_dist.mkdir(parents=True, exist_ok=True)
+        (frontend_dist / "index.html").write_text("<html></html>", encoding="utf-8")
+
+        exported_path = out_dir / "bundle"
+        captured: dict[str, Path | None] = {}
+
+        def fake_export_dashboard_snapshot(*, run_dir, out_dir, frontend_dist=None):
+            captured["run_dir"] = run_dir
+            captured["out_dir"] = out_dir
+            captured["frontend_dist"] = frontend_dist
+            return exported_path
+
+        monkeypatch.setattr("bnnr.dashboard.exporter.export_dashboard_snapshot", fake_export_dashboard_snapshot)
+
+        result = runner.invoke(
+            app,
+            [
+                "dashboard",
+                "export",
+                "--run-dir",
+                str(run_dir),
+                "--output",
+                str(out_dir),
+                "--frontend-dist",
+                str(frontend_dist),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert f"Exported dashboard snapshot to: {exported_path}" in result.stdout
+
+    def test_dashboard_export_missing_run_dir(self, tmp_path):
+        output = tmp_path / "output"
+        output.mkdir(parents=True, exist_ok=True)
+
+        result = runner.invoke(
+            app,
+            [
+                "dashboard",
+                "export",
+                "--run-dir",
+                "/does/not/exist",
+                "--output",
+                str(output)
+            ],
+        )
+
+        assert result.exit_code != 0
+
+    def test_dashboard_export_missing_output_dir(self, tmp_path):
+        run_dir = tmp_path / "run_1"
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        result = runner.invoke(
+            app,
+            [
+                "dashboard",
+                "export",
+                "--run-dir",
+                str(run_dir),
+                "--output",
+                "/does/not/exist",
+            ],
+        )
+
+        assert result.exit_code != 0

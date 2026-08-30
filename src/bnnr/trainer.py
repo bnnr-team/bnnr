@@ -182,12 +182,30 @@ class BNNRTrainer:
     _clone_state_dict = staticmethod(clone_state_dict)
     _copy_state_dict_inplace = staticmethod(copy_state_dict_inplace)
 
-    def _tensor_to_uint8(self, images: Tensor) -> np.ndarray:
-        return _img.tensor_to_uint8(images, warn_context=self)
+    def _batch_scale(self, images: Tensor) -> _img.BatchScale:
+        """Detect the batch convention using the configured denormalisation stats."""
+        return _img.detect_batch_scale(
+            images,
+            denorm_mean=self.config.denormalization_mean,
+            denorm_std=self.config.denormalization_std,
+        )
+
+    def _tensor_to_uint8(self, images: Tensor, *, scale: _img.BatchScale | None = None) -> np.ndarray:
+        return _img.tensor_to_uint8(
+            images,
+            scale=scale,
+            denorm_mean=self.config.denormalization_mean,
+            denorm_std=self.config.denormalization_std,
+        )
 
     @staticmethod
-    def _uint8_to_tensor(np_images: np.ndarray, *, ref_batch: Tensor) -> Tensor:
-        return _img.uint8_to_tensor(np_images, ref_batch=ref_batch)
+    def _uint8_to_tensor(
+        np_images: np.ndarray,
+        *,
+        ref_batch: Tensor,
+        scale: _img.BatchScale | None = None,
+    ) -> Tensor:
+        return _img.uint8_to_tensor(np_images, ref_batch=ref_batch, scale=scale)
 
     @staticmethod
     def _det_uint8_batch_to_float01(np_images: np.ndarray, *, ref_batch: Tensor) -> Tensor:
