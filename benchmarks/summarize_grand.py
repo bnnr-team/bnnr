@@ -312,6 +312,7 @@ def _analyze_dataset(
     by_cond: dict[str, dict[int, float]] = defaultdict(dict)
     gpu_epochs_by_cond: dict[str, list[int]] = defaultdict(list)
     deployed_epochs_by_cond: dict[str, list[int]] = defaultdict(list)
+    ece_by_cond: dict[str, list[float]] = defaultdict(list)
     for r in ds_runs:
         cid = r["condition"]
         seed = int(r["seed"])
@@ -325,6 +326,12 @@ def _analyze_dataset(
         dep = r.get("deployed_epochs")
         if dep is not None:
             deployed_epochs_by_cond[cid].append(int(dep))
+        # ECE was recorded from the start and never printed. On Imagewoof the
+        # most accurate conditions are the worst calibrated by roughly an order
+        # of magnitude, which is a headline fact rather than a JSON field.
+        ece = r.get("test_ece")
+        if ece is not None:
+            ece_by_cond[cid].append(float(ece))
 
     print(f"\n{'='*70}")
     print(f"  DATASET: {dataset.upper()}  |  fill={strategy}")
@@ -404,6 +411,8 @@ def _analyze_dataset(
         gpu_ep_s = str(int(statistics.median(gpu_epochs_list))) if gpu_epochs_list else "?"
         deployed_list = deployed_epochs_by_cond.get(cid, [])
         dep_ep_s = str(int(statistics.median(deployed_list))) if deployed_list else "?"
+        ece_list = ece_by_cond.get(cid, [])
+        ece_s = f"{statistics.median(ece_list):.3f}" if ece_list else "?"
 
         rows.append({
             "cid": cid,
@@ -419,6 +428,7 @@ def _analyze_dataset(
             "ci": ci_s,
             "gpu_epochs": gpu_ep_s,
             "deployed_epochs": dep_ep_s,
+            "ece": ece_s,
             "per_seed": ", ".join(f"{v*100:.2f}%" for v in sorted(vals)),
         })
 
@@ -435,8 +445,13 @@ def _print_text_table(rows: list[dict[str, Any]]) -> None:
     w = 38
     header = (
         f"{'Condition':<{w}} {'Median':>8} {'±IQR':>8} {'Mean':>8} {'±Std':>7} "
-        f"{'n':>3} {'Δ vs no_aug':>12} {'p(Holm)':>18} {'r':>6} {'GPU-ep':>8} {'Depl-ep':>8}"
+        f"{'n':>3} {'Δ vs no_aug':>12} {'p(Holm)':>18} {'r':>6} {'ECE':>7} "
+        f"{'GPU-ep':>8} {'Depl-ep':>8}"
     )
+    # Say what the ordering means. Accuracy and calibration reverse the ranking
+    # on this data, so a table sorted by one and read as "best" is misleading.
+    print("  ranked by: median held-out accuracy (higher better). "
+          "ECE is calibration error (LOWER better) and does not follow it.")
     print(header)
     print("-" * len(header))
     for row in rows:
@@ -447,7 +462,7 @@ def _print_text_table(rows: list[dict[str, Any]]) -> None:
         print(
             f"{row['label']:<{w}} {med_s:>8} {iqr_s:>8} {mn_s:>8} {std_s:>7} "
             f"{row['n']:>3} {row['delta']:>12} {row['p_holm']:>18} {row['r']:>6} "
-            f"{row['gpu_epochs']:>8} {row['deployed_epochs']:>8}"
+            f"{row['ece']:>7} {row['gpu_epochs']:>8} {row['deployed_epochs']:>8}"
         )
         print(f"  per-seed: {row['per_seed']}")
     print()
@@ -455,14 +470,20 @@ def _print_text_table(rows: list[dict[str, Any]]) -> None:
 
 def _print_markdown_table(rows: list[dict[str, Any]]) -> None:
     print(
+        "Ranked by median held-out accuracy (higher better). "
+        "ECE is calibration error, where **lower is better**, and it does not "
+        "follow the accuracy ranking: on Imagewoof the most accurate conditions "
+        "are the worst calibrated by roughly an order of magnitude.\n"
+    )
+    print(
         "| Condition | Median | ±IQR | mean±std | n | "
         "Δ vs no_aug | p (Holm) vs bnnr_xai | r | Bootstrap 95% CI | "
-        "GPU-epochs | Deployed epochs |"
+        "ECE ↓ | GPU-epochs | Deployed epochs |"
     )
     print(
         "|-----------|--------|------|----------|---|"
         "------------|---------------------|---|-----------------|"
-        "-----------|-----------------|"
+        "-------|-----------|-----------------|"
     )
     for row in rows:
         med_s = f"{row['median']*100:.2f}%"
@@ -478,7 +499,7 @@ def _print_markdown_table(rows: list[dict[str, Any]]) -> None:
             f"| {row['p_holm']} "
             f"| {row['r']} "
             f"| {row['ci']} "
-            f"| {row['gpu_epochs']} | {row['deployed_epochs']} |"
+            f"| {row['ece']} | {row['gpu_epochs']} | {row['deployed_epochs']} |"
         )
 
 
