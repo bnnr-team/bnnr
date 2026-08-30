@@ -6,7 +6,7 @@ Loads all ``results_*.json`` files from a directory and produces:
   2. Cross-dataset summary table (median accuracy per dataset, mean Δ vs no_aug)
   3. XAI correlation section (Spearman ρ between edge_ratio and accuracy)
   4. Key comparison section (bnnr_xai vs bnnr_random, per dataset, with p-values)
-  5. Compute transparency (total_gpu_epochs per condition)
+  5. Compute transparency (total and deployed epochs per condition)
   6. Which fill is best (fill-using methods ranked across strategies)
 
 Examples
@@ -311,6 +311,7 @@ def _analyze_dataset(
     # Group by condition → seed → metric
     by_cond: dict[str, dict[int, float]] = defaultdict(dict)
     gpu_epochs_by_cond: dict[str, list[int]] = defaultdict(list)
+    deployed_epochs_by_cond: dict[str, list[int]] = defaultdict(list)
     for r in ds_runs:
         cid = r["condition"]
         seed = int(r["seed"])
@@ -319,6 +320,11 @@ def _analyze_dataset(
         ep = r.get("total_gpu_epochs")
         if ep is not None:
             gpu_epochs_by_cond[cid].append(int(ep))
+        # Absent in records written before FIX-3-1. Those rows print "?" rather
+        # than crashing the summarizer, which is the point of reading with .get.
+        dep = r.get("deployed_epochs")
+        if dep is not None:
+            deployed_epochs_by_cond[cid].append(int(dep))
 
     print(f"\n{'='*70}")
     print(f"  DATASET: {dataset.upper()}  |  fill={strategy}")
@@ -396,6 +402,8 @@ def _analyze_dataset(
 
         gpu_epochs_list = gpu_epochs_by_cond.get(cid, [])
         gpu_ep_s = str(int(statistics.median(gpu_epochs_list))) if gpu_epochs_list else "?"
+        deployed_list = deployed_epochs_by_cond.get(cid, [])
+        dep_ep_s = str(int(statistics.median(deployed_list))) if deployed_list else "?"
 
         rows.append({
             "cid": cid,
@@ -410,6 +418,7 @@ def _analyze_dataset(
             "r": r_s,
             "ci": ci_s,
             "gpu_epochs": gpu_ep_s,
+            "deployed_epochs": dep_ep_s,
             "per_seed": ", ".join(f"{v*100:.2f}%" for v in sorted(vals)),
         })
 
@@ -426,7 +435,7 @@ def _print_text_table(rows: list[dict[str, Any]]) -> None:
     w = 38
     header = (
         f"{'Condition':<{w}} {'Median':>8} {'±IQR':>8} {'Mean':>8} {'±Std':>7} "
-        f"{'n':>3} {'Δ vs no_aug':>12} {'p(Holm)':>18} {'r':>6} {'GPU-ep':>8}"
+        f"{'n':>3} {'Δ vs no_aug':>12} {'p(Holm)':>18} {'r':>6} {'GPU-ep':>8} {'Depl-ep':>8}"
     )
     print(header)
     print("-" * len(header))
@@ -438,7 +447,7 @@ def _print_text_table(rows: list[dict[str, Any]]) -> None:
         print(
             f"{row['label']:<{w}} {med_s:>8} {iqr_s:>8} {mn_s:>8} {std_s:>7} "
             f"{row['n']:>3} {row['delta']:>12} {row['p_holm']:>18} {row['r']:>6} "
-            f"{row['gpu_epochs']:>8}"
+            f"{row['gpu_epochs']:>8} {row['deployed_epochs']:>8}"
         )
         print(f"  per-seed: {row['per_seed']}")
     print()
@@ -447,11 +456,13 @@ def _print_text_table(rows: list[dict[str, Any]]) -> None:
 def _print_markdown_table(rows: list[dict[str, Any]]) -> None:
     print(
         "| Condition | Median | ±IQR | mean±std | n | "
-        "Δ vs no_aug | p (Holm) vs bnnr_xai | r | Bootstrap 95% CI | GPU-epochs |"
+        "Δ vs no_aug | p (Holm) vs bnnr_xai | r | Bootstrap 95% CI | "
+        "GPU-epochs | Deployed epochs |"
     )
     print(
         "|-----------|--------|------|----------|---|"
-        "------------|---------------------|---|-----------------|-----------|"
+        "------------|---------------------|---|-----------------|"
+        "-----------|-----------------|"
     )
     for row in rows:
         med_s = f"{row['median']*100:.2f}%"
@@ -467,7 +478,7 @@ def _print_markdown_table(rows: list[dict[str, Any]]) -> None:
             f"| {row['p_holm']} "
             f"| {row['r']} "
             f"| {row['ci']} "
-            f"| {row['gpu_epochs']} |"
+            f"| {row['gpu_epochs']} | {row['deployed_epochs']} |"
         )
 
 
@@ -775,26 +786,41 @@ def _compute_transparency_section(
     *,
     strategy: str = "none",
 ) -> None:
-    """Print median total_gpu_epochs per condition."""
+    """Print median total and deployed epochs per condition.
+
+    Both numbers, because they answer different questions and T20's headline
+    deficit turned out to be the difference between them. total_gpu_epochs is
+    what an equal-compute protocol matches; deployed_epochs is what the shipped
+    model actually received. Printing only one is how the confound survived
+    into the results the first time.
+    """
     print("\n" + "=" * 70)
-    print(f"  COMPUTE TRANSPARENCY: median total_gpu_epochs per condition  |  fill={strategy}")
+    print(f"  COMPUTE TRANSPARENCY: median epochs per condition  |  fill={strategy}")
+    print("  total = every epoch trained;  deployed = epochs the shipped model got")
     print("=" * 70)
     for ds in datasets:
         ds_runs = [r for r in all_runs if r.get("dataset") == ds]
         if not ds_runs:
             continue
-        by_cond: dict[str, list[int]] = defaultdict(list)
+        total_by_cond: dict[str, list[int]] = defaultdict(list)
+        deployed_by_cond: dict[str, list[int]] = defaultdict(list)
         for r in ds_runs:
             ep = r.get("total_gpu_epochs")
             if ep is not None:
-                by_cond[r["condition"]].append(int(ep))
-        parts = [
-            f"{c}={int(statistics.median(by_cond[c]))}"
-            for c in ALL_CONDITIONS_ORDERED
-            if c in by_cond and by_cond[c]
-        ]
+                total_by_cond[r["condition"]].append(int(ep))
+            dep = r.get("deployed_epochs")
+            if dep is not None:
+                deployed_by_cond[r["condition"]].append(int(dep))
+        parts = []
+        for c in ALL_CONDITIONS_ORDERED:
+            if not total_by_cond.get(c):
+                continue
+            total = int(statistics.median(total_by_cond[c]))
+            deployed_list = deployed_by_cond.get(c)
+            deployed = int(statistics.median(deployed_list)) if deployed_list else None
+            parts.append(f"{c}={total}/{deployed if deployed is not None else '?'}")
         if parts:
-            print(f"  {ds}: {', '.join(parts)}")
+            print(f"  {ds}: {', '.join(parts)}  (total/deployed)")
     print()
 
 # ---------------------------------------------------------------------------

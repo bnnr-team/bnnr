@@ -22,6 +22,7 @@ from bnnr.training import dataset_profile as _dprofile
 from bnnr.training import hard_quantile as _hard_quantile
 from bnnr.training import metrics as _metrics
 from bnnr.training import probe as _probe
+from bnnr.training import run_record as _run_record
 from bnnr.training import xai_runner as _xai
 from bnnr.training.metrics import average_metrics
 from bnnr.utils import set_seed
@@ -36,6 +37,11 @@ def train_epoch(
     augmentations: list[BaseAugmentation] | None = None,
 ) -> dict[str, float]:
     """Run one training epoch (delegates augmentation application to *trainer*)."""
+    # Every training epoch in the run passes through here: baseline, every
+    # candidate of every iteration, pruned ones included. Counting at the
+    # chokepoint is what makes total_gpu_epochs a measurement rather than an
+    # estimate from m_epochs * iterations.
+    trainer._ledger.count_trained_epoch()
     epoch_metrics: list[dict[str, float]] = []
 
     if trainer._is_detection:
@@ -480,6 +486,9 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         # the best baseline (not the last epoch), then re-evaluate to refresh
         # the cached predictions used by the report.
         trainer.model.load_state_dict(best_baseline_state)
+        # The deployed model carries the best baseline epoch's weights, not the
+        # last epoch's, so credit what was kept rather than what was run.
+        trainer._ledger.credit_deployed(best_baseline_epoch)
         if best_baseline_epoch and best_baseline_epoch != trainer.config.m_epochs:
             trainer.console.print(
                 f"  (baseline best epoch: e{best_baseline_epoch})",
@@ -793,6 +802,9 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         # (already saved from the epoch with the highest selection metric)
         winner_state = candidate_states.get(selected_name)
         winner_best_epoch = candidate_best_epochs.get(selected_name, trainer.config.m_epochs)
+        # This iteration was accepted, so the winner's kept epochs are now part
+        # of the deployed model's training history.
+        trainer._ledger.credit_deployed(winner_best_epoch)
         if winner_state is not None:
             trainer.model.load_state_dict(winner_state)
             final_metrics = iteration_results[selected_name]
@@ -933,7 +945,30 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         best_metrics=best_metrics,
         selected_augmentations=selected_augmentations,
         analysis=analysis,
+        run_record=_build_run_record(trainer, selected_augmentations),
     )
     assert isinstance(result, BNNRRunResult)
     return result
 
+
+def _build_run_record(
+    trainer: BNNRTrainer, selected_augmentations: list[str]
+) -> _run_record.RunRecord:
+    """Collect the mandatory record fields at the end of a run.
+
+    ``search_policy`` is hard-coded to ``"exhaustive"`` because that is the only
+    policy that exists; #413 adds the alternatives and reads the config instead.
+    Recording it now rather than then is deliberate: rows written before the
+    feature lands stay distinguishable from rows written after it.
+    """
+    diagnosis = trainer._last_diagnosis
+    return _run_record.RunRecord(
+        total_gpu_epochs=trainer._ledger.total_gpu_epochs,
+        deployed_epochs=trainer._ledger.deployed_epochs,
+        search_policy="exhaustive",
+        selector=trainer.config.selector,
+        selected_candidate=tuple(selected_augmentations),
+        diagnosis=diagnosis.to_dict() if diagnosis is not None else None,
+        hard_quantile_q=trainer.config.hard_quantile_q,
+        augmentation_modes=_run_record.collect_augmentation_modes(trainer.augmentations),
+    )

@@ -513,10 +513,17 @@ def _result_entry(
     xai_meta: dict[str, Any],
     baseline_val: float | None = None,
     gain_pp: float | None = None,
+    run_record: Any | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     sel = cfg.selection_metric
     agg = xai_meta.get("aggregate_stats") or {}
+    # Conditions that never build a BNNRTrainer (plain training, RandAugment)
+    # have no run record, but they still have to carry the compute fields or
+    # they cannot be placed on an equal-compute axis at all. For them the two
+    # epoch counts coincide: there is no search, so every epoch trained is an
+    # epoch the deployed model received.
+    record = _record_fields(run_record, cfg=cfg, condition=condition)
     return {
         "condition": condition.id,
         "strategy": condition.strategy,
@@ -541,8 +548,34 @@ def _result_entry(
         "wall_clock_s": round(elapsed_s, 1),
         "report_json": _rel(report_path),
         "run_dir": _rel(run_dir),
+        **record,
         **(extra or {}),
     }
+
+
+def _record_fields(
+    run_record: Any | None, *, cfg: Any, condition: ConditionSpec
+) -> dict[str, Any]:
+    """The FIX-3-1 mandatory fields, for a row with or without a BNNR run.
+
+    Without a run record this is a non-search condition, so the deployed model
+    got every epoch that was trained and the two counts are the same number.
+    That is a fact about the condition, not a fallback: a plain-training row
+    with ``deployed_epochs != total_gpu_epochs`` would be a bug.
+    """
+    if run_record is None:
+        epochs = int(cfg.m_epochs)
+        return {
+            "deployed_epochs": epochs,
+            "total_gpu_epochs": epochs,
+            "search_policy": "none",
+            "selector": None,
+            "selected_candidate": [],
+            "diagnosis": None,
+            "hard_quantile_q": getattr(cfg, "hard_quantile_q", None),
+            "augmentation_modes": {},
+        }
+    return run_record.to_dict()
 
 
 def run_no_bnnr(
@@ -682,6 +715,7 @@ def run_bnnr_branch_search(
         xai_meta=xai_meta,
         baseline_val=baseline_val,
         gain_pp=gain,
+        run_record=result.run_record,
         extra={
             "selected_augmentations": selected,
             "augmentation_names": [a.name for a in augmentations],
