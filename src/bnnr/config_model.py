@@ -26,6 +26,9 @@ class BNNRConfig(BaseModel):
     metrics: list[str] = Field(default_factory=lambda: ["accuracy", "f1_macro", "loss"])
     selection_metric: str = "accuracy"
     selection_mode: str = "max"
+    # Which rule picks the winning candidate. "metric_argmax" is what BNNR has
+    # always done and stays the default; see bnnr.training.selection.SELECTORS.
+    selector: str = "metric_argmax"
 
     # NOTE: For detection tasks, use selection_metric="map_50" (or "map_50_95")
     # and metrics=["map_50", "map_50_95", "loss"].  The model_validator below
@@ -148,6 +151,18 @@ class BNNRConfig(BaseModel):
     def validate_detection_xai_controls(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("detection_xai_* controls must be > 0")
+        return value
+
+    @field_validator("selector")
+    @classmethod
+    def validate_selector(cls, value: str) -> str:
+        # Imported here rather than at module scope: selection imports the
+        # config for typing only, but a top-level import would still be a cycle
+        # waiting for the first runtime import either side adds.
+        from bnnr.training.selection import SELECTORS
+
+        if value not in SELECTORS:
+            raise ValueError(f"selector must be one of {sorted(SELECTORS)}, got {value!r}")
         return value
 
     @field_validator("selection_mode")

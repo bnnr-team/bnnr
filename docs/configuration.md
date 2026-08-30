@@ -32,12 +32,28 @@ seed: 42
 - `metrics` (default: `['accuracy', 'f1_macro', 'loss']`)
 - `selection_metric` (default: `accuracy`) — the metric used to select the best augmentation branch. Can be any metric from the tables below.
 - `selection_mode` (`max` or `min`, default: `max`) — use `min` for metrics where lower is better (e.g. `loss`, `zero_one_loss`).
+- `selector` (default: `metric_argmax`) — which rule picks the winning candidate. See below.
 - `early_stopping_patience` (default: `2`)
 - `device` (`cuda`, `cpu`, `auto`; default: `auto`)
 - `seed` (default: `42`)
 - `save_checkpoints` (default: `true`)
 - `verbose` (default: `true`)
 - `log_file` (default: `null`)
+
+## Candidate selectors
+
+`selector` names the rule that picks the winning candidate once every candidate has been evaluated.
+
+| value | rule |
+|---|---|
+| `metric_argmax` (default) | greedy argmax on `selection_metric`, blended with XAI quality when `xai_selection_weight > 0` |
+| `random` | uniform pick among the candidates, seeded from `seed` |
+
+Both are gated the same way: whatever a selector picks is discarded unless it beat the baseline on `selection_metric`. That gate is deliberately shared, so a comparison between two selectors is a comparison of their ranking rules and nothing else. A selector that skipped it would look better purely by accepting runs the others reject.
+
+`random` is not a joke setting. It is the arm the T20 benchmark ran `metric_argmax` against, and `metric_argmax` did not beat it at n=10 across two datasets; having it as a named selector is what makes that contrast reproducible rather than something the benchmark harness improvises.
+
+Changing `selector` does not change what `select_best_path()` is called or how — the function is now a thin adapter over the registry, so existing code picks up the setting without modification.
 
 ## Available metrics
 
