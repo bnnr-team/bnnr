@@ -146,6 +146,24 @@ The XAI cache is precomputed **after** the baseline phase, so masks from `ICD`/`
 - `candidate_pruning_warmup_epochs` (default: `1`, validated `>0`)
 - `reeval_baseline_per_iteration` (default: `false`)
 
+## Hard-quantile robustness fields
+
+- `hard_quantile_q` (default: `0.2`, validated `(0,1]`)
+
+The fraction of the validation set treated as "hard", ranked by per-sample loss. Every evaluation that caches predictions adds three fields to its metrics:
+
+| field | meaning |
+|---|---|
+| `hard_quantile_acc` | accuracy restricted to the highest-loss `hard_quantile_q` fraction |
+| `robustness_gap` | `overall accuracy - hard_quantile_acc` |
+| `hard_quantile_q` | the `q` those two were computed with |
+
+This is a label-free stand-in for "poor robustness to context shift". Group labels would answer the question directly, but consuming them costs the assumption BNNR is built on: images and labels, nothing else. Inferring the hard group from the loss is what the JTT/EIIL family does instead.
+
+A model that is uniformly mediocre has a small gap. A model that is excellent on the majority and fails a minority has a large one, which is the shape of a shortcut. The attention diagnosis reads `robustness_gap`; on its own it is a diagnostic you can watch.
+
+The loss is plain cross-entropy on the logits the prediction cache already captures, so it costs no second pass over the loader. It is deliberately not the trainer's own criterion: a weighted or label-smoothed criterion ranks samples by class frequency as much as by difficulty, and the ranking is the entire point. The three fields are single-label classification only; multilabel and detection runs do not carry them.
+
 ## Event logging fields
 
 - `event_log_enabled` (default: `true`)
