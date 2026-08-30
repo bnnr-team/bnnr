@@ -110,6 +110,24 @@ Both are **counted as epochs run**, not derived from `m_epochs × max_iterations
 
 A report written before this key existed still loads: `RunRecord.from_dict` falls back to defaults for absent fields and ignores unknown ones, so old runs summarize rather than crashing a reader.
 
+### `analysis.attention`
+
+What the run can honestly say about where the model's attention sits, so the report is readable on its own rather than needing the JSONL parsed by hand.
+
+| key | meaning |
+|---|---|
+| `axes` | which direction is better for each number the block reports |
+| `shadow_records` | how many observations were recorded |
+| `latest` | the most recent candidate's statistics and robustness metrics |
+| `diagnosis` | the regime and recommendation, or `null` |
+| `diagnosis_unavailable_because` | present only when `diagnosis` is `null`, saying why |
+
+**No regime is named without calibrated thresholds**, and the block says so rather than leaving a silent `null`. That absence is the design, not a gap: see [diagnosis](diagnosis.md).
+
+`axes` exists because **accuracy and calibration reverse the ranking** on the data this was written for. A report that prints both without saying which direction is better invites the reader to assume they agree.
+
+The block is omitted entirely when XAI or shadow mode is off, since an empty one would be noise.
+
 ## `shadow_records.jsonl`
 
 Written when `shadow_mode=true` (default) and XAI is enabled. One JSON object per line — JSONL rather than JSON so a run killed halfway still leaves every record it had already written.

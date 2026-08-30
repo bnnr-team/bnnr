@@ -987,6 +987,9 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         analysis["dual_xai"] = dual_xai_analysis
     if trainer.config.shadow_mode:
         trainer._shadow.write(trainer.reporter.run_dir)
+    attention = _attention_summary(trainer)
+    if attention:
+        analysis["attention"] = attention
     trainer._emit_pipeline_complete()
     result = trainer.reporter.finalize(
         best_path=best_path,
@@ -1079,3 +1082,57 @@ def _val_sample_count(trainer: BNNRTrainer) -> int | None:
         return len(dataset) if dataset is not None else None
     except TypeError:
         return None
+
+
+def _attention_summary(trainer: BNNRTrainer) -> dict[str, Any]:
+    """What the run can honestly say about where the model's attention sits.
+
+    The report has to be readable on its own, so this lands in ``analysis``
+    rather than staying an internal gate. What it can say depends on what was
+    configured:
+
+    * With shadow mode on, the saliency statistics and the robustness metrics.
+      No regime, because naming one needs thresholds and there are none by
+      default; that is the point of #405, not a gap.
+    * With calibrated thresholds and the diagnosis selector, the regime, the
+      recommendation and the clause-by-clause reason as well.
+
+    Also carries which axis each number is better on, because accuracy and
+    calibration reverse the ranking on the data this was written for, and a
+    report that prints both without saying so invites the reader to assume
+    they agree.
+    """
+    records = [r.to_dict() for r in trainer._shadow.records]
+    diagnosis = trainer._last_diagnosis
+    if not records and diagnosis is None:
+        return {}
+
+    summary: dict[str, Any] = {
+        "axes": {
+            "accuracy": "higher is better",
+            "hard_quantile_acc": "higher is better",
+            "robustness_gap": "lower is better",
+            "ece": "lower is better",
+            "concentration": "neither: high means focused, low means diffuse",
+            "border_mass": "neither: high means the model is reading the frame",
+        },
+    }
+    if records:
+        summary["shadow_records"] = len(records)
+        latest = records[-1]
+        summary["latest"] = {
+            "candidate": latest["candidate"],
+            "stats": latest["stats"],
+            "overall_acc": latest["overall_acc"],
+            "hard_quantile_acc": latest["hard_quantile_acc"],
+            "robustness_gap": latest["robustness_gap"],
+        }
+    if diagnosis is not None:
+        summary["diagnosis"] = diagnosis.to_dict()
+    else:
+        summary["diagnosis"] = None
+        summary["diagnosis_unavailable_because"] = (
+            "no calibrated thresholds were supplied, so no regime can be named. "
+            "The statistics above are recorded for calibration; see docs/diagnosis.md."
+        )
+    return summary
