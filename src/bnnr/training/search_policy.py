@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from bnnr.config_model import BNNRConfig
 
 __all__ = [
+    "DIAGNOSIS_DRIVEN_POLICIES",
     "SEARCH_POLICIES",
     "SearchPlan",
     "SearchRung",
