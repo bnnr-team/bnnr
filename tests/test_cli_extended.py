@@ -224,7 +224,8 @@ class TestXaiPresets:
         new_cfg = apply_xai_preset(cfg, "xai_full")
         assert new_cfg.xai_enabled is True
         assert new_cfg.dual_xai_report is True
-        assert new_cfg.xai_selection_weight == 0.1
+        # Zeroed in 0.x; the preset used to ship 0.1. See FIX-2-4.
+        assert new_cfg.xai_selection_weight == 0.0
 
     def test_apply_xai_preset_preserves_other_fields(self):
         from bnnr.config import apply_xai_preset

@@ -215,7 +215,10 @@ _XAI_PRESETS: dict[str, dict[str, Any]] = {
         "xai_enabled": True,
         "xai_method": "opticam",
         "dual_xai_report": True,
-        "xai_selection_weight": 0.1,
+        # Was 0.1. Zeroed in 0.x: it steered selection with a weight nobody
+        # measured, which is the path T20 traced its null result to. The XAI
+        # reporting this preset is actually for is unaffected.
+        "xai_selection_weight": 0.0,
         "xai_pruning_threshold": 0.15,
         "adaptive_icd_threshold": True,
     },
@@ -223,7 +226,8 @@ _XAI_PRESETS: dict[str, dict[str, Any]] = {
         "xai_enabled": True,
         "xai_method": "opticam",
         "dual_xai_report": False,
-        "xai_selection_weight": 0.15,
+        # Was 0.15, zeroed for the same reason as xai_full.
+        "xai_selection_weight": 0.0,
         "xai_pruning_threshold": 0.2,
         "adaptive_icd_threshold": True,
     },
@@ -259,12 +263,22 @@ def apply_xai_preset(config: BNNRConfig, preset: str) -> BNNRConfig:
 
     * ``"xai_light"`` – XAI enabled with defaults (no influence on
       training decisions).  Good for dashboards and reports.
-    * ``"xai_full"`` – All XAI features activated: composite selection
-      (10 % weight), XAI-based pruning, adaptive ICD thresholds, and
-      dual XAI report.
-    * ``"xai_adaptive"`` – XAI actively guides training: higher
-      composite selection weight (15 %), stricter pruning, and adaptive
-      ICD thresholds.
+    * ``"xai_full"`` – All XAI reporting activated: XAI-based pruning,
+      adaptive ICD thresholds, and dual XAI report. Composite selection
+      is **off** as of 0.x; see the note below.
+    * ``"xai_adaptive"`` – Stricter XAI-based pruning and adaptive ICD
+      thresholds. Composite selection is **off** as of 0.x.
+
+    .. note::
+       ``xai_full`` and ``xai_adaptive`` used to ship
+       ``xai_selection_weight`` of 0.1 and 0.15. Both are now 0.0. Those
+       weights blended a hand-weighted saliency scalar into candidate
+       selection, and T20 traced its null result to that path. Set the field
+       yourself if you want the old behaviour; it still works and warns.
+
+       ``xai_pruning_threshold`` is deprecated but left at its preset values,
+       since removing a candidate is reversible in a way that selecting the
+       wrong one is not.
 
     Parameters
     ----------

@@ -52,6 +52,22 @@ seed: 42
 
 Both are gated the same way: whatever a selector picks is discarded unless it beat the baseline on `selection_metric`. That gate is deliberately shared, so a comparison between two selectors is a comparison of their ranking rules and nothing else. A selector that skipped it would look better purely by accepting runs the others reject.
 
+### Deprecated XAI selection knobs
+
+`xai_selection_weight` and `xai_pruning_threshold` are **deprecated as of 0.x**. Both keep working and both emit a `DeprecationWarning` when you set them to a non-zero value.
+
+Both are built on `compute_xai_quality_score`, a hand-weighted scalar whose component weights were chosen by hand and never calibrated against an outcome. The T20 benchmark traced its null result to exactly this path.
+
+There were two separate defects:
+
+**Accuracy was counted twice.** The quality score carried accuracy at 25 %, and `select_best_path` then blended that score against the normalised selection metric — which is accuracy. The effective accuracy weight of the composite was a number nobody chose, and the two copies were not even the same quantity: one min-max normalised across candidates, the other the raw probe-set fraction. Accuracy is no longer part of the weighted sum; it remains in the breakdown as an observation.
+
+**The score encodes a prior.** It rewards high Gini and penalises `edge_ratio` unconditionally, so it hard-codes "concentrated, central saliency is good". That is precisely the question [the diagnosis](diagnosis.md) answers per case — and for a Waterbirds-like model the built-in prior points the wrong way, since a model reading background context has diffuse, border-heavy attention and needs ICD, which this score ranks last.
+
+**Preset change.** `xai_full` and `xai_adaptive` shipped `xai_selection_weight` of 0.1 and 0.15. Both are now `0.0`. Everything those presets are actually for — XAI reporting, dual XAI, adaptive ICD thresholds — is unchanged. Set the field yourself if you want the old behaviour.
+
+`xai_pruning_threshold` keeps its preset values, since dropping a candidate is recoverable in a way that selecting the wrong one is not.
+
 ### Shadow mode
 
 - `shadow_mode` (default: `true`)

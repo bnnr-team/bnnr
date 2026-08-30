@@ -133,7 +133,9 @@ def test_apply_xai_preset_full() -> None:
     result = apply_xai_preset(cfg, "xai_full")
     assert result.xai_enabled is True
     assert result.dual_xai_report is True
-    assert result.xai_selection_weight == 0.1
+    # Zeroed in 0.x: the preset used to ship 0.1, steering selection with a
+    # weight nobody measured. See FIX-2-4.
+    assert result.xai_selection_weight == 0.0
     assert result.xai_pruning_threshold == 0.15
     assert result.adaptive_icd_threshold is True
     # Non-XAI fields preserved
@@ -145,7 +147,8 @@ def test_apply_xai_preset_adaptive() -> None:
     cfg = BNNRConfig(device="cpu")
     result = apply_xai_preset(cfg, "xai_adaptive")
     assert result.xai_enabled is True
-    assert result.xai_selection_weight == 0.15
+    # Zeroed in 0.x; the preset used to ship 0.15. See FIX-2-4.
+    assert result.xai_selection_weight == 0.0
     assert result.xai_pruning_threshold == 0.2
     assert result.adaptive_icd_threshold is True
 
