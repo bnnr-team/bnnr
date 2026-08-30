@@ -102,6 +102,10 @@ class BNNRTrainer:
         # acted on by nothing.
         self._shadow = _shadow.ShadowRecorder()
         self._last_saliency_maps: Any | None = None
+        # Per-sample correctness of the baseline's best epoch, and the last
+        # selection result, for the indistinguishability test and its record.
+        self._baseline_correct: Any | None = None
+        self._last_selection: Any | None = None
         self.logger = setup_logging("bnnr", config.log_file, json_format=True)
         self._custom_metrics: dict[str, Any] = custom_metrics or {}
 

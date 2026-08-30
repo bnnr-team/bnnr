@@ -110,6 +110,11 @@ class BNNRConfig(BaseModel):
     #: Cut points for the ``diagnosis`` selector. Unset by design; see
     #: DiagnosisConfig and docs/diagnosis.md.
     diagnosis: DiagnosisConfig = Field(default_factory=DiagnosisConfig)
+    #: Bootstrap settings for the indistinguishability test. The resampling is
+    #: over a boolean vector rather than over the model, so it is cheap enough
+    #: to run on every iteration.
+    indistinguishable_resamples: int = Field(default=2000, ge=100)
+    indistinguishable_confidence: float = 0.95
 
     # NOTE: For detection tasks, use selection_metric="map_50" (or "map_50_95")
     # and metrics=["map_50", "map_50_95", "loss"].  The model_validator below
@@ -289,6 +294,13 @@ class BNNRConfig(BaseModel):
                     f"bnnr.config.load_diagnosis_profile(). See docs/diagnosis.md."
                 )
         return self
+
+    @field_validator("indistinguishable_confidence")
+    @classmethod
+    def validate_indistinguishable_confidence(cls, value: float) -> float:
+        if not (0.0 < value < 1.0):
+            raise ValueError("indistinguishable_confidence must be in (0, 1)")
+        return value
 
     @field_validator("selector")
     @classmethod

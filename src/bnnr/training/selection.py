@@ -21,7 +21,9 @@ from __future__ import annotations
 import hashlib
 import random
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+from bnnr.training.paired import PairedInterval, paired_bootstrap_ci
 
 if TYPE_CHECKING:
     from bnnr.analysis.diagnosis import Diagnosis
@@ -50,6 +52,11 @@ class CandidateReport:
     name: str
     metrics: dict[str, float]
     xai_score: float | None = None
+    #: Per-sample correctness on the selection-validation set, in the same
+    #: order for every candidate. Present only when the caller cached
+    #: predictions; without it the indistinguishability test cannot run and
+    #: selection falls back to the raw metric comparison.
+    per_sample_correct: Any | None = None
 
     def value(self, metric: str) -> float | None:
         """The named metric, or ``None`` when this candidate did not report it."""
@@ -74,6 +81,10 @@ class SelectionResult:
     selector: str
     reason: str
     scores: dict[str, float] = field(default_factory=dict)
+    #: Bootstrap interval on the winner's paired difference against the
+    #: baseline, when one could be computed. Recorded so the decision is
+    #: auditable after the fact rather than only at the moment it was made.
+    interval: PairedInterval | None = None
 
     @property
     def best(self) -> str | None:
@@ -93,6 +104,7 @@ class CandidateSelector(Protocol):
         config: BNNRConfig,
         *,
         diagnosis: Diagnosis | None = None,
+        baseline_correct: Any | None = None,
     ) -> SelectionResult:
         """Pick from *candidates*, or select nothing.
 
@@ -125,6 +137,7 @@ def _gate_on_baseline(
     config: BNNRConfig,
     selector: str,
     scores: dict[str, float],
+    baseline_correct: Any | None = None,
 ) -> SelectionResult:
     """Apply the shared rule: a pick only counts if it beat the baseline.
 
@@ -132,6 +145,16 @@ def _gate_on_baseline(
     contrast between their ranking rules and nothing else. A selector that
     skipped the gate would look better simply by accepting runs the others
     rejected.
+
+    When per-sample correctness is available for both the winner and the
+    baseline, "beat" means the paired bootstrap interval on the difference
+    excludes zero, not merely that one number is larger. T20's whole negative
+    result is that a strict ``>`` on differences smaller than the standard
+    error is not a decision. On a tie the baseline is kept: it is the closest
+    thing to what the data supports and the cheapest in epochs.
+
+    Without those vectors the raw comparison stands, so a caller that never
+    cached predictions behaves exactly as before.
     """
     baseline_value = baseline.get(config.selection_metric)
     chosen = next((c for c in candidates if c.name == name), None)
@@ -141,7 +164,19 @@ def _gate_on_baseline(
         return SelectionResult((), selector, "no_baseline", scores)
     if not _improved(value, float(baseline_value), config.selection_mode):
         return SelectionResult((), selector, "no_improvement", scores)
-    return SelectionResult((name,), selector, "improved", scores)
+
+    interval = None
+    if chosen is not None and chosen.per_sample_correct is not None and baseline_correct is not None:
+        interval = paired_bootstrap_ci(
+            chosen.per_sample_correct,
+            baseline_correct,
+            n_resamples=config.indistinguishable_resamples,
+            confidence=config.indistinguishable_confidence,
+            seed=config.seed,
+        )
+    if interval is not None and interval.contains_zero:
+        return SelectionResult((), selector, "indistinguishable", scores, interval)
+    return SelectionResult((name,), selector, "improved", scores, interval)
 
 
 class MetricArgmaxSelector:
@@ -172,6 +207,7 @@ class MetricArgmaxSelector:
         config: BNNRConfig,
         *,
         diagnosis: Diagnosis | None = None,
+        baseline_correct: Any | None = None,
     ) -> SelectionResult:
         del diagnosis  # this selector decides on the metric alone
         metric = config.selection_metric
@@ -186,7 +222,9 @@ class MetricArgmaxSelector:
         if weight <= 0 or not has_xai:
             sign = 1.0 if mode == "max" else -1.0
             best_name = max(values, key=lambda name: sign * values[name])
-            return _gate_on_baseline(best_name, candidates, baseline, config, self.name, values)
+            return _gate_on_baseline(
+                best_name, candidates, baseline, config, self.name, values, baseline_correct
+            )
 
         lo, hi = min(values.values()), max(values.values())
         span = hi - lo if hi != lo else 1.0
@@ -198,7 +236,9 @@ class MetricArgmaxSelector:
             scores[name] = (1.0 - weight) * normalised + weight * xai_by_name.get(name, 0.0)
 
         best_name = max(scores, key=lambda name: scores[name])
-        return _gate_on_baseline(best_name, candidates, baseline, config, self.name, scores)
+        return _gate_on_baseline(
+            best_name, candidates, baseline, config, self.name, scores, baseline_correct
+        )
 
 
 class RandomSelector:
@@ -220,6 +260,7 @@ class RandomSelector:
         config: BNNRConfig,
         *,
         diagnosis: Diagnosis | None = None,
+        baseline_correct: Any | None = None,
     ) -> SelectionResult:
         del diagnosis  # a random arm reads nothing
         values = _resolved_values(candidates, config.selection_metric)
@@ -234,7 +275,9 @@ class RandomSelector:
         rng = random.Random(int.from_bytes(digest[:8], "big"))
         picked = rng.choice(sorted(values))
         scores = {name: (1.0 if name == picked else 0.0) for name in values}
-        return _gate_on_baseline(picked, candidates, baseline, config, self.name, scores)
+        return _gate_on_baseline(
+            picked, candidates, baseline, config, self.name, scores, baseline_correct
+        )
 
 
 class DiagnosisSelector:
@@ -267,6 +310,7 @@ class DiagnosisSelector:
         config: BNNRConfig,
         *,
         diagnosis: Diagnosis | None = None,
+        baseline_correct: Any | None = None,
     ) -> SelectionResult:
         values = _resolved_values(candidates, config.selection_metric)
         if not values:
@@ -289,7 +333,9 @@ class DiagnosisSelector:
         # hyperparameters of it.
         sign = 1.0 if config.selection_mode == "max" else -1.0
         best = max(wanted, key=lambda name: sign * values[name])
-        return _gate_on_baseline(best, candidates, baseline, config, self.name, scores)
+        return _gate_on_baseline(
+            best, candidates, baseline, config, self.name, scores, baseline_correct
+        )
 
 
 #: Longest first, so a family that contains another as a substring is tested
@@ -330,6 +376,8 @@ def run_selector(
     xai_scores: dict[str, float] | None = None,
     *,
     diagnosis: Diagnosis | None = None,
+    per_sample_correct: dict[str, Any] | None = None,
+    baseline_correct: Any | None = None,
 ) -> SelectionResult:
     """Build the candidate reports and run the configured selector over them."""
     candidates = [
@@ -341,9 +389,14 @@ def run_selector(
             # is reserved for "no XAI scoring at all", which is the condition
             # that selects the plain-argmax path.
             xai_score=(xai_scores.get(name, 0.0) if xai_scores else None),
+            per_sample_correct=(per_sample_correct or {}).get(name),
         )
         for name, metrics in results.items()
     ]
     return get_selector(config.selector).select(
-        candidates, baseline_metrics, config, diagnosis=diagnosis
+        candidates,
+        baseline_metrics,
+        config,
+        diagnosis=diagnosis,
+        baseline_correct=baseline_correct,
     )

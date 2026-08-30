@@ -52,6 +52,23 @@ seed: 42
 
 Both are gated the same way: whatever a selector picks is discarded unless it beat the baseline on `selection_metric`. That gate is deliberately shared, so a comparison between two selectors is a comparison of their ranking rules and nothing else. A selector that skipped it would look better purely by accepting runs the others reject.
 
+### Indistinguishability test
+
+- `indistinguishable_resamples` (default: `2000`, validated `>= 100`)
+- `indistinguishable_confidence` (default: `0.95`, validated in `(0, 1)`)
+
+A candidate only replaces the baseline when the **paired bootstrap interval on the difference excludes zero** — not merely when its metric is a larger number.
+
+T20's central negative result is that the selector was picking between candidates that are not distinguishable on the criterion it uses. On Waterbirds the candidate accuracies were .8749 / .8816 / .8549 on a validation set whose binomial standard error is larger than that spread. A strict `>` on those numbers is a coin flip.
+
+When the interval covers zero, `SelectionResult.reason` becomes `"indistinguishable"` and **the baseline is kept**: it is the closest thing to what the data supports, and it is the cheapest in epochs. The interval lands in the run record so the decision is auditable afterwards rather than only at the moment it was made.
+
+The comparison is **paired**: both arms are evaluated on the same validation set, and each bootstrap draw indexes both arms together. Ignoring the pairing would inflate the interval with variance that comes from the validation set rather than from the arms, and make everything look indistinguishable.
+
+The statistic is the **mean** paired difference, not the median. At sample level the paired difference is in `{-1, 0, 1}`, where the median is degenerate; the mean of those differences *is* the accuracy difference. The seed-level convention in the benchmark summarizers is a median, because a per-seed metric is continuous — different level of aggregation, different right answer.
+
+The test runs only when per-sample predictions were cached for both the candidate and the baseline. Without them the raw metric comparison stands, so a caller that never cached predictions behaves exactly as before.
+
 ### Deprecated XAI selection knobs
 
 `xai_selection_weight` and `xai_pruning_threshold` are **deprecated as of 0.x**. Both keep working and both emit a `DeprecationWarning` when you set them to a non-zero value.
