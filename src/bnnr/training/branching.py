@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from bnnr.training import selection as _selection
+
 if TYPE_CHECKING:
     from bnnr.config_model import BNNRConfig
 
@@ -14,60 +16,17 @@ def select_best_path(
     config: BNNRConfig,
     xai_scores: dict[str, float] | None = None,
 ) -> str | None:
-    """Pick the best augmentation candidate from *results*, or ``None`` if no improvement."""
-    metric = config.selection_metric
-    mode = config.selection_mode
-    w = config.xai_selection_weight
+    """Pick the best augmentation candidate from *results*, or ``None`` if no improvement.
 
-    baseline_value = baseline_metrics.get(metric)
+    Thin adapter over :mod:`bnnr.training.selection`. The logic that used to live
+    here is now ``SELECTORS["metric_argmax"]``, which stays the default, so this
+    returns exactly what it always did. Setting ``config.selector`` routes the
+    same call through a different rule.
 
-    if w <= 0 or not xai_scores:
-        best_name: str | None = None
-        best_value = None
-        for aug_name, aug_metrics in results.items():
-            val = aug_metrics.get(metric)
-            if val is None:
-                continue
-            if best_value is None or (mode == "max" and val > best_value) or (mode == "min" and val < best_value):
-                best_name = aug_name
-                best_value = val
-        if best_name is None or baseline_value is None or best_value is None:
-            return None
-        improved = (best_value > baseline_value) if mode == "max" else (best_value < baseline_value)
-        return best_name if improved else None
-
-    metric_vals = {name: m.get(metric) for name, m in results.items() if m.get(metric) is not None}
-    if not metric_vals:
-        return None
-
-    all_vals = list(metric_vals.values())
-    min_m = min(v for v in all_vals if v is not None)
-    max_m = max(v for v in all_vals if v is not None)
-    m_range = max_m - min_m if max_m != min_m else 1.0  # type: ignore[operator]
-
-    best_name = None
-    best_composite: float | None = None
-    for aug_name, val in metric_vals.items():
-        if val is None:
-            continue
-        if mode == "max":
-            norm_m = (float(val) - float(min_m)) / float(m_range)  # type: ignore[arg-type]
-        else:
-            norm_m = (float(max_m) - float(val)) / float(m_range)  # type: ignore[arg-type]
-        xai_q = xai_scores.get(aug_name, 0.0)
-        composite = (1.0 - w) * norm_m + w * xai_q
-        if best_composite is None or composite > best_composite:
-            best_composite = composite
-            best_name = aug_name
-
-    if best_name is None or baseline_value is None:
-        return None
-
-    best_value = results[best_name].get(metric)
-    if best_value is None:
-        return None
-    improved = (best_value > baseline_value) if mode == "max" else (best_value < baseline_value)
-    return best_name if improved else None
+    Kept at this name and signature on purpose: it is public surface, imported
+    by ``tests/test_backward_compat.py`` and re-exported from ``bnnr.training``.
+    """
+    return _selection.run_selector(results, baseline_metrics, config, xai_scores).best
 
 
 def should_prune_candidate(
