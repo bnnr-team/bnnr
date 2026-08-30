@@ -108,6 +108,24 @@ Both are **counted as epochs run**, not derived from `m_epochs × max_iterations
 
 A report written before this key existed still loads: `RunRecord.from_dict` falls back to defaults for absent fields and ignores unknown ones, so old runs summarize rather than crashing a reader.
 
+## `shadow_records.jsonl`
+
+Written when `shadow_mode=true` (default) and XAI is enabled. One JSON object per line — JSONL rather than JSON so a run killed halfway still leaves every record it had already written.
+
+| key | meaning |
+|---|---|
+| `phase` | `"baseline"` or `"candidate"` |
+| `iteration` | which iteration produced it (`0` for the baseline phase) |
+| `candidate` | augmentation name, or `"baseline"` |
+| `stats` | the saliency statistics, or `null` when no maps were available |
+| `overall_acc`, `hard_quantile_acc`, `robustness_gap` | from the evaluation result; `null` when not measured |
+| `sample_size` | how many maps the statistics were computed over |
+| `selected` | whether this arm is the one the run kept |
+
+Every candidate of every iteration appears, not only the winner: a calibration set with only winning arms cannot answer whether the other choice would have been better.
+
+No record contains a regime or a recommendation. Producing one would need thresholds, and these records exist to calibrate them.
+
 ## `events.jsonl`
 
 Written when `event_log_enabled=true` (default). Each line is a JSON object with `schema_version` (`"2.1"`, from `bnnr.events.EVENT_SCHEMA_VERSION`).

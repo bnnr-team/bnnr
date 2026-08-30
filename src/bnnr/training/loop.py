@@ -23,6 +23,7 @@ from bnnr.training import hard_quantile as _hard_quantile
 from bnnr.training import metrics as _metrics
 from bnnr.training import probe as _probe
 from bnnr.training import run_record as _run_record
+from bnnr.training import shadow as _shadow
 from bnnr.training import xai_runner as _xai
 from bnnr.training.metrics import average_metrics
 from bnnr.utils import set_seed
@@ -512,6 +513,13 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         )
 
         # Emit XAI-guided augmentation hints after baseline
+        _record_shadow(
+            trainer,
+            phase="baseline",
+            iteration=0,
+            candidate="baseline",
+            metrics=baseline_metrics,
+        )
         if xai_diagnoses and trainer._prev_xai_batch_stats:
             _xai.generate_augmentation_hints(trainer,
                 xai_diagnoses, trainer._prev_xai_batch_stats, phase="baseline",
@@ -672,6 +680,13 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
                 _, cand_xai_diag, _ = _xai.generate_xai_lightweight(trainer,
                     iteration, augmentation.name, confusion=confusion_candidate,
                 )
+                _record_shadow(
+                    trainer,
+                    phase="candidate",
+                    iteration=iteration,
+                    candidate=augmentation.name,
+                    metrics=cand_best_metrics,
+                )
                 if cand_xai_diag:
                     avg_q = float(np.mean([
                         d.get("quality_score", 0.0) for d in cand_xai_diag.values()
@@ -749,6 +764,8 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
             baseline_metrics,
             xai_scores=xai_scores_by_candidate if candidates else None,
         )
+        # Shadow records are only a calibration set once they say which arm won.
+        trainer._shadow.mark_selected(iteration, selected_name)
         top_candidate_names = _branching.top_k_candidate_names(iteration_results, trainer.config, k=3)
         candidate_preview_pairs: dict[str, list[tuple[Path, Path]]] = {}
         aug_by_name = {aug.name: aug for aug in trainer.augmentations}
@@ -939,6 +956,8 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
     dual_xai_analysis = _xai.generate_dual_xai_analysis(trainer)
     if dual_xai_analysis:
         analysis["dual_xai"] = dual_xai_analysis
+    if trainer.config.shadow_mode:
+        trainer._shadow.write(trainer.reporter.run_dir)
     trainer._emit_pipeline_complete()
     result = trainer.reporter.finalize(
         best_path=best_path,
@@ -971,4 +990,36 @@ def _build_run_record(
         diagnosis=diagnosis.to_dict() if diagnosis is not None else None,
         hard_quantile_q=trainer.config.hard_quantile_q,
         augmentation_modes=_run_record.collect_augmentation_modes(trainer.augmentations),
+    )
+
+
+def _record_shadow(
+    trainer: BNNRTrainer,
+    *,
+    phase: str,
+    iteration: int,
+    candidate: str,
+    metrics: dict[str, float] | None,
+) -> None:
+    """Record one shadow observation from the maps the run just produced.
+
+    Reads ``trainer._last_saliency_maps``, which the XAI runner stashes, and
+    clears it afterwards so a candidate whose XAI probe produced nothing cannot
+    silently inherit the previous candidate's attention.
+    """
+    if not trainer.config.shadow_mode:
+        return
+    maps = trainer._last_saliency_maps
+    trainer._last_saliency_maps = None
+    if maps is None:
+        return
+    stats = _shadow.stats_from_maps(maps)
+    if stats is None:
+        return
+    trainer._shadow.record(
+        phase=phase,
+        iteration=iteration,
+        candidate=candidate,
+        stats=stats,
+        metrics=metrics,
     )

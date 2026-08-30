@@ -186,7 +186,11 @@ class TestRealRunPopulatesTheRecord:
 
     def test_search_policy_is_recorded_before_alternatives_exist(self, tmp_path) -> None:
         """So rows from before #413 stay distinguishable from rows after it."""
-        assert self._trainer(tmp_path).run().run_record.search_policy == "exhaustive"
+        # The run happens on its own line: an assert is stripped under
+        # python -O, and one that also performs the action under test would
+        # take the action with it.
+        record = self._trainer(tmp_path).run().run_record
+        assert record.search_policy == "exhaustive"
 
     def test_the_record_lands_in_the_json_report(self, tmp_path) -> None:
         result = self._trainer(tmp_path).run()
@@ -199,4 +203,5 @@ class TestRealRunPopulatesTheRecord:
         from bnnr.reporting import load_report
 
         result = self._trainer(tmp_path).run()
-        assert load_report(result.report_json_path) is not None
+        reloaded = load_report(result.report_json_path)
+        assert reloaded is not None

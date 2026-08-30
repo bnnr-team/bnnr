@@ -28,6 +28,7 @@ from bnnr.training import loop as _loop
 from bnnr.training import metrics as _metrics
 from bnnr.training import probe as _probe
 from bnnr.training import run_record as _run_record
+from bnnr.training import shadow as _shadow
 from bnnr.training.checkpoint import (  # noqa: F401 — re-exported for backward compat
     _RuntimeState,
     _TrainerState,
@@ -97,6 +98,10 @@ class BNNRTrainer:
         # Set when a diagnosis was computed for the run. Stays None until
         # shadow mode (#411) starts filling it on every run.
         self._last_diagnosis: Any | None = None
+        # Shadow-mode observations for this run. Recorded on every candidate,
+        # acted on by nothing.
+        self._shadow = _shadow.ShadowRecorder()
+        self._last_saliency_maps: Any | None = None
         self.logger = setup_logging("bnnr", config.log_file, json_format=True)
         self._custom_metrics: dict[str, Any] = custom_metrics or {}
 
