@@ -106,6 +106,8 @@ class BNNRTrainer:
         # selection result, for the indistinguishability test and its record.
         self._baseline_correct: Any | None = None
         self._last_selection: Any | None = None
+        #: The search plan the last iteration ran, for the run record.
+        self._last_search_plan: Any | None = None
         self.logger = setup_logging("bnnr", config.log_file, json_format=True)
         self._custom_metrics: dict[str, Any] = custom_metrics or {}
 

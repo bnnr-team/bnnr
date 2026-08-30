@@ -95,7 +95,8 @@ The fields a run must carry for its result to be comparable with another run. Wr
 |---|---|
 | `total_gpu_epochs` | every epoch trained anywhere: baseline, every candidate of every iteration, pruned and losing candidates included |
 | `deployed_epochs` | epochs of training the shipped model actually received |
-| `search_policy` | how candidates were enumerated; `"exhaustive"` is the only one today |
+| `search_policy` | `exhaustive`, `diagnosis_single` or `successive_halving` |
+| `search_plan` | the rung structure that policy produced, with its planned epoch accounting |
 | `selector` | which rule picked the winner, from `config.selector` |
 | `selected_candidate` | list of names the selector chose |
 | `diagnosis` | the attention diagnosis when one was computed, else `null` |
