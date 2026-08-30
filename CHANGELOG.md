@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.8.0](https://github.com/bnnr-team/bnnr/compare/v0.7.3...v0.8.0) (2026-08-30)
+
+
+### Features
+
+* **analysis:** AttentionRegime and the attention decision rule ([#432](https://github.com/bnnr-team/bnnr/issues/432)) ([6e9561a](https://github.com/bnnr-team/bnnr/commit/6e9561afe86b93d85a191ef546c42097421eed0b)), closes [#403](https://github.com/bnnr-team/bnnr/issues/403)
+* **analysis:** saliency shape statistics for the attention-regime diagnosis ([#428](https://github.com/bnnr-team/bnnr/issues/428)) ([8fc0f25](https://github.com/bnnr-team/bnnr/commit/8fc0f253917cbd6c196b7a69518ea7287f990e34)), closes [#402](https://github.com/bnnr-team/bnnr/issues/402)
+* **config:** diagnosis thresholds as config with no defaults ([#433](https://github.com/bnnr-team/bnnr/issues/433)) ([d08911b](https://github.com/bnnr-team/bnnr/commit/d08911b193590cb3b532a93897723ea9077fb129)), closes [#405](https://github.com/bnnr-team/bnnr/issues/405)
+* **reporting:** surface the attention evidence and promote ECE into the table ([#439](https://github.com/bnnr-team/bnnr/issues/439)) ([9f33dc8](https://github.com/bnnr-team/bnnr/commit/9f33dc8581f0fffc05c7657eb7b85b287739e8e9)), closes [#412](https://github.com/bnnr-team/bnnr/issues/412)
+* **training:** CandidateSelector protocol and the SELECTORS registry ([#431](https://github.com/bnnr-team/bnnr/issues/431)) ([75c949e](https://github.com/bnnr-team/bnnr/commit/75c949ecac28c7b33411ae2a05f5cbaf02fa2a17))
+* **training:** hard_quantile_acc and robustness_gap ([#430](https://github.com/bnnr-team/bnnr/issues/430)) ([ce98980](https://github.com/bnnr-team/bnnr/commit/ce98980774231a04564c2870a0ef22de00eab793)), closes [#404](https://github.com/bnnr-team/bnnr/issues/404)
+* **training:** indistinguishability test for candidate selection ([#437](https://github.com/bnnr-team/bnnr/issues/437)) ([b59b4a9](https://github.com/bnnr-team/bnnr/commit/b59b4a9c21e802d30295bcb80e5b15a722626811)), closes [#408](https://github.com/bnnr-team/bnnr/issues/408)
+* **training:** mandatory run-record fields for selection and compute ([#434](https://github.com/bnnr-team/bnnr/issues/434)) ([565a0d1](https://github.com/bnnr-team/bnnr/commit/565a0d1e4122ab4fc5fe644b89bec61c94fce5fb)), closes [#410](https://github.com/bnnr-team/bnnr/issues/410)
+* **training:** search_policy with exhaustive, diagnosis_single and successive_halving ([#440](https://github.com/bnnr-team/bnnr/issues/440)) ([97c80db](https://github.com/bnnr-team/bnnr/commit/97c80db18f964f6ca1a4d7b3a9c5189bac46071e))
+* **training:** shadow mode, record the diagnosis evidence without acting on it ([#435](https://github.com/bnnr-team/bnnr/issues/435)) ([1b4656c](https://github.com/bnnr-team/bnnr/commit/1b4656cd636c5a551aa04f7002cbb4f836e4eab8))
+
+
+### Bug Fixes
+
+* **augmentations:** make ChurchNoise the same transform on both paths ([#423](https://github.com/bnnr-team/bnnr/issues/423)) ([7241229](https://github.com/bnnr-team/bnnr/commit/7241229fd505a72a1ce97d57bc1968f78a1511ad)), closes [#396](https://github.com/bnnr-team/bnnr/issues/396)
+* **config:** deprecate the guessed XAI knobs and stop double-counting accuracy ([#436](https://github.com/bnnr-team/bnnr/issues/436)) ([6d9b0e3](https://github.com/bnnr-team/bnnr/commit/6d9b0e35c146bf2f1035ecddaecb31a49194a8bd)), closes [#409](https://github.com/bnnr-team/bnnr/issues/409)
+* **selection:** scale candidate differences by measurement noise, not by spread ([#438](https://github.com/bnnr-team/bnnr/issues/438)) ([7ced1f1](https://github.com/bnnr-team/bnnr/commit/7ced1f1436226cc00a967cebc897e3622d6311bc)), closes [#407](https://github.com/bnnr-team/bnnr/issues/407)
+
+
+### Documentation
+
+* describe what ICD and AICD actually mask, and when each applies ([#424](https://github.com/bnnr-team/bnnr/issues/424)) ([ff8af15](https://github.com/bnnr-team/bnnr/commit/ff8af151a43c6cafd369d6676d21ca52b428dd58)), closes [#397](https://github.com/bnnr-team/bnnr/issues/397)
+
 ## [0.7.3](https://github.com/bnnr-team/bnnr/compare/v0.7.2...v0.7.3) (2026-08-26)
 
 
