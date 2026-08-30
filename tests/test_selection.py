@@ -388,3 +388,88 @@ class TestDiagnosisSelector:
                 self.RESULTS, self.BASELINE, config, diagnosis=_diagnosis(("icd",))
             ).best
             assert without == with_diag
+
+
+# ---------------------------------------------------------------------------
+# The noise-scaled unit (FIX-2-2)
+# ---------------------------------------------------------------------------
+
+
+class TestNoiseScaledUnit:
+    """Min-max stretched any spread across [0, 1]; the unit is now measured."""
+
+    BASELINE = {"accuracy": 0.50}
+
+    def _scores(self, accuracies: dict[str, float], *, n_val: int | None, weight: float = 0.5):
+        return run_selector(
+            {name: {"accuracy": acc} for name, acc in accuracies.items()},
+            self.BASELINE,
+            _config(xai_selection_weight=weight),
+            {name: 0.0 for name in accuracies},
+            n_val=n_val,
+        ).scores
+
+    def test_a_sub_noise_spread_no_longer_reaches_one(self) -> None:
+        """A 0.2 pp spread on 1000 samples is ~0.19 standard errors. Under
+        min-max the best candidate's metric term was exactly 1.0 regardless."""
+        scores = self._scores({"a": 0.8700, "b": 0.8720, "c": 0.8710}, n_val=1000)
+        # weight 0.5 and xai 0.0, so the metric term is score * 2.
+        assert max(scores.values()) * 2 < 0.3
+
+    def test_a_spread_of_several_standard_errors_is_treated_as_real(self) -> None:
+        """The T20 candidate accuracies are 2.5 SE apart at n=1000, which is a
+        resolved difference. Scaling by noise must not flatten those."""
+        scores = self._scores({"a": 0.8749, "b": 0.8816, "c": 0.8549}, n_val=1000)
+        assert max(scores.values()) * 2 > 2.0
+
+    def test_a_large_spread_still_saturates_the_metric_term(self) -> None:
+        """Differences of many standard errors should dominate, and do."""
+        scores = self._scores({"a": 0.50, "b": 0.90}, n_val=1000)
+        assert max(scores.values()) * 2 > 1.0
+
+    def test_the_same_spread_means_the_same_thing_at_two_sample_sizes(self) -> None:
+        """Min-max could not tell these apart; a noise unit must."""
+        small = self._scores({"a": 0.80, "b": 0.82}, n_val=100)
+        large = self._scores({"a": 0.80, "b": 0.82}, n_val=10000)
+        assert max(large.values()) > max(small.values())
+
+    def test_the_ranking_is_unchanged(self) -> None:
+        """Scaling changes what a difference means, not which is bigger."""
+        scores = self._scores({"a": 0.80, "b": 0.86, "c": 0.83}, n_val=500)
+        assert max(scores, key=lambda k: scores[k]) == "b"
+
+    def test_an_unknown_sample_size_falls_back_to_the_spread(self) -> None:
+        """No n means no binomial claim; the old behaviour stands."""
+        scores = self._scores({"a": 0.80, "b": 0.90}, n_val=None)
+        assert max(scores.values()) * 2 == pytest.approx(1.0)
+
+    def test_a_non_proportion_metric_falls_back(self) -> None:
+        """A loss is not a proportion and the binomial form says nothing."""
+        result = run_selector(
+            {"a": {"loss": 2.5}, "b": {"loss": 1.0}},
+            {"loss": 3.0},
+            _config(selection_metric="loss", selection_mode="min", xai_selection_weight=0.5),
+            {"a": 0.0, "b": 0.0},
+            n_val=500,
+        )
+        assert max(result.scores.values()) * 2 == pytest.approx(1.0)
+
+    def test_identical_candidates_do_not_divide_by_zero(self) -> None:
+        scores = self._scores({"a": 0.85, "b": 0.85}, n_val=500)
+        assert all(v == pytest.approx(0.0) for v in scores.values())
+
+    def test_a_saturated_metric_does_not_divide_by_zero(self) -> None:
+        """p = 1.0 has zero binomial variance; the spread is the honest unit."""
+        scores = self._scores({"a": 1.0, "b": 1.0}, n_val=500)
+        assert all(v == pytest.approx(0.0) for v in scores.values())
+
+    def test_the_plain_argmax_path_is_untouched(self) -> None:
+        """Scaling only enters the composite; weight 0 must be unaffected."""
+        result = run_selector(
+            {"a": {"accuracy": 0.8749}, "b": {"accuracy": 0.8816}},
+            self.BASELINE,
+            _config(),
+            n_val=1000,
+        )
+        assert result.best == "b"
+        assert result.scores == {"a": 0.8749, "b": 0.8816}

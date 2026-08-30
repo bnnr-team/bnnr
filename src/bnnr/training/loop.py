@@ -780,6 +780,7 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
             xai_scores_by_candidate if candidates else None,
             per_sample_correct=candidate_correct,
             baseline_correct=trainer._baseline_correct,
+            n_val=_val_sample_count(trainer),
         )
         selected_name = selection.best
         trainer._last_selection = selection
@@ -1059,3 +1060,22 @@ def _record_shadow(
         stats=stats,
         metrics=metrics,
     )
+
+
+def _val_sample_count(trainer: BNNRTrainer) -> int | None:
+    """How many validation samples the selection metric was measured on.
+
+    The noise unit the selector scales differences by is the binomial standard
+    error, which needs this. Preferring the cached label vector over
+    ``len(dataset)`` because it is what the metric was actually computed over:
+    a drop_last loader or a dataset without ``__len__`` would make the two
+    disagree, and the smaller honest number is the right one.
+    """
+    labels = trainer._last_eval_labels
+    if labels is not None and labels.size:
+        return int(labels.size)
+    dataset = getattr(trainer.val_loader, "dataset", None)
+    try:
+        return len(dataset) if dataset is not None else None
+    except TypeError:
+        return None

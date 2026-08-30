@@ -19,6 +19,7 @@ return, and is now a thin adapter over the registry.
 from __future__ import annotations
 
 import hashlib
+import math
 import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
@@ -105,6 +106,7 @@ class CandidateSelector(Protocol):
         *,
         diagnosis: Diagnosis | None = None,
         baseline_correct: Any | None = None,
+        n_val: int | None = None,
     ) -> SelectionResult:
         """Pick from *candidates*, or select nothing.
 
@@ -124,6 +126,50 @@ def _resolved_values(candidates: list[CandidateReport], metric: str) -> dict[str
         if value is not None:
             resolved[candidate.name] = value
     return resolved
+
+
+def _noise_unit(values: dict[str, float], n_val: int | None) -> float:
+    """The resolution of the selection metric, for scaling candidate differences.
+
+    Min-max normalisation used to go here, and it is what T20 found fault with.
+    It stretches whatever spread the candidates happened to have across the full
+    [0, 1] range, so a spread of 0.2 pp and a spread of 20 pp both produce a
+    metric term running from 0 to 1. The blending weight therefore means
+    something different in every iteration, and on a saturated metric it is
+    applied to scatter rather than to signal.
+
+    The unit here is the binomial standard error ``sqrt(p(1-p)/n)`` of the
+    selection metric, which is the actual resolution of the number being
+    compared. A normalised difference of 1.0 now means "one standard error
+    better than the weakest candidate" in every iteration, and a sub-noise
+    spread produces a term well below 1 instead of a near-1.0 one.
+
+    ``p`` is the mean across candidates rather than a per-candidate value: the
+    candidates differ by fractions of a point, so the choice barely moves the
+    unit, and one shared unit keeps the scores on a common scale.
+
+    **Standard deviation across the candidates is deliberately not used.** Three
+    points is a poor estimator of anything, and on the run T20 examined it would
+    have been an estimator of the noise it was supposed to divide out.
+
+    Falls back to the observed spread when the sample size is unknown or the
+    metric is not a proportion, since the binomial form claims nothing there.
+    """
+    spread = max(values.values()) - min(values.values())
+    fallback = spread if spread > 0 else 1.0
+
+    if not n_val or n_val < 1:
+        return fallback
+    mean_p = sum(values.values()) / len(values)
+    if not 0.0 <= mean_p <= 1.0:
+        # Not a proportion (a loss, say); the binomial standard error is not
+        # defined for it and pretending otherwise would be worse than min-max.
+        return fallback
+
+    unit = math.sqrt(max(mean_p * (1.0 - mean_p), 0.0) / n_val)
+    # A metric saturated at exactly 0 or 1 has zero binomial variance, which
+    # would divide by zero. The observed spread is the honest answer there.
+    return unit if unit > 1e-12 else fallback
 
 
 def _improved(value: float, baseline_value: float, mode: str) -> bool:
@@ -208,6 +254,7 @@ class MetricArgmaxSelector:
         *,
         diagnosis: Diagnosis | None = None,
         baseline_correct: Any | None = None,
+        n_val: int | None = None,
     ) -> SelectionResult:
         del diagnosis  # this selector decides on the metric alone
         metric = config.selection_metric
@@ -227,12 +274,13 @@ class MetricArgmaxSelector:
             )
 
         lo, hi = min(values.values()), max(values.values())
-        span = hi - lo if hi != lo else 1.0
+        unit = _noise_unit(values, n_val)
         xai_by_name = {c.name: (c.xai_score or 0.0) for c in candidates}
 
         scores = {}
         for name, value in values.items():
-            normalised = (value - lo) / span if mode == "max" else (hi - value) / span
+            delta = (value - lo) if mode == "max" else (hi - value)
+            normalised = delta / unit
             scores[name] = (1.0 - weight) * normalised + weight * xai_by_name.get(name, 0.0)
 
         best_name = max(scores, key=lambda name: scores[name])
@@ -261,8 +309,9 @@ class RandomSelector:
         *,
         diagnosis: Diagnosis | None = None,
         baseline_correct: Any | None = None,
+        n_val: int | None = None,
     ) -> SelectionResult:
-        del diagnosis  # a random arm reads nothing
+        del diagnosis, n_val  # a random arm reads nothing
         values = _resolved_values(candidates, config.selection_metric)
         if not values:
             return SelectionResult((), self.name, "no_candidates", {})
@@ -311,7 +360,9 @@ class DiagnosisSelector:
         *,
         diagnosis: Diagnosis | None = None,
         baseline_correct: Any | None = None,
+        n_val: int | None = None,
     ) -> SelectionResult:
+        del n_val  # the diagnosis decides the family, not a scaled metric
         values = _resolved_values(candidates, config.selection_metric)
         if not values:
             return SelectionResult((), self.name, "no_candidates", {})
@@ -378,6 +429,7 @@ def run_selector(
     diagnosis: Diagnosis | None = None,
     per_sample_correct: dict[str, Any] | None = None,
     baseline_correct: Any | None = None,
+    n_val: int | None = None,
 ) -> SelectionResult:
     """Build the candidate reports and run the configured selector over them."""
     candidates = [
@@ -399,4 +451,5 @@ def run_selector(
         config,
         diagnosis=diagnosis,
         baseline_correct=baseline_correct,
+        n_val=n_val,
     )
