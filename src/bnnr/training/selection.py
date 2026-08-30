@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from bnnr.analysis.diagnosis import Diagnosis
     from bnnr.config_model import BNNRConfig
 
 __all__ = [
@@ -90,8 +91,16 @@ class CandidateSelector(Protocol):
         candidates: list[CandidateReport],
         baseline: dict[str, float],
         config: BNNRConfig,
+        *,
+        diagnosis: Diagnosis | None = None,
     ) -> SelectionResult:
-        """Pick from *candidates*, or select nothing."""
+        """Pick from *candidates*, or select nothing.
+
+        *diagnosis* is the attention diagnosis for this iteration when one was
+        computed. It is keyword-only and optional so a selector that does not
+        read attention is not forced to know the concept exists; the two
+        metric-driven selectors ignore it entirely.
+        """
         raise NotImplementedError
 
 
@@ -161,7 +170,10 @@ class MetricArgmaxSelector:
         candidates: list[CandidateReport],
         baseline: dict[str, float],
         config: BNNRConfig,
+        *,
+        diagnosis: Diagnosis | None = None,
     ) -> SelectionResult:
+        del diagnosis  # this selector decides on the metric alone
         metric = config.selection_metric
         mode = config.selection_mode
         weight = config.xai_selection_weight
@@ -206,7 +218,10 @@ class RandomSelector:
         candidates: list[CandidateReport],
         baseline: dict[str, float],
         config: BNNRConfig,
+        *,
+        diagnosis: Diagnosis | None = None,
     ) -> SelectionResult:
+        del diagnosis  # a random arm reads nothing
         values = _resolved_values(candidates, config.selection_metric)
         if not values:
             return SelectionResult((), self.name, "no_candidates", {})
@@ -222,9 +237,79 @@ class RandomSelector:
         return _gate_on_baseline(picked, candidates, baseline, config, self.name, scores)
 
 
+class DiagnosisSelector:
+    """Pick the candidate the attention diagnosis asked for.
+
+    This is the selector the whole remediation programme exists to make
+    possible: the intervention is chosen by *where attention already is*, not by
+    an argmax over sub-point differences in a saturated accuracy.
+
+    It refuses to guess. Without a diagnosis it returns nothing with reason
+    ``"no_diagnosis"`` rather than quietly falling back to argmax, because a
+    silent fallback would make a benchmark contrast between this selector and
+    argmax measure a blend of the two. FIX-4-2 adds an explicit, recorded
+    fallback for the low-confidence case; that is a policy decision and it
+    belongs in the policy layer, not hidden in here.
+
+    Matching is by substring against the candidate name, because a candidate is
+    an augmentation instance (``icd_p50``, ``aicd``) while a recommendation is a
+    family (``icd``). ``aicd`` is checked before ``icd`` would match it, since
+    ``"icd" in "aicd"`` is true and the wrong way round would recommend ICD for
+    every AICD candidate.
+    """
+
+    name = "diagnosis"
+
+    def select(
+        self,
+        candidates: list[CandidateReport],
+        baseline: dict[str, float],
+        config: BNNRConfig,
+        *,
+        diagnosis: Diagnosis | None = None,
+    ) -> SelectionResult:
+        values = _resolved_values(candidates, config.selection_metric)
+        if not values:
+            return SelectionResult((), self.name, "no_candidates", {})
+        if diagnosis is None:
+            return SelectionResult((), self.name, "no_diagnosis", {})
+
+        scores = {name: 0.0 for name in values}
+        for family in diagnosis.recommended:
+            for name in values:
+                if _matches_family(name, family):
+                    scores[name] = 1.0
+
+        wanted = [name for name, score in scores.items() if score > 0.0]
+        if not wanted:
+            return SelectionResult((), self.name, "no_matching_candidate", scores)
+
+        # Among candidates of the recommended family, the metric still breaks
+        # the tie: the diagnosis says which *kind* of intervention, not which
+        # hyperparameters of it.
+        sign = 1.0 if config.selection_mode == "max" else -1.0
+        best = max(wanted, key=lambda name: sign * values[name])
+        return _gate_on_baseline(best, candidates, baseline, config, self.name, scores)
+
+
+#: Longest first, so a family that contains another as a substring is tested
+#: before the shorter one can claim its candidates.
+_FAMILY_ALIASES = ("aicd", "icd", "church_noise")
+
+
+def _matches_family(candidate_name: str, family: str) -> bool:
+    """Whether *candidate_name* is an instance of the recommended *family*."""
+    name = candidate_name.lower()
+    for alias in _FAMILY_ALIASES:
+        if alias in name:
+            return alias == family
+    return family in name
+
+
 SELECTORS: dict[str, CandidateSelector] = {
     MetricArgmaxSelector.name: MetricArgmaxSelector(),
     RandomSelector.name: RandomSelector(),
+    DiagnosisSelector.name: DiagnosisSelector(),
 }
 
 
@@ -243,6 +328,8 @@ def run_selector(
     baseline_metrics: dict[str, float],
     config: BNNRConfig,
     xai_scores: dict[str, float] | None = None,
+    *,
+    diagnosis: Diagnosis | None = None,
 ) -> SelectionResult:
     """Build the candidate reports and run the configured selector over them."""
     candidates = [
@@ -257,4 +344,6 @@ def run_selector(
         )
         for name, metrics in results.items()
     ]
-    return get_selector(config.selector).select(candidates, baseline_metrics, config)
+    return get_selector(config.selector).select(
+        candidates, baseline_metrics, config, diagnosis=diagnosis
+    )

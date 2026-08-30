@@ -250,8 +250,8 @@ class TestRegistry:
     def test_default_selector_is_metric_argmax(self) -> None:
         assert BNNRConfig().selector == "metric_argmax"
 
-    def test_both_selectors_are_registered(self) -> None:
-        assert set(SELECTORS) == {"metric_argmax", "random"}
+    def test_every_selector_is_registered(self) -> None:
+        assert set(SELECTORS) == {"metric_argmax", "random", "diagnosis"}
 
     def test_unknown_selector_rejected_by_config(self) -> None:
         with pytest.raises(ValueError, match="selector must be one of"):
@@ -271,3 +271,102 @@ class TestRegistry:
             )
             assert isinstance(result, SelectionResult)
             assert isinstance(result.selected, tuple)
+
+
+# ---------------------------------------------------------------------------
+# The diagnosis selector (FIX-1-2 step 3 of FIX-2-1)
+# ---------------------------------------------------------------------------
+
+
+def _diagnosis(recommended: tuple[str, ...], confidence: float = 1.0):
+    from bnnr.analysis.diagnosis import AttentionRegime, Diagnosis
+    from bnnr.analysis.saliency_stats import SaliencyStats
+
+    regime = {
+        ("icd",): AttentionRegime.SHORTCUT_SUSPECTED,
+        ("aicd",): AttentionRegime.OBJECT_FOCUSED,
+        ("church_noise",): AttentionRegime.UNSTRUCTURED,
+    }[recommended]
+    return Diagnosis(
+        regime=regime,
+        stats=SaliencyStats(0.5, 0.5, 0.2, (14, 14)),
+        overall_acc=0.9,
+        hard_quantile_acc=0.4,
+        robustness_gap=0.5,
+        recommended=recommended,
+        confidence=confidence,
+        reason="synthetic",
+    )
+
+
+class TestDiagnosisSelector:
+    RESULTS = {
+        "icd": {"accuracy": 0.81},
+        "aicd": {"accuracy": 0.85},
+        "church_noise": {"accuracy": 0.83},
+    }
+    BASELINE = {"accuracy": 0.50}
+
+    def _run(self, recommended, results=None):
+        return run_selector(
+            results if results is not None else self.RESULTS,
+            self.BASELINE,
+            _config(selector="diagnosis"),
+            diagnosis=_diagnosis(recommended),
+        )
+
+    @pytest.mark.parametrize("family", ["icd", "aicd", "church_noise"])
+    def test_picks_the_recommended_family(self, family: str) -> None:
+        assert self._run((family,)).best == family
+
+    def test_ignores_a_better_metric_outside_the_recommendation(self) -> None:
+        """The whole point: attention decides the kind, not the accuracy."""
+        result = self._run(("icd",))
+        assert result.best == "icd"  # 0.81, while aicd scores 0.85
+
+    def test_aicd_is_not_matched_by_the_icd_family(self) -> None:
+        """"icd" in "aicd" is true; the wrong ordering would recommend ICD for
+        every AICD candidate."""
+        result = self._run(("icd",), results={"aicd_p50": {"accuracy": 0.9}})
+        assert result.selected == ()
+        assert result.reason == "no_matching_candidate"
+
+    def test_metric_breaks_ties_within_the_recommended_family(self) -> None:
+        """The diagnosis says which intervention, not which hyperparameters."""
+        results = {
+            "icd_p50": {"accuracy": 0.81},
+            "icd_p90": {"accuracy": 0.88},
+            "aicd": {"accuracy": 0.95},
+        }
+        assert self._run(("icd",), results=results).best == "icd_p90"
+
+    def test_refuses_to_run_without_a_diagnosis(self) -> None:
+        """A silent fallback to argmax would make a benchmark contrast between
+        this selector and argmax measure a blend of the two."""
+        result = run_selector(self.RESULTS, self.BASELINE, _config(selector="diagnosis"))
+        assert result.selected == ()
+        assert result.reason == "no_diagnosis"
+
+    def test_still_gated_on_beating_the_baseline(self) -> None:
+        result = run_selector(
+            {"icd": {"accuracy": 0.30}},
+            {"accuracy": 0.90},
+            _config(selector="diagnosis"),
+            diagnosis=_diagnosis(("icd",)),
+        )
+        assert result.selected == ()
+        assert result.reason == "no_improvement"
+
+    def test_is_registered_and_configurable(self) -> None:
+        assert "diagnosis" in SELECTORS
+        assert BNNRConfig(selector="diagnosis").selector == "diagnosis"
+
+    def test_metric_selectors_ignore_a_supplied_diagnosis(self) -> None:
+        """Passing one must not change what the metric-driven arms do."""
+        for name in ("metric_argmax", "random"):
+            config = _config(selector=name, seed=3)
+            without = run_selector(self.RESULTS, self.BASELINE, config).best
+            with_diag = run_selector(
+                self.RESULTS, self.BASELINE, config, diagnosis=_diagnosis(("icd",))
+            ).best
+            assert without == with_diag

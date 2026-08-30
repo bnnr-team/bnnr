@@ -48,8 +48,11 @@ seed: 42
 |---|---|
 | `metric_argmax` (default) | greedy argmax on `selection_metric`, blended with XAI quality when `xai_selection_weight > 0` |
 | `random` | uniform pick among the candidates, seeded from `seed` |
+| `diagnosis` | picks the family the attention diagnosis recommends; see [diagnosis](diagnosis.md) |
 
 Both are gated the same way: whatever a selector picks is discarded unless it beat the baseline on `selection_metric`. That gate is deliberately shared, so a comparison between two selectors is a comparison of their ranking rules and nothing else. A selector that skipped it would look better purely by accepting runs the others reject.
+
+`diagnosis` needs calibrated thresholds and a `Diagnosis` for the iteration. Without one it selects nothing rather than falling back to argmax, because a silent fallback would make a benchmark contrast between the two measure a blend of them.
 
 `random` is not a joke setting. It is the arm the T20 benchmark ran `metric_argmax` against, and `metric_argmax` did not beat it at n=10 across two datasets; having it as a named selector is what makes that contrast reproducible rather than something the benchmark harness improvises.
 
