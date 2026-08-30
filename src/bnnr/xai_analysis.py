@@ -324,29 +324,49 @@ def compute_xai_quality_score(
     stats: list[dict[str, float]],
     correct_flags: list[bool],
 ) -> tuple[float, dict[str, float]]:
-    """Compute a 0–1 quality score from saliency statistics and accuracy.
+    """Compute a 0–1 score describing the *shape* of the saliency maps.
 
-    Higher score = better-focused model with higher accuracy.
+    Higher score = more concentrated, more coherent, less border-heavy, more
+    consistent across samples.
 
-    **6-component formula** (v2):
+    **5-component formula** (v3):
 
     =============================  ======  ================================
     Component                      Weight  Source
     =============================  ======  ================================
-    accuracy                       25 %    fraction of correct predictions
-    focus (Gini coefficient)       20 %    higher Gini → sharper focus
-    coverage                       15 %    moderate (5–30 %) is ideal
-    spatial coherence              15 %    single blob preferred
-    edge ratio (inverted)          10 %    penalise border attention
-    cross-sample consistency       15 %    low CV of entropy across samples
+    focus (Gini coefficient)       26.7 %  higher Gini → sharper focus
+    coverage                       20 %    moderate (5–30 %) is ideal
+    spatial coherence              20 %    single blob preferred
+    edge ratio (inverted)          13.3 %  penalise border attention
+    cross-sample consistency       20 %    low CV of entropy across samples
     =============================  ======  ================================
+
+    **Accuracy was removed from the weighted sum in v3.** It used to carry 25 %,
+    and ``select_best_path`` then blended this score against the normalised
+    selection metric, which is accuracy. Accuracy was therefore counted twice,
+    at an effective weight nobody chose, and the two copies were not even the
+    same quantity: one min-max normalised across candidates, the other the raw
+    probe-set fraction. The weights above are the surviving five renormalised
+    to sum to 1, so the score keeps its ``[0, 1]`` range.
+
+    ``accuracy`` stays in ``breakdown`` as an observation, because the dashboard
+    displays it, but nothing multiplies it any more.
+
+    **This score encodes a prior: "concentrated, central saliency is good."**
+    It rewards high Gini and penalises ``edge_ratio`` unconditionally. That is
+    exactly the question :mod:`bnnr.analysis.diagnosis` decides per case, and
+    for a Waterbirds-like model the built-in prior points the wrong way: a
+    model reading background context has *diffuse, border-heavy* attention and
+    needs ICD, which this score would rank last. Prefer the diagnosis where the
+    answer matters; this remains a display statistic.
 
     Returns
     -------
     score : float
-        Scalar quality score in ``[0, 1]``.
+        Scalar shape score in ``[0, 1]``.
     breakdown : dict[str, float]
-        Per-component sub-scores (each 0–1) for dashboard display.
+        Per-component sub-scores (each 0–1) for dashboard display, plus the
+        observed ``accuracy``, which is no longer weighted into the score.
     """
     if not stats:
         return 0.0, {}
@@ -391,6 +411,7 @@ def compute_xai_quality_score(
         consistency_score = 0.5
 
     breakdown = {
+        # Observed, not weighted: see the docstring on the v3 change.
         "accuracy": round(accuracy, 4),
         "focus": round(focus_score, 4),
         "coverage": round(coverage_score, 4),
@@ -399,13 +420,15 @@ def compute_xai_quality_score(
         "consistency": round(consistency_score, 4),
     }
 
+    # The v2 weights without accuracy summed to 0.75, so each is divided by
+    # that to keep the score on [0, 1]. Written as the division rather than as
+    # rounded constants so the provenance of every number stays visible.
     score = (
-        accuracy * 0.25
-        + focus_score * 0.20
-        + coverage_score * 0.15
-        + coherence_score * 0.15
-        + edge_score * 0.10
-        + consistency_score * 0.15
+        focus_score * (0.20 / 0.75)
+        + coverage_score * (0.15 / 0.75)
+        + coherence_score * (0.15 / 0.75)
+        + edge_score * (0.10 / 0.75)
+        + consistency_score * (0.15 / 0.75)
     )
     return round(min(1.0, max(0.0, score)), 4), breakdown
 

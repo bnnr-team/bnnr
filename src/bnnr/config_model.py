@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -9,6 +10,19 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 if TYPE_CHECKING:
     from bnnr.analysis.diagnosis import DiagnosisThresholds
+
+#: Knobs whose value came from nobody's measurement, with what to do instead.
+#: They keep working; the warning exists so a run that depends on one says so.
+_DEPRECATED_XAI_KNOBS = {
+    "xai_selection_weight": (
+        "Use selector='diagnosis' with calibrated thresholds to let attention "
+        "decide, or leave it at 0.0 to select on the metric alone."
+    ),
+    "xai_pruning_threshold": (
+        "Use candidate_pruning_relative_threshold, which prunes on the metric "
+        "being optimised rather than on a hand-weighted saliency scalar."
+    ),
+}
 
 #: Selectors that cannot run without calibrated thresholds. A diagnosis-driven
 #: search policy (#413) joins this set rather than growing a second check.
@@ -224,6 +238,35 @@ class BNNRConfig(BaseModel):
         if value <= 0:
             raise ValueError("detection_xai_* controls must be > 0")
         return value
+
+    @model_validator(mode="after")
+    def warn_on_uncalibrated_xai_knobs(self) -> BNNRConfig:
+        """Warn when a run is steered by a weight nobody measured.
+
+        Both knobs are built on ``compute_xai_quality_score``, a hand-weighted
+        scalar whose components were chosen by hand and never calibrated
+        against an outcome. T20 traced its null result to exactly this path.
+        They keep working, since we stay in 0.x, but a run that relies on them
+        should say so out loud.
+
+        The warning fires only when the field was explicitly supplied.
+        ``model_fields_set`` is what makes that distinguishable from the
+        default, so a user who never touched the knob is never nagged about it.
+        """
+        for field, replacement in _DEPRECATED_XAI_KNOBS.items():
+            if field not in self.model_fields_set:
+                continue
+            value = getattr(self, field)
+            if not value:
+                continue
+            warnings.warn(
+                f"{field}={value} is deprecated: it is built on an uncalibrated "
+                f"hand-weighted quality score, which is what T20 traced its null "
+                f"result to. {replacement} See docs/diagnosis.md.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_diagnosis_is_calibrated(self) -> BNNRConfig:
