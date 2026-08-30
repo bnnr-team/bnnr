@@ -16,8 +16,21 @@ from bnnr.training.selection import (
     run_selector,
 )
 
+#: Any values will do here: these tests exercise the selector, not the rule.
+#: What matters is that they are present, since a diagnosis-driven config
+#: without calibrated thresholds is refused at construction (FIX-1-4).
+CALIBRATED_DIAGNOSIS = {
+    "concentration_lo": 0.30,
+    "concentration_hi": 0.60,
+    "border_mass_hi": 0.35,
+    "perturbation_shift_hi": 0.50,
+    "robustness_gap_hi": 0.15,
+}
+
 
 def _config(**overrides) -> BNNRConfig:
+    if overrides.get("selector") == "diagnosis" and "diagnosis" not in overrides:
+        overrides["diagnosis"] = CALIBRATED_DIAGNOSIS
     return BNNRConfig(**overrides)
 
 
@@ -359,7 +372,12 @@ class TestDiagnosisSelector:
 
     def test_is_registered_and_configurable(self) -> None:
         assert "diagnosis" in SELECTORS
-        assert BNNRConfig(selector="diagnosis").selector == "diagnosis"
+        assert _config(selector="diagnosis").selector == "diagnosis"
+
+    def test_config_refuses_the_selector_without_thresholds(self) -> None:
+        """FIX-1-4: the gate fires at construction, before any GPU time."""
+        with pytest.raises(ValueError, match="calibrated diagnosis thresholds"):
+            BNNRConfig(selector="diagnosis")
 
     def test_metric_selectors_ignore_a_supplied_diagnosis(self) -> None:
         """Passing one must not change what the metric-driven arms do."""
