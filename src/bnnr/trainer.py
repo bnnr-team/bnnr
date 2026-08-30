@@ -27,6 +27,7 @@ from bnnr.training import image_utils as _img
 from bnnr.training import loop as _loop
 from bnnr.training import metrics as _metrics
 from bnnr.training import probe as _probe
+from bnnr.training import run_record as _run_record
 from bnnr.training.checkpoint import (  # noqa: F401 — re-exported for backward compat
     _RuntimeState,
     _TrainerState,
@@ -89,6 +90,13 @@ class BNNRTrainer:
         # Cache for merged _evaluate + _compute_eval_class_details (classification only)
         self._last_eval_preds: np.ndarray | None = None
         self._last_eval_labels: np.ndarray | None = None
+        # Epoch accounting. Counted as epochs run rather than derived from
+        # m_epochs * iterations, because pruning stops candidates early and the
+        # deployed model keeps its best epoch rather than its last.
+        self._ledger = _run_record.ComputeLedger()
+        # Set when a diagnosis was computed for the run. Stays None until
+        # shadow mode (#411) starts filling it on every run.
+        self._last_diagnosis: Any | None = None
         self.logger = setup_logging("bnnr", config.log_file, json_format=True)
         self._custom_metrics: dict[str, Any] = custom_metrics or {}
 

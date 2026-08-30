@@ -85,6 +85,28 @@ Common top-level keys:
 - `checkpoints`
 - `iteration_summaries`
 - `analysis`
+- `run_record`
+
+### `run_record`
+
+The fields a run must carry for its result to be comparable with another run. Written by `bnnr.training.run_record.RunRecord`.
+
+| key | meaning |
+|---|---|
+| `total_gpu_epochs` | every epoch trained anywhere: baseline, every candidate of every iteration, pruned and losing candidates included |
+| `deployed_epochs` | epochs of training the shipped model actually received |
+| `search_policy` | how candidates were enumerated; `"exhaustive"` is the only one today |
+| `selector` | which rule picked the winner, from `config.selector` |
+| `selected_candidate` | list of names the selector chose |
+| `diagnosis` | the attention diagnosis when one was computed, else `null` |
+| `hard_quantile_q` | the loss quantile the robustness metrics used |
+| `augmentation_modes` | `{name: mode}` for augmentations whose transform depends on a mode |
+
+**The two epoch counts are the point.** They differ whenever a branch search runs, and confusing them is what made BNNR look worse than it was: under "equal compute" the deployed model trained for a third of the budget while single-augmentation baselines trained all of it. Matching deployed epochs instead closed a 4.46 pp gap to 0.09 pp. They are equal only for a run with no search.
+
+Both are **counted as epochs run**, not derived from `m_epochs × max_iterations`. Pruning stops candidates early and the deployed model keeps its best epoch rather than its last, so the arithmetic would be an upper bound rather than an answer.
+
+A report written before this key existed still loads: `RunRecord.from_dict` falls back to defaults for absent fields and ignores unknown ones, so old runs summarize rather than crashing a reader.
 
 ## `events.jsonl`
 
