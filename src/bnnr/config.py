@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from bnnr.config_model import BNNRConfig
+from bnnr.config_model import BNNRConfig, DiagnosisConfig
 from bnnr.utils import _parse_fbeta
 
 
@@ -58,6 +58,63 @@ def load_config(config_path: Path) -> BNNRConfig:
         return BNNRConfig(**(data or {}))
     except ValidationError as exc:
         raise ValueError(f"Invalid BNNRConfig in {config_path}: {exc}") from exc
+
+
+def load_diagnosis_profile(profile_path: Path, name: str | None = None) -> DiagnosisConfig:
+    """Load a named set of calibrated diagnosis thresholds from a YAML file.
+
+    A profile file holds one or more named threshold sets::
+
+        imagewoof_resnet50:
+          concentration_lo: 0.31
+          concentration_hi: 0.58
+          border_mass_hi: 0.34
+          perturbation_shift_hi: 0.47
+          robustness_gap_hi: 0.12
+          min_confidence: 0.75
+
+    Thresholds are calibrated per model family and per saliency resolution, so
+    they travel as a file rather than as library defaults. This is what lets the
+    calibration study publish a profile without anything being hard-coded here.
+
+    With one profile in the file *name* may be omitted. With several it is
+    required, because picking one silently would be the same class of mistake
+    as a default threshold.
+
+    The result is not validated for completeness here: a partial profile is a
+    legitimate thing to load and then finish by hand. Completeness is checked
+    when a config that uses it asks for the ``diagnosis`` selector.
+    """
+    if not profile_path.exists():
+        raise FileNotFoundError(f"Diagnosis profile not found: {profile_path}")
+    try:
+        data = yaml.safe_load(profile_path.read_text())
+    except yaml.YAMLError as exc:
+        raise yaml.YAMLError(f"Invalid YAML in {profile_path}: {exc}") from exc
+
+    if not isinstance(data, dict) or not data:
+        raise ValueError(f"{profile_path} holds no named threshold profiles")
+
+    if name is None:
+        if len(data) > 1:
+            raise ValueError(
+                f"{profile_path} holds {len(data)} profiles ({', '.join(sorted(data))}); "
+                f"name the one you want rather than letting it be picked for you"
+            )
+        name = next(iter(data))
+    elif name not in data:
+        raise KeyError(
+            f"Profile {name!r} not in {profile_path}. Available: {sorted(data)}"
+        )
+
+    entry = data[name]
+    if not isinstance(entry, dict):
+        raise ValueError(f"Profile {name!r} in {profile_path} is not a mapping")
+
+    try:
+        return DiagnosisConfig(**entry)
+    except ValidationError as exc:
+        raise ValueError(f"Invalid diagnosis profile {name!r} in {profile_path}: {exc}") from exc
 
 
 def save_config(config: BNNRConfig, save_path: Path) -> None:

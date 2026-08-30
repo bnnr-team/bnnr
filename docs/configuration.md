@@ -52,6 +52,38 @@ seed: 42
 
 Both are gated the same way: whatever a selector picks is discarded unless it beat the baseline on `selection_metric`. That gate is deliberately shared, so a comparison between two selectors is a comparison of their ranking rules and nothing else. A selector that skipped it would look better purely by accepting runs the others reject.
 
+### Diagnosis thresholds
+
+`selector: diagnosis` requires a `diagnosis:` block, and **every field in it starts unset**:
+
+```yaml
+selector: diagnosis
+diagnosis:
+  concentration_lo: 0.31
+  concentration_hi: 0.58
+  border_mass_hi: 0.34
+  perturbation_shift_hi: 0.47
+  robustness_gap_hi: 0.12
+  min_confidence: 0.75        # optional
+```
+
+Asking for the selector with any of the first five unset raises at **config construction**, not mid-run, so the failure lands before any GPU time is spent. There is deliberately no default: shipping one would repeat the mistake that produced `xai_selection_weight` and its preset 0.1 and 0.15.
+
+Thresholds are calibrated per model family and per saliency resolution, so they travel as a file rather than as library defaults:
+
+```python
+from bnnr.config import load_diagnosis_profile
+
+thresholds = load_diagnosis_profile(Path("profiles.yaml"), "imagewoof_resnet50")
+config = BNNRConfig(selector="diagnosis", diagnosis=thresholds)
+```
+
+A profile file holds one or more named sets. With several in the file the name is required — picking one silently would be the same class of mistake as a default threshold.
+
+Setting the block without setting `selector` is harmless and is what shadow mode does: it records the raw statistics and needs no thresholds at all.
+
+`hard_quantile_q` is **not** part of this block. It lives at the top level because `hard_quantile_acc` and `robustness_gap` are worth watching with no diagnosis configured; the calibration study sweeps it alongside these thresholds, which does not make it one.
+
 `diagnosis` needs calibrated thresholds and a `Diagnosis` for the iteration. Without one it selects nothing rather than falling back to argmax, because a silent fallback would make a benchmark contrast between the two measure a blend of them.
 
 `random` is not a joke setting. It is the arm the T20 benchmark ran `metric_argmax` against, and `metric_argmax` did not beat it at n=10 across two datasets; having it as a named selector is what makes that contrast reproducible rather than something the benchmark harness improvises.
