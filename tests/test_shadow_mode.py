@@ -129,17 +129,25 @@ class TestWriting:
     def test_the_filename_is_stable(self, tmp_path) -> None:
         recorder = ShadowRecorder()
         recorder.record(phase="baseline", iteration=0, candidate="baseline", stats=_stats(), metrics={})
-        assert recorder.write(tmp_path).name == SHADOW_RECORDS_FILENAME
+        # The write happens on its own line: under python -O an assert is
+        # stripped, and an assertion that also performs the action under test
+        # would take the action with it.
+        path = recorder.write(tmp_path)
+        assert path is not None
+        assert path.name == SHADOW_RECORDS_FILENAME
 
     def test_nothing_recorded_writes_no_file(self, tmp_path) -> None:
-        assert ShadowRecorder().write(tmp_path) is None
+        path = ShadowRecorder().write(tmp_path)
+        assert path is None
         assert not (tmp_path / SHADOW_RECORDS_FILENAME).exists()
 
     def test_creates_the_directory(self, tmp_path) -> None:
         recorder = ShadowRecorder()
         recorder.record(phase="baseline", iteration=0, candidate="baseline", stats=_stats(), metrics={})
         target = tmp_path / "nested" / "run"
-        assert recorder.write(target) is not None
+        path = recorder.write(target)
+        assert path is not None
+        assert path.parent == target
 
 
 class TestStatsFromMaps:
