@@ -199,9 +199,152 @@ def _line_partitions(height: int, width: int, num_lines: int, rnd: random.Random
 _NOISE_KINDS = ("white", "gaussian", "pink")
 _NOISE_MODES = frozenset({"regional", "uniform"})
 
+_DIF_KINDS = ("warm", "cold", "sharpen", "blur", "vivid", "fade")
+#: Global mode drops the two spatial effects: a whole-image sharpen or blur is a
+#: different augmentation, not a cheaper version of a localized one.
+_DIF_GLOBAL_KINDS = ("warm", "cold", "vivid", "fade")
+_DIF_EFFECT_MODES = frozenset({"circles", "global"})
+
+_CAMERA_PROFILES = ("cheap", "smartphone", "pro", "webcam", "darkroom")
+_PROCAM_MODES = frozenset({"profile", "wb_gamma"})
+
 
 def _np_rng(rnd: random.Random) -> np.random.Generator:
     return np.random.default_rng(rnd.randrange(0, 2**32 - 1))  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# Tensor-side colour helpers.
+#
+# cv2's uint8 HSV puts S and V on [0, 255], so scaling a channel by a factor and
+# clipping at 255 is the same operation as scaling s or v on [0, 1] and clamping
+# at 1.0. That is what lets the numpy and tensor paths of DifPresets and ProCAM
+# run the same saturation and value adjustments.
+# ---------------------------------------------------------------------------
+
+
+def _rgb_to_hsv(images: Tensor) -> Tensor:
+    """BCHW RGB in [0, 1] -> BCHW HSV with h in [0, 1), s and v in [0, 1]."""
+    r, g, b = images[:, 0], images[:, 1], images[:, 2]
+    maxc, _ = images[:, :3].max(dim=1)
+    minc, _ = images[:, :3].min(dim=1)
+    span = maxc - minc
+
+    # A grey pixel has no hue; 0 is the convention cv2 uses too.
+    safe_span = torch.where(span > 0, span, torch.ones_like(span))
+    rc = (maxc - r) / safe_span
+    gc = (maxc - g) / safe_span
+    bc = (maxc - b) / safe_span
+
+    h = torch.where(
+        maxc == r,
+        bc - gc,
+        torch.where(maxc == g, 2.0 + rc - bc, 4.0 + gc - rc),
+    )
+    h = torch.where(span > 0, (h / 6.0) % 1.0, torch.zeros_like(h))
+    s = torch.where(maxc > 0, span / torch.where(maxc > 0, maxc, torch.ones_like(maxc)), torch.zeros_like(maxc))
+    return torch.stack([h, s, maxc], dim=1)
+
+
+def _hsv_to_rgb(hsv: Tensor) -> Tensor:
+    """Inverse of :func:`_rgb_to_hsv`."""
+    h, s, v = hsv[:, 0], hsv[:, 1], hsv[:, 2]
+    i = torch.floor(h * 6.0)
+    f = h * 6.0 - i
+    p = v * (1.0 - s)
+    q = v * (1.0 - f * s)
+    t = v * (1.0 - (1.0 - f) * s)
+    idx = (i % 6).long()
+
+    options = torch.stack(
+        [
+            torch.stack([v, t, p], dim=1),
+            torch.stack([q, v, p], dim=1),
+            torch.stack([p, v, t], dim=1),
+            torch.stack([p, q, v], dim=1),
+            torch.stack([t, p, v], dim=1),
+            torch.stack([v, p, q], dim=1),
+        ],
+        dim=0,
+    )
+    gather_idx = idx.unsqueeze(0).unsqueeze(2).expand(1, -1, 3, -1, -1)
+    return options.gather(0, gather_idx).squeeze(0)
+
+
+def _scale_saturation_value(images: Tensor, sat: float, val: float) -> Tensor:
+    """Multiply the S and V channels, the tensor twin of the cv2 HSV path."""
+    hsv = _rgb_to_hsv(images[:, :3].clamp(0.0, 1.0))
+    hsv[:, 1] = (hsv[:, 1] * sat).clamp(0.0, 1.0)
+    hsv[:, 2] = (hsv[:, 2] * val).clamp(0.0, 1.0)
+    out = _hsv_to_rgb(hsv)
+    if images.shape[1] > 3:
+        out = torch.cat([out, images[:, 3:]], dim=1)
+    return out
+
+
+def _shift_channels(images: Tensor, shifts: tuple[float, float, float]) -> Tensor:
+    """Add a per-channel offset given in R, G, B order, in [0, 1] units."""
+    out = images.clone()
+    n = min(images.shape[1], 3)
+    offset = torch.tensor(shifts[:n], device=images.device, dtype=images.dtype)
+    out[:, :n] = out[:, :n] + offset.view(1, n, 1, 1)
+    return out.clamp(0.0, 1.0)
+
+
+_SHARPEN_KERNEL = ((0.0, -1.0, 0.0), (-1.0, 5.0, -1.0), (0.0, -1.0, 0.0))
+
+
+def _sharpen(images: Tensor) -> Tensor:
+    """The 3x3 sharpen kernel cv2.filter2D runs, with matching reflect padding."""
+    c = images.shape[1]
+    kernel = torch.tensor(_SHARPEN_KERNEL, device=images.device, dtype=images.dtype)
+    kernel = kernel.view(1, 1, 3, 3).repeat(c, 1, 1, 1)
+    padded = torch.nn.functional.pad(images, (1, 1, 1, 1), mode="reflect")
+    return torch.nn.functional.conv2d(padded, kernel, groups=c).clamp(0.0, 1.0)
+
+
+def _gaussian_blur_t(images: Tensor, kernel_size: int) -> Tensor:
+    """Odd-sized Gaussian blur with the sigma cv2 derives from the kernel."""
+    import torchvision.transforms.functional as tv_functional
+
+    k = int(kernel_size)
+    if k % 2 == 0:
+        k += 1
+    k = max(3, k)
+    limit = 2 * min(images.shape[-2], images.shape[-1]) - 1
+    if k > limit:
+        k = max(3, limit if limit % 2 == 1 else limit - 1)
+    return tv_functional.gaussian_blur(images, [k, k])
+
+
+def _feather_kernel(feather: int, h: int, w: int) -> int:
+    """Odd blur kernel for a feather radius, capped to fit inside the image.
+
+    torch's reflect padding refuses a pad wider than the dimension it pads, and
+    cv2 quietly widens its border instead. Capping here, on the shared path,
+    keeps the numpy and tensor masks the same rather than letting the two
+    disagree on small images.
+    """
+    k = max(3, int(feather) * 2 + 1)
+    limit = 2 * min(h, w) - 1
+    if k > limit:
+        k = limit if limit % 2 == 1 else limit - 1
+    return max(3, k)
+
+
+def _feathered_circle(
+    h: int, w: int, cx: int, cy: int, radius: int, feather: int, *, device: torch.device, dtype: torch.dtype
+) -> Tensor:
+    """(1, 1, H, W) mask in [0, 1]: a filled circle, blurred by ``feather``.
+
+    Same construction as the numpy path (``cv2.circle`` then a Gaussian blur of
+    kernel :func:`_feather_kernel`), so the two produce the same footprint.
+    """
+    ys = torch.arange(h, device=device, dtype=torch.float32).view(-1, 1)
+    xs = torch.arange(w, device=device, dtype=torch.float32).view(1, -1)
+    hard = (((xs - cx) ** 2 + (ys - cy) ** 2) <= radius * radius).to(torch.float32)
+    mask = _gaussian_blur_t(hard.view(1, 1, h, w), _feather_kernel(feather, h, w))
+    return mask.to(dtype)
 
 
 @AugmentationRegistry.register("augmentation_1")
@@ -417,112 +560,194 @@ class BasicAugmentation(BaseAugmentation):
 @AugmentationRegistry.register("augmentation_5")
 @AugmentationRegistry.register("dif_presets")
 class DifPresets(BaseAugmentation):
-    """Color-effect augmentation. CPU/GPU paths diverge by design.
+    """Localized colour effects, identical on the numpy and tensor paths.
 
-    The CPU path (``apply``) paints several *localized* feathered circles with
-    per-circle effects (warm/cold/sharpen/blur/vivid/fade); the GPU path
-    (``apply_tensor_native``) applies a single *global* color-temperature
-    shift (warm/cold/vivid/fade). ``device_compatible=True``, so the runner
-    uses the GPU path on tensors. The circle params only affect the CPU path.
+    ``effect_mode`` selects the transform, and both paths implement both modes,
+    so the device no longer decides which transform runs:
+
+    ``"circles"`` (default)
+        ``num_circles_range`` feathered circles, each with its own effect drawn
+        from warm, cold, sharpen, blur, vivid and fade, composited over the
+        original. This is what the numpy path has always done and what the
+        tensor path now does too.
+    ``"global"``
+        One effect applied to the whole image, drawn from warm, cold, vivid and
+        fade. Cheaper, and close to what the tensor path used to do
+        unconditionally. ``num_circles_range``, ``radius_range`` and ``feather``
+        have no effect in this mode.
+
+    Both paths draw their circles, their effects and every effect parameter from
+    one shared ``_circle_plan`` / ``_global_plan``, so the two are the same
+    transform by construction rather than by inspection.
+
+    Circle mode on the tensor path costs one feathered mask and one full-image
+    effect per circle. Pass ``effect_mode="global"`` to trade the locality back
+    for that, or to approximate runs made before this change.
+
+    The channel order of the warm and cold shifts was wrong on the numpy path,
+    which added the blue offset to red and the red offset to blue: ``warm``
+    cooled the image and ``cold`` warmed it. Both paths now apply the offsets in
+    R, G, B order.
     """
 
     device_compatible: bool = True
 
-    def __init__(self, num_circles_range: tuple[int, int] = (3, 6), radius_range: tuple[int, int] = (15, 60), feather: int = 35, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        num_circles_range: tuple[int, int] = (3, 6),
+        radius_range: tuple[int, int] = (15, 60),
+        feather: int = 35,
+        effect_mode: str = "circles",
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
+        if effect_mode not in _DIF_EFFECT_MODES:
+            raise ValueError(
+                f"effect_mode must be one of {sorted(_DIF_EFFECT_MODES)}, got {effect_mode!r}"
+            )
         self.num_circles_range = num_circles_range
         self.radius_range = radius_range
         self.feather = feather
+        self.effect_mode = effect_mode
+
+    def __repr__(self) -> str:
+        # Extend, do not replace: the base repr carries probability and intensity.
+        return f"{super().__repr__()[:-1]}, effect_mode={self.effect_mode})"
+
+    # ------------------------------------------------------------------
+    # Shared plan: both paths draw the same circles and the same per-effect
+    # parameters from the same RNG, so they are the same transform.
+    # ------------------------------------------------------------------
+
+    def _effect_params(self, kind: str) -> dict[str, Any]:
+        """Draw the parameters of one effect. Shifts are in pixel units."""
+        if kind == "warm":
+            return {
+                "shifts": (
+                    float(self._rnd.randint(15, 40)),
+                    float(self._rnd.randint(5, 25)),
+                    float(self._rnd.randint(-15, 5)),
+                )
+            }
+        if kind == "cold":
+            return {
+                "shifts": (
+                    float(self._rnd.randint(-5, 10)),
+                    float(self._rnd.randint(-15, 5)),
+                    float(self._rnd.randint(20, 45)),
+                )
+            }
+        if kind == "vivid":
+            return {"sat": self._rnd.uniform(1.2, 1.7), "val": self._rnd.uniform(1.1, 1.5)}
+        if kind == "fade":
+            return {"sat": self._rnd.uniform(0.4, 0.8), "val": self._rnd.uniform(0.7, 1.0)}
+        if kind == "blur":
+            return {"kernel": int(self._rnd.choice([5, 7, 9, 11]))}
+        return {}
+
+    def _circle_plan(self, h: int, w: int) -> list[tuple[int, int, int, str, dict[str, Any]]]:
+        """Draw ``(cx, cy, radius, kind, params)`` for every circle of one image."""
+        plan: list[tuple[int, int, int, str, dict[str, Any]]] = []
+        for _ in range(self._rnd.randint(*self.num_circles_range)):
+            radius = min(self._rnd.randint(*self.radius_range), min(h, w) // 2)
+            cx = self._rnd.randint(radius, max(radius + 1, w - radius))
+            cy = self._rnd.randint(radius, max(radius + 1, h - radius))
+            kind = self._rnd.choice(_DIF_KINDS)
+            plan.append((cx, cy, radius, kind, self._effect_params(kind)))
+        return plan
+
+    def _global_plan(self) -> tuple[str, dict[str, Any]]:
+        """Draw the single effect used by ``effect_mode="global"``."""
+        kind = self._rnd.choice(_DIF_GLOBAL_KINDS)
+        return kind, self._effect_params(kind)
+
+    # ------------------------------------------------------------------
+    # Tensor path
+    # ------------------------------------------------------------------
+
+    def _effect_tensor(self, images: Tensor, kind: str, params: dict[str, Any]) -> Tensor:
+        """Apply one effect to a whole BCHW batch in [0, 1]."""
+        if kind in {"warm", "cold"}:
+            r, g, b = params["shifts"]
+            return _shift_channels(images, (r / 255.0, g / 255.0, b / 255.0))
+        if kind in {"vivid", "fade"}:
+            return _scale_saturation_value(images, params["sat"], params["val"])
+        if kind == "sharpen":
+            return _sharpen(images)
+        if kind == "blur":
+            return _gaussian_blur_t(images, params["kernel"])
+        return images
 
     def apply_tensor_native(self, images: Tensor) -> Tensor:
-        """GPU-native DifPresets: color temperature shifts on BCHW float32 tensors."""
+        """Tensor-native DifPresets on BCHW float32 tensors in [0, 1]."""
         if self._rnd.random() > self.probability:
             return images
-        b, c, h, w = images.shape
-        kind = self._rnd.choice(["warm", "cold", "vivid", "fade"])
-        if kind == "warm":
-            shifts = torch.tensor(
-                [self._rnd.uniform(15, 40) / 255.0, self._rnd.uniform(5, 25) / 255.0, self._rnd.uniform(-15, 5) / 255.0],
-                device=images.device, dtype=images.dtype,
-            )
-        elif kind == "cold":
-            shifts = torch.tensor(
-                [self._rnd.uniform(-5, 10) / 255.0, self._rnd.uniform(-15, 5) / 255.0, self._rnd.uniform(20, 45) / 255.0],
-                device=images.device, dtype=images.dtype,
-            )
-        elif kind == "vivid":
-            # Increase contrast/saturation via scaling around mean
-            scale = self._rnd.uniform(1.1, 1.4)
-            mean = images.mean(dim=(2, 3), keepdim=True)
-            result = mean + (images - mean) * scale
-            result = result.clamp(0.0, 1.0)
-            if self.intensity < 1.0:
-                result = images * (1.0 - self.intensity) + result * self.intensity
-            return result
-        else:  # fade
-            scale = self._rnd.uniform(0.5, 0.8)
-            mean = images.mean(dim=(2, 3), keepdim=True)
-            result = mean + (images - mean) * scale
-            result = result.clamp(0.0, 1.0)
-            if self.intensity < 1.0:
-                result = images * (1.0 - self.intensity) + result * self.intensity
-            return result
+        _, _, h, w = images.shape
 
-        if c >= 3:
-            result = images.clone()
-            result[:, 0:3] = result[:, 0:3] + shifts.view(1, 3, 1, 1)
-            result = result.clamp(0.0, 1.0)
+        if self.effect_mode == "global":
+            kind, params = self._global_plan()
+            result = self._effect_tensor(images, kind, params).clamp(0.0, 1.0)
         else:
-            result = (images + shifts[0]).clamp(0.0, 1.0)
+            result = images.clone()
+            for cx, cy, radius, kind, params in self._circle_plan(h, w):
+                mask = _feathered_circle(
+                    h, w, cx, cy, radius, self.feather,
+                    device=images.device, dtype=images.dtype,
+                )
+                # The effect is computed from the untouched image, as on the
+                # numpy path: circles layer over the original, not over each
+                # other's output.
+                effect = self._effect_tensor(images, kind, params)
+                result = effect * mask + result * (1.0 - mask)
+            result = result.clamp(0.0, 1.0)
+
         if self.intensity < 1.0:
             result = images * (1.0 - self.intensity) + result * self.intensity
         return result
 
-    def _apply_augmentation(self, img: np.ndarray, kind: str) -> np.ndarray:
-        if kind == "warm":
-            shifts = (self._rnd.randint(15, 40), self._rnd.randint(5, 25), self._rnd.randint(-15, 5))
-        elif kind == "cold":
-            shifts = (self._rnd.randint(-5, 10), self._rnd.randint(-15, 5), self._rnd.randint(20, 45))
-        else:
-            shifts = (0, 0, 0)
+    # ------------------------------------------------------------------
+    # Numpy path
+    # ------------------------------------------------------------------
+
+    def _effect_numpy(self, img: np.ndarray, kind: str, params: dict[str, Any]) -> np.ndarray:
+        """Apply one effect to a single HWC uint8 RGB image."""
         if kind in {"warm", "cold"}:
-            b, g, r = cv2.split(img.astype(np.int16))
-            out = cv2.merge([
-                np.clip(b + shifts[2], 0, 255),
-                np.clip(g + shifts[1], 0, 255),
-                np.clip(r + shifts[0], 0, 255),
-            ]).astype(np.uint8)
-            return out
-        if kind == "vivid" or kind == "fade":
+            r, g, b = params["shifts"]
+            channels = cv2.split(img.astype(np.int16))
+            merged = cv2.merge([
+                np.clip(channels[0] + r, 0, 255),
+                np.clip(channels[1] + g, 0, 255),
+                np.clip(channels[2] + b, 0, 255),
+            ])
+            return np.asarray(merged, dtype=np.uint8)
+        if kind in {"vivid", "fade"}:
             hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV).astype(np.float32)
-            sat = self._rnd.uniform(1.2, 1.7) if kind == "vivid" else self._rnd.uniform(0.4, 0.8)
-            val = self._rnd.uniform(1.1, 1.5) if kind == "vivid" else self._rnd.uniform(0.7, 1.0)
-            hsv[:, :, 1] = np.clip(hsv[:, :, 1] * sat, 0, 255)
-            hsv[:, :, 2] = np.clip(hsv[:, :, 2] * val, 0, 255)
-            return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB)
+            hsv[:, :, 1] = np.clip(hsv[:, :, 1] * params["sat"], 0, 255)
+            hsv[:, :, 2] = np.clip(hsv[:, :, 2] * params["val"], 0, 255)
+            return np.asarray(cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB))
         if kind == "sharpen":
-            kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-            return cv2.filter2D(img, -1, kernel)
+            kernel = np.array(_SHARPEN_KERNEL, dtype=np.float32)
+            return np.asarray(cv2.filter2D(img, -1, kernel))
         if kind == "blur":
-            return cv2.GaussianBlur(img, (self._rnd.choice([5, 7, 9, 11]),) * 2, 0)
+            k = params["kernel"]
+            return np.asarray(cv2.GaussianBlur(img, (k, k), 0))
         return img
 
     def apply(self, image: np.ndarray) -> np.ndarray:
         image = self.validate_input(image)
         h, w, _ = image.shape
+
+        if self.effect_mode == "global":
+            kind, params = self._global_plan()
+            return np.clip(self._effect_numpy(image, kind, params), 0, 255).astype(np.uint8)
+
         final: np.ndarray = image.copy().astype(np.float32)
-        kinds = ["warm", "cold", "sharpen", "blur", "vivid", "fade"]
-        n = self._rnd.randint(*self.num_circles_range)
-        for _ in range(n):
-            radius = min(self._rnd.randint(*self.radius_range), min(h, w) // 2)
-            cx = self._rnd.randint(radius, max(radius + 1, w - radius))
-            cy = self._rnd.randint(radius, max(radius + 1, h - radius))
+        for cx, cy, radius, kind, params in self._circle_plan(h, w):
             mask_u8 = np.zeros((h, w), dtype=np.uint8)
             cv2.circle(mask_u8, (cx, cy), radius, 255, -1)
-            mask = cv2.GaussianBlur(mask_u8, (self.feather * 2 + 1, self.feather * 2 + 1), 0).astype(
-                np.float32
-            ) / 255.0
-            aug: np.ndarray = self._apply_augmentation(image, self._rnd.choice(kinds)).astype(np.float32)
+            k = _feather_kernel(self.feather, h, w)
+            mask = cv2.GaussianBlur(mask_u8, (k, k), 0).astype(np.float32) / 255.0
+            aug = self._effect_numpy(image, kind, params).astype(np.float32)
             final = aug * mask[..., None] + final * (1.0 - mask[..., None])
         return np.clip(final, 0, 255).astype(np.uint8)
 
@@ -607,71 +832,154 @@ class LuxferGlass(BaseAugmentation):
 @AugmentationRegistry.register("augmentation_8")
 @AugmentationRegistry.register("procam")
 class ProCAM(BaseAugmentation):
-    """Camera-simulation augmentation. CPU/GPU paths diverge by design.
+    """Camera-profile simulation, identical on the numpy and tensor paths.
 
-    The CPU path (``apply``) runs a full camera-profile pipeline
-    (cheap/smartphone/pro/webcam/darkroom: white balance plus
-    saturation/contrast tweaks); the GPU path (``apply_tensor_native``)
-    applies only white balance + gamma. ``device_compatible=True``, so the
-    runner uses the simpler GPU path on tensors.
+    ``camera_mode`` selects the transform, and both paths implement both modes,
+    so the device no longer decides which transform runs:
+
+    ``"profile"`` (default)
+        One of cheap, smartphone, pro, webcam or darkroom, each a white balance
+        shift plus the contrast, saturation or gamma step that profile implies.
+        This is what the numpy path has always done and what the tensor path now
+        does too.
+    ``"wb_gamma"``
+        A white balance shift and a gamma correction, with no profile. Cheaper,
+        and what the tensor path used to do unconditionally.
+
+    Both paths draw the profile and every parameter from one shared
+    ``_camera_plan``, so the two are the same transform by construction rather
+    than by inspection.
+
+    The saturation step runs through cv2's uint8 HSV on the numpy path and
+    through the equivalent float HSV on the tensor path, so the two agree to
+    within uint8 quantisation rather than exactly.
+
+    White balance offsets were applied in reversed channel order on the numpy
+    path, so a profile that meant to warm an image cooled it. Both paths now
+    apply them in R, G, B order.
     """
 
     device_compatible: bool = True
 
+    def __init__(self, camera_mode: str = "profile", **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        if camera_mode not in _PROCAM_MODES:
+            raise ValueError(
+                f"camera_mode must be one of {sorted(_PROCAM_MODES)}, got {camera_mode!r}"
+            )
+        self.camera_mode = camera_mode
+
+    def __repr__(self) -> str:
+        # Extend, do not replace: the base repr carries probability and intensity.
+        return f"{super().__repr__()[:-1]}, camera_mode={self.camera_mode})"
+
+    # ------------------------------------------------------------------
+    # Shared plan
+    # ------------------------------------------------------------------
+
+    def _camera_plan(self) -> tuple[str, dict[str, Any]]:
+        """Draw the profile and its parameters. Shifts are in pixel units."""
+        if self.camera_mode == "wb_gamma":
+            shifts = tuple(float(self._rnd.uniform(-5, 5)) for _ in range(3))
+            return "wb_gamma", {"shifts": shifts, "gamma": self._rnd.uniform(0.9, 1.1)}
+
+        profile = self._rnd.choice(_CAMERA_PROFILES)
+        if profile == "cheap":
+            return profile, {
+                "shifts": (
+                    float(self._rnd.randint(-5, 3)),
+                    float(self._rnd.randint(-3, 3)),
+                    float(self._rnd.randint(-3, 5)),
+                ),
+                "contrast": self._rnd.uniform(0.85, 1.0),
+            }
+        if profile == "smartphone":
+            return profile, {
+                "shifts": tuple(float(self._rnd.randint(-2, 5)) for _ in range(3)),
+                "sat": self._rnd.uniform(1.05, 1.15),
+            }
+        if profile == "pro":
+            return profile, {
+                "shifts": tuple(float(self._rnd.randint(-2, 2)) for _ in range(3)),
+                "gamma": self._rnd.uniform(0.95, 1.05),
+            }
+        if profile == "webcam":
+            return profile, {
+                "shifts": (
+                    float(self._rnd.randint(-5, 3)),
+                    float(self._rnd.randint(0, 5)),
+                    float(self._rnd.randint(-3, 3)),
+                )
+            }
+        return profile, {
+            "shifts": (
+                float(self._rnd.randint(0, 5)),
+                float(self._rnd.randint(-2, 2)),
+                float(self._rnd.randint(0, 5)),
+            ),
+            "gamma": self._rnd.uniform(1.0, 1.15),
+        }
+
+    # ------------------------------------------------------------------
+    # Tensor path
+    # ------------------------------------------------------------------
+
     def apply_tensor_native(self, images: Tensor) -> Tensor:
-        """GPU-native ProCAM: white balance + gamma on BCHW float32 tensors in [0,1]."""
+        """Tensor-native ProCAM on BCHW float32 tensors in [0, 1]."""
         if self._rnd.random() > self.probability:
             return images
-        b, c, h, w = images.shape
-        # Random per-channel white balance shift
-        shifts = torch.tensor(
-            [self._rnd.uniform(-5, 5) / 255.0 for _ in range(min(c, 3))],
-            device=images.device, dtype=images.dtype,
-        )
-        # Pad if fewer than c channels
-        if c > len(shifts):
-            shifts = torch.cat([shifts, torch.zeros(c - len(shifts), device=images.device)])
-        result = images + shifts.view(1, c, 1, 1)
-        # Random gamma correction
-        gamma = self._rnd.uniform(0.9, 1.1)
-        result = result.clamp(1e-8, 1.0).pow(1.0 / gamma)
-        result = result.clamp(0.0, 1.0)
+        profile, params = self._camera_plan()
+
+        r, g, b = params["shifts"]
+        result = _shift_channels(images, (r / 255.0, g / 255.0, b / 255.0))
+
+        if "contrast" in params:
+            mean = result.mean()
+            result = (mean + (result - mean) * params["contrast"]).clamp(0.0, 1.0)
+        if "sat" in params:
+            result = _scale_saturation_value(result, params["sat"], 1.0)
+        if "gamma" in params:
+            result = result.clamp(1e-8, 1.0).pow(1.0 / max(params["gamma"], 1e-6)).clamp(0.0, 1.0)
+
         if self.intensity < 1.0:
             result = images * (1.0 - self.intensity) + result * self.intensity
         return result
 
-    def _adjust_wb(self, img: np.ndarray, shift: tuple[int, int, int]) -> np.ndarray:
-        b, g, r = cv2.split(img.astype(np.int16))
-        return cv2.merge([
-            np.clip(b + shift[2], 0, 255),
-            np.clip(g + shift[1], 0, 255),
-            np.clip(r + shift[0], 0, 255),
-        ]).astype(np.uint8)
+    # ------------------------------------------------------------------
+    # Numpy path
+    # ------------------------------------------------------------------
+
+    def _adjust_wb(self, img: np.ndarray, shift: tuple[float, float, float]) -> np.ndarray:
+        """Add a per-channel offset given in R, G, B order."""
+        channels = cv2.split(img.astype(np.int16))
+        merged = cv2.merge([
+            np.clip(channels[0] + shift[0], 0, 255),
+            np.clip(channels[1] + shift[1], 0, 255),
+            np.clip(channels[2] + shift[2], 0, 255),
+        ])
+        return np.asarray(merged, dtype=np.uint8)
 
     def _gamma(self, img: np.ndarray, gamma: float) -> np.ndarray:
         inv = 1.0 / max(gamma, 1e-6)
         table = np.array([(i / 255.0) ** inv * 255 for i in range(256)], dtype=np.uint8)
-        return cv2.LUT(img, table)
+        return np.asarray(cv2.LUT(img, table))
 
     def apply(self, image: np.ndarray) -> np.ndarray:
         img = self.validate_input(image)
-        profile = self._rnd.choice(["cheap", "smartphone", "pro", "webcam", "darkroom"])
-        if profile == "cheap":
-            img = self._adjust_wb(img, (self._rnd.randint(-5, 3), self._rnd.randint(-3, 3), self._rnd.randint(-3, 5)))
-            img = np.clip((img - img.mean()) * self._rnd.uniform(0.85, 1.0) + img.mean(), 0, 255).astype(np.uint8)
-        elif profile == "smartphone":
-            img = self._adjust_wb(img, (self._rnd.randint(-2, 5), self._rnd.randint(-2, 5), self._rnd.randint(-2, 5)))
+        profile, params = self._camera_plan()
+
+        img = self._adjust_wb(img, params["shifts"])
+
+        if "contrast" in params:
+            img = np.clip(
+                (img - img.mean()) * params["contrast"] + img.mean(), 0, 255
+            ).astype(np.uint8)
+        if "sat" in params:
             hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV).astype(np.float32)
-            hsv[:, :, 1] = np.clip(hsv[:, :, 1] * self._rnd.uniform(1.05, 1.15), 0, 255)
-            img = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB)
-        elif profile == "pro":
-            img = self._adjust_wb(img, (self._rnd.randint(-2, 2), self._rnd.randint(-2, 2), self._rnd.randint(-2, 2)))
-            img = self._gamma(img, self._rnd.uniform(0.95, 1.05))
-        elif profile == "webcam":
-            img = self._adjust_wb(img, (self._rnd.randint(-5, 3), self._rnd.randint(0, 5), self._rnd.randint(-3, 3)))
-        else:
-            img = self._adjust_wb(img, (self._rnd.randint(0, 5), self._rnd.randint(-2, 2), self._rnd.randint(0, 5)))
-            img = self._gamma(img, self._rnd.uniform(1.0, 1.15))
+            hsv[:, :, 1] = np.clip(hsv[:, :, 1] * params["sat"], 0, 255)
+            img = np.asarray(cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB))
+        if "gamma" in params:
+            img = self._gamma(img, params["gamma"])
         return img
 
 
