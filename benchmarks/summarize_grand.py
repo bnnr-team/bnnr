@@ -23,13 +23,22 @@ import argparse
 import json
 import math
 import statistics
+import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
 import numpy as np
 
+# Sibling import: running this as a script puts benchmarks/ on sys.path, but the
+# test-suite loader (spec_from_file_location) does not, so `import stats` needs
+# the explicit guard. Same pattern as run.py and run_grand_benchmark.py, except
+# that this appends rather than prepends: benchmarks/ holds generic module names
+# (stats, lib, metrics_extended) and must not take precedence over the stdlib or
+# site-packages for the whole process.
 BENCHMARKS_DIR = Path(__file__).resolve().parent
+if str(BENCHMARKS_DIR) not in sys.path:
+    sys.path.append(str(BENCHMARKS_DIR))
 
 ALL_DATASETS = ["imagewoof", "pets", "flowers102", "dtd", "aircraft", "eurosat"]
 
@@ -73,110 +82,48 @@ FILL_USING_CONDITIONS = [
 
 
 # ---------------------------------------------------------------------------
-# Statistical helpers (from summarize_v2.py — self-contained copy)
+# Statistical helpers — imported, not implemented here (see benchmarks/stats.py)
 # ---------------------------------------------------------------------------
+# These estimators used to be defined here, with two defects reported in #390:
+# the rank-biserial discarded its sign, and the bootstrap resampled a difference
+# of medians rather than the median of paired differences. Both are fixed in
+# stats.py, which is now the single implementation for the whole benchmarks/
+# tree — see that module for the zero, tie and sign conventions.
+from stats import (  # noqa: E402
+    WilcoxonResult,
+    bootstrap_median_diff_ci,
+    holm_bonferroni,
+    wilcoxon_signed_rank,
+)
 
 
-class WilcoxonResult(NamedTuple):
-    W_statistic: float
-    p_value: float
-    rank_biserial_r: float
-
-
-def _wilcoxon_signed_rank(
-    x: list[float], y: list[float]
-) -> WilcoxonResult | None:
-    """Paired Wilcoxon signed-rank test (two-sided).
-
-    Returns (W_statistic, p_value, rank_biserial_r) or None if n < 2.
-    """
+def _paired_diffs(x: list[float], y: list[float]) -> np.ndarray:
+    """Elementwise x - y, for paired samples given as equal-length lists."""
     if len(x) != len(y):
-        raise ValueError("x and y must have equal length for paired test")
+        raise ValueError("x and y must have equal length for paired analysis")
+    return np.asarray(x, dtype=float) - np.asarray(y, dtype=float)
+
+
+def _wilcoxon_signed_rank(x: list[float], y: list[float]) -> WilcoxonResult | None:
+    """Paired two-sided Wilcoxon signed-rank on ``x`` against ``y``.
+
+    Returns ``None`` when fewer than two pairs are supplied. The result carries
+    the signed matched-pairs rank-biserial correlation, the n the test actually
+    ran on and how many zero differences were dropped to get there.
+    """
     if len(x) < 2:
         return None
-
-    diffs = [float(xi) - float(yi) for xi, yi in zip(x, y)]
-
-    try:
-        from scipy.stats import wilcoxon as _scipy_wilcoxon
-
-        nonzero = [d for d in diffs if d != 0.0]
-        if len(nonzero) == 0:
-            return WilcoxonResult(0.0, 1.0, 0.0)
-        result = _scipy_wilcoxon(nonzero, alternative="two-sided")
-        W = float(result.statistic)
-        p = float(result.pvalue)
-        n = len(nonzero)
-        r = 1.0 - 2.0 * W / (n * (n + 1)) if n > 0 else 0.0
-        return WilcoxonResult(W, p, r)
-    except ImportError:
-        pass
-
-    nonzero = [d for d in diffs if d != 0.0]
-    n = len(nonzero)
-    if n == 0:
-        return 0.0, 1.0, 0.0
-
-    abs_d = [abs(d) for d in nonzero]
-    order = sorted(range(n), key=lambda i: abs_d[i])
-    ranks = [0.0] * n
-    i = 0
-    while i < n:
-        j = i
-        while j < n and abs_d[order[j]] == abs_d[order[i]]:
-            j += 1
-        avg_rank = (i + j + 1) / 2.0
-        for k in range(i, j):
-            ranks[order[k]] = avg_rank
-        i = j
-
-    W_plus = sum(ranks[i] for i in range(n) if nonzero[i] > 0)
-    W_minus = sum(ranks[i] for i in range(n) if nonzero[i] < 0)
-    W = min(W_plus, W_minus)
-
-    if n <= 15:
-        p = _wilcoxon_exact_p(n, W)
-    else:
-        mu = n * (n + 1) / 4.0
-        sigma2 = n * (n + 1) * (2 * n + 1) / 24.0
-        if sigma2 == 0:
-            p = 1.0
-        else:
-            z = (W - mu + 0.5) / math.sqrt(sigma2)
-            p = _normal_two_sided_p(abs(z))
-
-    r = 1.0 - 2.0 * W / (n * (n + 1))
-    return W, min(1.0, p), r
+    return wilcoxon_signed_rank(_paired_diffs(x, y))
 
 
-def _wilcoxon_exact_p(n: int, W: float) -> float:
-    total = 1 << n
-    count = 0
-    ranks = list(range(1, n + 1))
-    max_sum = sum(ranks)
-    for mask in range(total):
-        w_plus = sum(ranks[i] for i in range(n) if mask >> i & 1)
-        w_minus = max_sum - w_plus
-        w_stat = min(w_plus, w_minus)
-        if w_stat <= W:
-            count += 1
-    return float(count) / float(total)
+def _paired_median_delta(x: list[float], y: list[float]) -> float:
+    """Median of the paired differences — the quantity the Wilcoxon p tests.
 
-
-def _normal_two_sided_p(z: float) -> float:
-    return float(math.erfc(z / math.sqrt(2.0)))
-
-
-def _holm_bonferroni(p_values: list[float]) -> list[float]:
-    n = len(p_values)
-    indexed = sorted(enumerate(p_values), key=lambda t: t[1])
-    adjusted = [0.0] * n
-    running_max = 0.0
-    for rank, (orig_idx, p) in enumerate(indexed):
-        adj = p * (n - rank)
-        running_max = max(running_max, adj)
-        adjusted[orig_idx] = min(1.0, running_max)
-    return adjusted
+    Not ``median(x) - median(y)``: that is a difference of medians, a different
+    estimand, and reporting it beside a paired p-value is the mismatch #390
+    reported. On the T20 headline contrast the two differ by 0.11 pp.
+    """
+    return float(np.median(_paired_diffs(x, y)))
 
 
 def _bootstrap_median_diff_ci(
@@ -184,28 +131,21 @@ def _bootstrap_median_diff_ci(
     y: list[float],
     *,
     n_boot: int = 10_000,
-    ci: float = 0.95,
     rng_seed: int = 0,
 ) -> tuple[float, float]:
-    """Return a bootstrap CI for the median difference (median(x) - median(y)).
+    """Bootstrap 95% CI on the median paired difference of ``x`` and ``y``.
 
-    Computational cost scales linearly with ``n_boot`` resamples. The default
-    (10,000 iterations) favors stability, but can be expensive when many
-    dataset/condition comparisons are evaluated. Callers can lower ``n_boot``
-    to speed up large benchmark runs.
+    Cost scales linearly with ``n_boot``; callers may lower it for large runs.
     """
-    rng = np.random.default_rng(rng_seed)
-    n = len(x)
-    xa = np.array(x)
-    ya = np.array(y)
-    diffs = np.empty(n_boot)
-    for i in range(n_boot):
-        idx = rng.integers(0, n, size=n)
-        diffs[i] = float(np.median(xa[idx]) - np.median(ya[idx]))
-    alpha = 1.0 - ci
-    lo = float(np.quantile(diffs, alpha / 2))
-    hi = float(np.quantile(diffs, 1.0 - alpha / 2))
+    lo, hi, _ = bootstrap_median_diff_ci(
+        _paired_diffs(x, y), n_boot=n_boot, seed=rng_seed
+    )
     return lo, hi
+
+
+def _holm_bonferroni(p_values: list[float]) -> list[float]:
+    """Holm-Bonferroni adjusted p-values, in the input order."""
+    return holm_bonferroni(p_values)
 
 
 def _iqr(values: list[float]) -> float:
@@ -355,12 +295,15 @@ def _analyze_dataset(
         if wres is None:
             wilcoxon_results[cid] = {"W": None, "p": None, "r": None, "n": len(shared)}
         else:
-            W, p, r = wres
+            W, p, r = wres.w_statistic, wres.p_value, wres.rank_biserial_r
             ci_lo, ci_hi = (float("nan"), float("nan"))
             if not no_bootstrap and len(shared) >= 2:
                 ci_lo, ci_hi = _bootstrap_median_diff_ci(bx, ot, n_boot=n_boot, rng_seed=42)
             wilcoxon_results[cid] = {
                 "W": W, "p": p, "r": r, "n": len(shared),
+                # Short label: the printed `n=<tested>` already carries the
+                # dropped-zero fact, and the footer says what "exact" means here.
+                "n_test": wres.n, "method": wres.method,
                 "ci_lo": ci_lo, "ci_hi": ci_hi,
                 "bnnr_xai_vals": bx,
                 "other_vals": ot,
@@ -368,7 +311,12 @@ def _analyze_dataset(
 
     # Holm-Bonferroni correction
     if comp_conds_present:
-        p_raw = [(wilcoxon_results[c].get("p") or 1.0) for c in comp_conds_present]
+        # `or 1.0` would turn an exact p of 0.0 into 1.0. Only a missing test
+        # should default to 1.0.
+        p_raw = [
+            1.0 if wilcoxon_results[c].get("p") is None else wilcoxon_results[c]["p"]
+            for c in comp_conds_present
+        ]
         p_holm = _holm_bonferroni(p_raw)
         for i, cid in enumerate(comp_conds_present):
             wilcoxon_results[cid]["p_holm"] = p_holm[i]
@@ -397,7 +345,18 @@ def _analyze_dataset(
         wr = wilcoxon_results.get(cid, {})
         p_adj = wr.get("p_holm")
         r_v = wr.get("r")
-        p_adj_s = f"{_p_label(p_adj)} {_sig_stars(p_adj)}" if p_adj is not None else "—"
+        # The method qualifies the p-value, so it rides with it rather than in a
+        # column of its own. `n=` appears only when zeros were dropped, which is
+        # the case where the pair count overstates the evidence.
+        p_adj_s = "—"
+        if p_adj is not None:
+            qual = wr.get("method", "")
+            n_test = wr.get("n_test")
+            if n_test is not None and n_test != wr.get("n"):
+                qual = f"{qual}, n={n_test}"
+            p_adj_s = f"{_p_label(p_adj)} {_sig_stars(p_adj)}"
+            if qual:
+                p_adj_s = f"{p_adj_s} ({qual})"
         r_s = f"{r_v:.2f}" if r_v is not None else "—"
         ci_lo_v = wr.get("ci_lo", float("nan"))
         ci_hi_v = wr.get("ci_hi", float("nan"))
@@ -445,7 +404,7 @@ def _print_text_table(rows: list[dict[str, Any]]) -> None:
     w = 38
     header = (
         f"{'Condition':<{w}} {'Median':>8} {'±IQR':>8} {'Mean':>8} {'±Std':>7} "
-        f"{'n':>3} {'Δ vs no_aug':>12} {'p(Holm)':>18} {'r':>6} {'ECE':>7} "
+        f"{'n':>3} {'Δ vs no_aug':>12} {'p(Holm)':>30} {'r':>6} {'ECE':>7} "
         f"{'GPU-ep':>8} {'Depl-ep':>8}"
     )
     # Say what the ordering means. Accuracy and calibration reverse the ranking
@@ -461,7 +420,7 @@ def _print_text_table(rows: list[dict[str, Any]]) -> None:
         std_s = f"±{row['std']*100:.2f}"
         print(
             f"{row['label']:<{w}} {med_s:>8} {iqr_s:>8} {mn_s:>8} {std_s:>7} "
-            f"{row['n']:>3} {row['delta']:>12} {row['p_holm']:>18} {row['r']:>6} "
+            f"{row['n']:>3} {row['delta']:>12} {row['p_holm']:>30} {row['r']:>6} "
             f"{row['ece']:>7} {row['gpu_epochs']:>8} {row['deployed_epochs']:>8}"
         )
         print(f"  per-seed: {row['per_seed']}")
@@ -520,16 +479,25 @@ def _print_xai_vs_random(
     br = [by_cond["bnnr_random"][s] for s in shared]
     med_xai = statistics.median(bx)
     med_rand = statistics.median(br)
-    delta = (med_xai - med_rand) * 100
+    # Paired median difference, matching the Wilcoxon p and CI beside it (#390).
+    delta = _paired_median_delta(bx, br) * 100
 
     p_holm = wr.get("p_holm", wr.get("p"))
     r_v = wr.get("r")
     ci_lo = wr.get("ci_lo", float("nan"))
     ci_hi = wr.get("ci_hi", float("nan"))
 
+    # The two medians are marginal (each condition's own middle seed); Δ is the
+    # median of the paired differences. They are different quantities and can
+    # disagree -- on the T20 headline the medians differ by 0.11pp while every
+    # paired difference cancels to 0.00pp -- so the line says which is which.
+    n_test = wr.get("n_test", len(shared))
+    n_s = f"{len(shared)}" if n_test == len(shared) else f"{len(shared)}→{n_test}"
+    method_s = wr.get("method", "")
     print(f"  KEY: bnnr_xai ({med_xai*100:.2f}%) vs bnnr_random ({med_rand*100:.2f}%)  "
-          f"Δ={delta:+.2f}pp  n={len(shared)}  "
-          f"{_p_label(p_holm)} {_sig_stars(p_holm)}  r={r_v:.2f}")
+          f"[medians]  Δ={delta:+.2f}pp [median of paired diffs]  n={n_s}  "
+          f"{_p_label(p_holm)} {_sig_stars(p_holm)}"
+          f"{f' ({method_s})' if method_s else ''}  r={r_v:.2f}")
     if not (math.isnan(ci_lo) or math.isnan(ci_hi)):
         print(f"  Bootstrap 95% CI for Δ median: [{ci_lo*100:+.2f}, {ci_hi*100:+.2f}]pp")
     print()
@@ -731,13 +699,14 @@ def _key_comparison_section(
         br = [rand_by_seed[s] for s in shared]
         med_xai = statistics.median(bx)
         med_rand = statistics.median(br)
-        delta = (med_xai - med_rand) * 100
+        delta = _paired_median_delta(bx, br) * 100
 
         wres = _wilcoxon_signed_rank(bx, br)
         ci_lo, ci_hi = float("nan"), float("nan")
         if wres is not None and not no_bootstrap:
             ci_lo, ci_hi = _bootstrap_median_diff_ci(bx, br, n_boot=n_boot, rng_seed=42)
-        W, p, r = wres if wres is not None else (None, None, None)
+        p = wres.p_value if wres is not None else None
+        r = wres.rank_biserial_r if wres is not None else None
         rows.append({
             "dataset": ds,
             "n": len(shared),
@@ -913,13 +882,14 @@ def _rank_strategies_for_method(
                             "stars": "—", "ci_lo": float("nan"), "ci_hi": float("nan")})
             continue
         wres = _wilcoxon_signed_rank(vecs[s], ref_vec)
-        W, p, r = wres if wres is not None else (None, None, None)
+        p = wres.p_value if wres is not None else None
+        r = wres.rank_biserial_r if wres is not None else None
         ci_lo, ci_hi = float("nan"), float("nan")
         if wres is not None and not no_bootstrap:
             # Δ orientation: strategy - ref (positive => strategy is higher).
             ci_lo, ci_hi = _bootstrap_median_diff_ci(vecs[s], ref_vec, n_boot=n_boot, rng_seed=42)
         entries.append({"strategy": s, "median": medians[s], "is_ref": False,
-                        "delta": (medians[s] - medians[ref]) * 100,
+                        "delta": _paired_median_delta(vecs[s], ref_vec) * 100,
                         "p": p, "p_holm": None, "r": r, "stars": _sig_stars(p),
                         "ci_lo": ci_lo, "ci_hi": ci_hi})
 
@@ -930,7 +900,19 @@ def _rank_strategies_for_method(
             e["stars"] = _sig_stars(p_adj)
 
     non_ref = [e for e in entries if not e["is_ref"]]
-    challenger = non_ref[0] if non_ref else None  # highest-median non-reference strategy
+    runner_up = non_ref[0] if non_ref else None  # highest-median non-reference strategy
+    # In reference mode the question is "does anything beat the default?", and it
+    # has to be asked with the estimand the verdict prints: the paired Δ against
+    # the reference. Ranking by marginal median instead lets the verdict crown a
+    # strategy whose Δ, r and CI beside it are all negative. (Unlike the
+    # condition table, where "Δ vs no_aug" is a genuinely different contrast from
+    # the p-value in its row and is meant to be.) In best mode the question is
+    # "is the top separated from its nearest rival?", so the runner-up by median
+    # is the right comparator and the prose below says so.
+    challenger = (
+        max(non_ref, key=lambda e: e["delta"]) if (mode == "reference" and non_ref)
+        else runner_up
+    )
 
     def _sig_and_ci(e):
         if e is None or e["p_holm"] is None:
@@ -940,7 +922,8 @@ def _rank_strategies_for_method(
         return e["p_holm"] < 0.05 and (no_bootstrap or ci_excl)
 
     if mode == "reference":
-        meaningful = (challenger is not None and challenger["median"] > medians[ref]
+        # Direction from the paired Δ, the same quantity the CI brackets.
+        meaningful = (challenger is not None and challenger["delta"] > 0.0
                       and _sig_and_ci(challenger))
     else:
         meaningful = _sig_and_ci(challenger)  # challenger == runner-up in best mode
@@ -949,9 +932,10 @@ def _rank_strategies_for_method(
 
     return {"insufficient": False, "mode": mode, "reference": ref,
             "reference_requested": reference, "reference_missing": reference_missing,
-            "reference_is_top": ref == top, "shared": shared, "best": top,
+            "shared": shared, "best": top,
             "challenger": challenger["strategy"] if challenger else None,
-            "runner_up": challenger["strategy"] if challenger else None,
+            "runner_up": runner_up["strategy"] if runner_up else None,
+            "challenger_delta": challenger["delta"] if challenger else None,
             "entries": entries, "meaningful": meaningful,
             "gate_reachable": gate_reachable, "holm_floor": holm_floor}
 
@@ -1049,12 +1033,16 @@ def _verdict_line(result: dict[str, Any]) -> str:
     if result.get("mode") == "reference":
         if result["meaningful"]:
             return f"{challenger} beats the reference ({ref}) significantly — candidate to replace the default."
-        if result.get("reference_is_top"):
-            return f"reference ({ref}) has the highest median; no strategy beats it — keep the default."
+        # "leads" has to mean the paired Δ is positive, which is what the gate
+        # now tests; a strategy with the highest median can still lose every pair.
+        if (result.get("challenger_delta") or 0.0) <= 0.0:
+            return (f"no strategy beats the reference ({ref}) on the paired median "
+                    "difference — keep the default.")
         return f"{challenger} leads the reference ({ref}) but not significantly — keep the default (change unjustified)."
+    runner_up = result.get("runner_up")
     if result["meaningful"]:
-        return f"best: {ref} — gap to runner-up ({challenger}) is significant (meaningful)."
-    return (f"best: {ref} — but not clearly separated from runner-up ({challenger}); "
+        return f"best: {ref} — gap to runner-up ({runner_up}) is significant (meaningful)."
+    return (f"best: {ref} — but not clearly separated from runner-up ({runner_up}); "
             "treat the ranking as tentative.")
 
 
@@ -1248,12 +1236,32 @@ def main() -> None:
 
     # Footer
     print(
-        "\nStatistical notes:"
-        "\n  Tests: Wilcoxon signed-rank (paired, two-sided) — scipy if available, "
-        "else exact enumeration (n<=15) or normal approx."
+        "\nStatistical notes (estimators: benchmarks/stats.py):"
+        "\n  Two columns, two different contrasts — read them separately:"
+        "\n    'Δ vs no_aug' compares a condition against no_aug. It is a "
+        "difference of condition medians, median(cond) - median(no_aug), taken "
+        "over each condition's own seeds. It is descriptive; no test is attached to it."
+        "\n    'p (Holm)', 'r' and 'Bootstrap 95% CI' all compare bnnr_xai "
+        "against that condition — a different pair — over their shared seeds, "
+        "and the CI is the median of the paired differences, median(bnnr_xai - cond)."
+        "\n  The headline Δ is the median of the paired differences, matching the "
+        "p-value beside it. That is the Δ in the KEY line, in the 'KEY COMPARISON: "
+        "bnnr_xai vs bnnr_random (per dataset)' table, and in the fill ranking. "
+        "The 'CROSS-DATASET SUMMARY' table is the other kind: its 'Mean Δ' column "
+        "averages median(cond) - median(no_aug) across datasets."
+        "\n  Tests: Wilcoxon signed-rank (paired, two-sided), pure numpy. Exact "
+        "enumeration of the null when n<=25 and no ties in |d|; otherwise the "
+        "normal approximation with continuity and tie correction."
+        "\n  Zeros: zero differences are dropped and n reduced (Wilcoxon "
+        "convention). The n column is the seed count behind the median and mean; "
+        "when the test ran on fewer pairs the p cell says so, as '(exact, n=8)'. "
+        "Exact there means exact conditional on that reduced n."
+        "\n  Ties: tied |d| take mid-ranks, detected with a relative tolerance so "
+        "that equal differences between k/N fractions are not split by float noise."
         "\n  Multiple testing: Holm-Bonferroni correction over all pairwise tests vs bnnr_xai."
-        "\n  Bootstrap CI: paired (bnnr_xai - baseline) median difference."
-        "\n  Effect size r: rank-biserial correlation = 1 - 2W/(n*(n+1))."
+        "\n  Effect size r: matched-pairs rank-biserial = (W+ - W-)/(W+ + W-), "
+        "range [-1, +1], signed by W+ - W- (not by the median). Negative means "
+        "bnnr_xai lost more ranks than it won."
         "\n  Significance: *** p<0.001, ** p<0.01, * p<0.05, ns p>=0.05."
     )
 
