@@ -61,6 +61,7 @@ N_INFERENTIAL_MIN = 6  # below this: direction/sign-consistency only, no p-value
 # --------------------------------------------------------------------------- #
 # These used to be defined here. They now live in stats.py so that this file and
 # summarize_grand.py cannot drift apart; two copies is how #390 happened.
+from console import force_utf8_stdout  # noqa: E402
 from stats import (  # noqa: E402
     N_EXACT_MAX,
     bootstrap_median_diff_ci,
@@ -315,6 +316,7 @@ def build_report(runs: list[dict[str, Any]], label: str | None) -> str:
 
 
 def main() -> None:
+    force_utf8_stdout()
     ap = argparse.ArgumentParser()
     ap.add_argument("path", help="results dir or results_*.json file")
     ap.add_argument("--out", default=None, help="write markdown here")

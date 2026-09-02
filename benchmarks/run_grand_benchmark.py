@@ -63,6 +63,7 @@ if str(BENCHMARKS_DIR) not in sys.path:
 if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from console import force_utf8_stdout  # noqa: E402
 from lib import (  # noqa: E402
     ConditionSpec,
     _make_run_dir,
@@ -1376,6 +1377,7 @@ def _estimate(args: argparse.Namespace, n_seeds: int, conds: list[str], n_strate
 
 
 def main() -> None:
+    force_utf8_stdout()
     parser = argparse.ArgumentParser(
         description="Grand benchmark: BNNR across 6 datasets × 2 regimes (paper-quality)",
         formatter_class=argparse.RawDescriptionHelpFormatter,

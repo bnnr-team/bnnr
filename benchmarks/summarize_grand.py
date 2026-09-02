@@ -89,6 +89,7 @@ FILL_USING_CONDITIONS = [
 # of medians rather than the median of paired differences. Both are fixed in
 # stats.py, which is now the single implementation for the whole benchmarks/
 # tree — see that module for the zero, tie and sign conventions.
+from console import force_utf8_stdout  # noqa: E402
 from stats import (  # noqa: E402
     WilcoxonResult,
     bootstrap_median_diff_ci,
@@ -1117,6 +1118,7 @@ def _print_fill_ranking_markdown(cid: str, label: str, result: dict[str, Any]) -
 
 
 def main() -> None:
+    force_utf8_stdout()
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,

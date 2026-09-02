@@ -62,6 +62,7 @@ _THIS = Path(__file__).resolve()
 _REPO = _THIS.parent.parent
 sys.path.insert(0, str(_REPO / "src"))
 sys.path.insert(0, str(_THIS.parent))
+from console import force_utf8_stdout  # noqa: E402
 
 CONDITIONS = ["base_frozen", "erm_continue", "dfr", "bnnr_random", "bnnr_xai"]
 
@@ -1148,6 +1149,7 @@ def train_and_diagnose_base(spec: DatasetSpec, args: argparse.Namespace, seed: i
 # Main
 # =========================================================================== #
 def main() -> None:
+    force_utf8_stdout()
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--dataset", default="waterbirds",

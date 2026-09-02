@@ -12,6 +12,7 @@ BENCHMARKS_DIR = Path(__file__).resolve().parent
 if str(BENCHMARKS_DIR) not in sys.path:
     sys.path.insert(0, str(BENCHMARKS_DIR))
 
+from console import force_utf8_stdout  # noqa: E402
 from lib import (  # noqa: E402
     CONDITIONS,
     DEFAULT_CONFIG,
@@ -40,6 +41,7 @@ def _estimate_hours(device: str, n_seeds: int, condition_ids: list[str]) -> str:
 
 
 def main() -> None:
+    force_utf8_stdout()
     parser = argparse.ArgumentParser(
         description="CIFAR-10 benchmark: no BNNR vs RandAugment vs BNNR branch search",
         epilog="""

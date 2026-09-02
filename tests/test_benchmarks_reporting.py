@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -285,6 +286,64 @@ def test_footer_states_the_zero_and_tie_conventions(report: str) -> None:
     assert "Zeros" in notes and "dropped" in notes
     assert "Ties" in notes and "mid-ranks" in notes
     assert "Holm" in notes
+
+
+# --------------------------------------------------------------------------- #
+# The tools must be able to print their own output on a non-UTF-8 console
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("script", "args", "expect"),
+    [
+        ("summarize_grand.py",
+         ["--results-dir", str(BENCHMARKS_DIR), "--datasets", "imagewoof", "--markdown"],
+         "Δ"),
+        ("summarize_spurious.py",
+         [str(BENCHMARKS_DIR / "findings_t20" / "results_waterbirds_b15.json")],
+         "Δ"),
+    ],
+)
+def test_summarizers_print_under_a_non_utf8_stdout(script, args, expect) -> None:
+    """These tools print Δ, W⁺, ≈, ≤, →. Windows defaults stdout to cp1252.
+
+    Without ``force_utf8_stdout`` the run dies with ``UnicodeEncodeError`` partway
+    through the report — the user waits for the whole thing and gets a traceback.
+    Reproduced here by forcing the same encoding through ``PYTHONIOENCODING``,
+    which fails identically on Linux.
+
+    The fix belongs to the tool: setting ``PYTHONIOENCODING=utf-8`` in this test's
+    environment would make it pass while leaving a real Windows user broken.
+    """
+    proc = subprocess.run(
+        [sys.executable, str(BENCHMARKS_DIR / script), *args],
+        capture_output=True, timeout=900, cwd=str(REPO_ROOT),
+        env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+    assert proc.returncode == 0, (
+        f"{script} crashed under cp1252 stdout:\n"
+        + proc.stderr.decode("utf-8", "replace")[-2000:]
+    )
+    assert expect in proc.stdout.decode("utf-8"), f"{script} lost its non-ASCII output"
+
+
+def test_every_non_ascii_entry_point_forces_utf8() -> None:
+    """A new script that prints non-ASCII must not reintroduce the crash.
+
+    Static rather than behavioural on purpose: running every entry point would
+    need GPUs and datasets, but the omission this guards against is visible in
+    the source. Any ``benchmarks/*.py`` with a ``__main__`` block and a non-ASCII
+    character in it has to call ``force_utf8_stdout()``.
+    """
+    offenders = []
+    for path in sorted(BENCHMARKS_DIR.glob("*.py")):
+        src = path.read_text(encoding="utf-8")
+        if "__main__" not in src or src.isascii():
+            continue
+        if "force_utf8_stdout()" not in src:
+            offenders.append(path.name)
+    assert not offenders, (
+        "these entry points print non-ASCII but never call force_utf8_stdout(), "
+        f"so they crash on a cp1252 console: {offenders}"
+    )
 
 
 # --------------------------------------------------------------------------- #

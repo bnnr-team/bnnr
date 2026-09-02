@@ -56,6 +56,7 @@ if str(BENCHMARKS_DIR) not in sys.path:
 if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from console import force_utf8_stdout  # noqa: E402
 from lib import (  # noqa: E402
     ConditionSpec,
     _extract_baseline_from_report,
@@ -591,6 +592,7 @@ def _estimate(args: argparse.Namespace, n_seeds: int, conds: list[str]) -> str:
 
 
 def main() -> None:
+    force_utf8_stdout()
     parser = argparse.ArgumentParser(
         description="ResNet18 / Imagewoof augmentation benchmark (low-data, from-scratch)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
