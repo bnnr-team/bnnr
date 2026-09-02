@@ -781,3 +781,31 @@ def run_condition(
         condition=spec, seed=seed, device=device,
         config_path=config_path, output_root=output_root,
     )
+
+
+def force_utf8_stdout() -> None:
+    """Re-encode stdout/stderr as UTF-8 so a cp1252 console cannot kill a report.
+
+    These scripts print Δ, W⁺, W⁻, ≈, ≤, →, ±, § as a matter of course. Python
+    takes stdout's encoding from the platform; on Windows that is cp1252, which
+    encodes none of them, so the run dies with UnicodeEncodeError partway through
+    the output. Pre-existing on main — see benchmarks/summarize_grand.py's Δ
+    columns — and invisible to CI until a test ran a summarizer as a subprocess.
+
+    The fix belongs to the tool, not the caller: requiring PYTHONIOENCODING would
+    leave a Windows user with a traceback and no explanation.
+
+    Call from ``main()``, not at import: importing a summarizer as a library (the
+    test suite does) must not reconfigure the importing process's streams.
+    Anything reading these scripts' output must decode UTF-8 explicitly rather
+    than rely on the platform default, or it fails on the same platform for the
+    mirror-image reason.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except (ValueError, OSError):  # detached, closed, or not a TextIOWrapper
+            pass

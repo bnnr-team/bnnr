@@ -62,7 +62,7 @@ _THIS = Path(__file__).resolve()
 _REPO = _THIS.parent.parent
 sys.path.insert(0, str(_REPO / "src"))
 sys.path.insert(0, str(_THIS.parent))
-from console import force_utf8_stdout  # noqa: E402
+from lib import force_utf8_stdout  # noqa: E402
 
 CONDITIONS = ["base_frozen", "erm_continue", "dfr", "bnnr_random", "bnnr_xai"]
 

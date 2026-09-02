@@ -12,11 +12,11 @@ BENCHMARKS_DIR = Path(__file__).resolve().parent
 if str(BENCHMARKS_DIR) not in sys.path:
     sys.path.insert(0, str(BENCHMARKS_DIR))
 
-from console import force_utf8_stdout  # noqa: E402
 from lib import (  # noqa: E402
     CONDITIONS,
     DEFAULT_CONFIG,
     benchmark_document,
+    force_utf8_stdout,
     git_head,
     load_results,
     run_condition,

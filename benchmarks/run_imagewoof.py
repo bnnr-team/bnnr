@@ -56,7 +56,6 @@ if str(BENCHMARKS_DIR) not in sys.path:
 if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from console import force_utf8_stdout  # noqa: E402
 from lib import (  # noqa: E402
     ConditionSpec,
     _extract_baseline_from_report,
@@ -66,6 +65,7 @@ from lib import (  # noqa: E402
     _run_plain_epochs,
     build_bnnr_candidate_augmentations,
     export_attention_maps,
+    force_utf8_stdout,
     git_head,
     load_results,
     save_results,

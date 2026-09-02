@@ -28,7 +28,7 @@ BENCHMARKS_DIR = Path(__file__).resolve().parent
 if str(BENCHMARKS_DIR) not in sys.path:
     sys.path.append(str(BENCHMARKS_DIR))
 
-from console import force_utf8_stdout  # noqa: E402
+from lib import force_utf8_stdout  # noqa: E402
 
 DEFAULT_RESULTS = BENCHMARKS_DIR / "results_resnet50.json"
 

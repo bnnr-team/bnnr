@@ -21,6 +21,7 @@ page is wrong.
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import os
@@ -56,7 +57,16 @@ def sg() -> ModuleType:
 
 @pytest.fixture(scope="module")
 def report() -> str:
-    """Run the summarizer exactly as a user would, and capture what it printed."""
+    """Run the summarizer exactly as a user would, and capture what it printed.
+
+    ``encoding="utf-8"`` rather than ``text=True``: the summarizer forces UTF-8 on
+    its own stdout, so the reader has to decode UTF-8. With ``text=True`` Python
+    decodes using the platform default, which on Windows is cp1252 — the reader
+    thread dies with ``UnicodeDecodeError``, ``proc.stdout`` comes back ``None``
+    while ``returncode`` is still 0, and every test in this file gets ``None``.
+    That is the mirror image of the defect the tool-side fix addresses, and it
+    bites on the same platform.
+    """
     assert IMAGEWOOF_JSON.is_file(), f"missing records: {IMAGEWOOF_JSON}"
     proc = subprocess.run(
         [
@@ -67,9 +77,10 @@ def report() -> str:
             "--markdown",
             "--bootstrap-n", "10000",
         ],
-        capture_output=True, text=True, timeout=900, cwd=str(REPO_ROOT),
+        capture_output=True, encoding="utf-8", timeout=900, cwd=str(REPO_ROOT),
     )
     assert proc.returncode == 0, proc.stderr
+    assert proc.stdout, "summarizer produced no stdout — check the decode above"
     return proc.stdout
 
 
@@ -323,6 +334,37 @@ def test_summarizers_print_under_a_non_utf8_stdout(script, args, expect) -> None
         + proc.stderr.decode("utf-8", "replace")[-2000:]
     )
     assert expect in proc.stdout.decode("utf-8"), f"{script} lost its non-ASCII output"
+
+
+def test_this_file_never_decodes_tool_output_with_the_platform_default() -> None:
+    """Subprocess text mode decodes with the platform encoding — cp1252 on Windows.
+
+    The tools force UTF-8 on their own stdout, so anything reading them must ask
+    for UTF-8 explicitly. Getting this wrong is worse than a plain failure: the
+    reader thread raises ``UnicodeDecodeError`` inside ``subprocess``, ``stdout``
+    comes back ``None``, ``returncode`` stays 0, and the assertion that would have
+    caught it passes. Every downstream test then fails on ``NoneType``, pointing
+    nowhere near the cause.
+
+    Static because on Linux the platform default *is* UTF-8, so no behavioural
+    test on this machine can reproduce it.
+    """
+    # Parsed, not grepped: prose in this file's own docstrings names the flag.
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    offenders = [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        for kw in node.keywords
+        if kw.arg == "text"
+        and isinstance(kw.value, ast.Constant)
+        and kw.value.value is True
+    ]
+    assert not offenders, (
+        f"lines {offenders} decode a benchmarks script with the platform default; "
+        "pass encoding='utf-8' instead — the platform default is cp1252 on Windows "
+        "and yields a silent None rather than an error"
+    )
 
 
 def test_every_non_ascii_entry_point_forces_utf8() -> None:
