@@ -69,6 +69,7 @@ from lib import (  # noqa: E402
     _result_entry,
     _run_config,
     export_attention_maps,
+    force_utf8_stdout,
     git_head,
     load_results,
     save_results,
@@ -1376,6 +1377,7 @@ def _estimate(args: argparse.Namespace, n_seeds: int, conds: list[str], n_strate
 
 
 def main() -> None:
+    force_utf8_stdout()
     parser = argparse.ArgumentParser(
         description="Grand benchmark: BNNR across 6 datasets × 2 regimes (paper-quality)",
         formatter_class=argparse.RawDescriptionHelpFormatter,

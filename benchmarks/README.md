@@ -266,4 +266,37 @@ benchmarks/
 
 ### Results
 
-_Pending a GPU run._ Run the primary Imagewoof matrix first, review the JSON, then paste the `summarize_grand.py --markdown` table here. Do not hand-write numbers.
+Imagewoof, from scratch, equal compute (budget 40), 10 seeds, 100 records in
+[`results_imagewoof_scratch.json`](results_imagewoof_scratch.json). Regenerate with:
+
+```bash
+python benchmarks/summarize_grand.py --results-dir benchmarks/ --datasets imagewoof --markdown
+```
+
+| Condition | Median | ±IQR | mean±std | n | Δ vs no_aug | p (Holm) vs bnnr_xai | r | Bootstrap 95% CI | ECE ↓ | GPU-epochs |
+|-----------|--------|------|----------|---|------------|---------------------|---|-----------------|-------|-----------|
+| No augmentation (crop + flip) | 33.97% | ±1.38pp | 34.25% ±1.20 | 10 | — | p=0.018 * (exact) | -1.00 | [-5.90, -4.53]pp | 0.257 | 40 |
+| RandAugment (torchvision) | 30.79% | ±2.11pp | 31.18% ±1.30 | 10 | -3.17pp | p=0.018 * (exact) | -0.96 | [-3.77, -0.66]pp | 0.033 | 40 |
+| TrivialAugmentWide (torchvision) | 31.67% | ±1.76pp | 31.74% ±1.58 | 10 | -2.30pp | p=0.041 * (exact) | -0.85 | [-3.91, -0.71]pp | 0.042 | 40 |
+| AutoAugment (ImageNet policy) | 27.83% | ±5.07pp | 27.09% ±3.16 | 10 | -6.13pp | p=0.645 ns (exact) | 0.38 | [-0.88, +6.18]pp | 0.025 | 40 |
+| ChurchNoise only (non-XAI ablation) | 33.40% | ±2.70pp | 33.94% ±1.97 | 10 | -0.57pp | p=0.018 * (exact) | -1.00 | [-6.67, -3.13]pp | 0.246 | 40 |
+| ICD only | 33.83% | ±2.35pp | 33.80% ±1.73 | 10 | -0.14pp | p=0.018 * (exact) | -1.00 | [-6.58, -3.32]pp | 0.240 | 40 |
+| AICD only | 33.14% | ±1.35pp | 33.29% ±1.36 | 10 | -0.83pp | p=0.018 * (exact) | -1.00 | [-5.53, -3.27]pp | 0.250 | 40 |
+| ICD+AICD fixed (no search) | 33.24% | ±2.00pp | 33.05% ±1.48 | 10 | -0.72pp | p=0.018 * (exact) | -1.00 | [-5.22, -3.39]pp | 0.230 | 40 |
+| BNNR random selection (XAI ablation) | 29.62% | ±1.79pp | 28.97% ±2.02 | 10 | -4.35pp | p=0.945 ns (exact, n=8) | -0.06 | [-0.20, +0.15]pp | 0.054 | 40 |
+| BNNR XAI-guided (equal compute) | 29.51% | ±1.56pp | 28.95% ±1.92 | 10 | -4.46pp | — | — | — | 0.060 | 40 |
+
+**Headline:** `bnnr_xai` (29.51%) vs `bnnr_random` (29.62%) — median of paired
+differences **+0.00pp**, n=10 (8 after dropping two tied pairs), p=0.945 ns,
+r=−0.06, bootstrap 95% CI [−0.20, +0.15]pp. **XAI-guided candidate selection is
+indistinguishable from random selection at n=10.** Full write-up:
+[`findings_t20/findings_imagewoof.md`](findings_t20/findings_imagewoof.md).
+
+Read the two Δ conventions apart: `Δ vs no_aug` compares a condition against
+`no_aug` and is a difference of condition medians, descriptive and untested; the
+`p`, `r` and CI in the same row compare `bnnr_xai` against that condition and the
+CI is the median of the paired differences. The summarizer prints this
+distinction in its own statistical notes. Estimators: [`stats.py`](stats.py).
+
+Regenerated after #398, which fixed the rank-biserial sign and made the Δ and CI
+paired. Do not hand-write numbers here.

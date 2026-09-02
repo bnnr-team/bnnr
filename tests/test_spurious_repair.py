@@ -143,9 +143,9 @@ def test_wilcoxon_matches_known_value() -> None:
 
 def test_wilcoxon_exact_null_distribution_sums_to_2n() -> None:
     """The DP null distribution must be a full enumeration of 2**n sign flips."""
-    sr = _load_module("summarize_spurious")
+    st = _load_module("stats")  # private helper: reach it on the module that owns it
     for n in (1, 5, 10, 17):
-        counts = sr._wilcoxon_null_counts(n)
+        counts = st._wilcoxon_null_counts(n)
         assert int(counts.sum()) == 2**n
         assert len(counts) == n * (n + 1) // 2 + 1
         assert int(counts[0]) == 1  # only the all-positive assignment gives W-=0
@@ -163,11 +163,72 @@ def test_wilcoxon_falls_back_to_approx_on_ties() -> None:
     assert p == pytest.approx(0.00592, abs=1e-4), f"approx p drifted: {p}"
 
 
-def test_wilcoxon_zero_diffs_force_approx() -> None:
-    """Dropped zeros also disqualify the exact branch (n changes, D-EXACT-P)."""
+def test_wilcoxon_zero_diffs_keep_the_exact_branch() -> None:
+    """Dropped zeros do not cost exactness (#398, was: they forced approx).
+
+    The signed-rank test with zeros dropped is exact *conditional on* the number
+    of non-zero differences — the standard "wilcox" procedure. Requiring no
+    dropped zeros was over-conservative: it downgraded three already-published
+    T20 contrasts to the normal approximation (imagewoof b40 0.9453 -> 0.9442,
+    b80 0.4609 -> 0.4412, pets 0.1250 -> 0.1056). n is reduced and reported.
+
+    **This rule changes no SpuriousBench number** — verified: the only Waterbirds
+    contrast with a dropped zero (`bnnr_xai vs bnnr_random`, b15) also has ties
+    and is `approx` either way. That claim is about the *zero* rule only. The
+    separate *tie*-tolerance change does move one published contrast; see
+    ``test_tie_tolerance_moves_the_dfr_contrast`` below.
+
+    Note also that scipy's ``method='auto'`` does **not** do this: it routes away
+    from its exact branch whenever a zero is present. Feed it the already-dropped
+    non-zeros and it agrees.
+    """
     sr = _load_module("summarize_spurious")
     d = np.array([0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06])
-    assert sr.wilcoxon_p_method(d) == "approx"
+    assert sr.wilcoxon_p_method(d) == "exact"
+    w_plus, w_minus, p, r = sr.wilcoxon_signed_rank(d)
+    assert (w_plus, w_minus) == (21.0, 0.0)  # n = 6 after dropping the zero
+    assert p == pytest.approx(2 / 64, abs=1e-12)
+    assert r == pytest.approx(1.0)
+
+
+def test_tie_tolerance_moves_the_dfr_contrast() -> None:
+    """The tie rule *does* move one published SpuriousBench number (#398).
+
+    On ``results_waterbirds_b15.json``, ``bnnr_xai vs dfr`` carries two |d|
+    values 7.2e-16 apart relative — ``k/N`` fractions that are mathematically
+    equal but not bit-equal. Exact equality missed them, so the contrast claimed
+    the exact branch while violating its no-ties precondition:
+
+        was:  p = 0.001953125 (= 2/1024, exact),  Holm 0.0098,  3/5 exact
+        now:  p = 0.005889270 (approx),           Holm 0.0236,  2/5 exact
+
+    The new value is the correct one. This test exists so the change can never
+    happen silently again, and so the published table can be checked against it.
+    """
+    records = Path(__file__).resolve().parents[1] / "benchmarks" / "findings_t20" / \
+        "results_waterbirds_b15.json"
+    if not records.is_file():
+        pytest.skip("waterbirds b15 records not present")
+
+    sr = _load_module("summarize_spurious")
+    st = _load_module("stats")
+    cs = sr.by_condition_seed(sr.load_runs(records))
+    xa, xb, seeds = sr.paired_wga(cs, "bnnr_xai", "dfr")
+    d = xa - xb
+
+    assert len(seeds) == 10
+    res = st.wilcoxon_signed_rank(d)
+    assert (res.w_plus, res.w_minus) == (0.0, 55.0), "every seed pair favours dfr"
+
+    # the near-tie that changes the method
+    mags = np.sort(np.abs(d))
+    gaps = np.diff(mags) / mags[1:]
+    assert gaps.min() < 1e-15, "fixture no longer contains the near-tie"
+    assert len(np.unique(np.abs(d))) == len(d), "exact equality still sees no tie"
+
+    assert res.method == "approx"
+    assert res.p_value == pytest.approx(0.005889270, abs=1e-8)
+    assert st.wilcoxon_exact_p(0.0, 10) == pytest.approx(2 / 1024, abs=1e-12)
 
 
 def test_holm_bonferroni_monotone() -> None:

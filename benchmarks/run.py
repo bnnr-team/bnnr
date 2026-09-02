@@ -16,6 +16,7 @@ from lib import (  # noqa: E402
     CONDITIONS,
     DEFAULT_CONFIG,
     benchmark_document,
+    force_utf8_stdout,
     git_head,
     load_results,
     run_condition,
@@ -40,6 +41,7 @@ def _estimate_hours(device: str, n_seeds: int, condition_ids: list[str]) -> str:
 
 
 def main() -> None:
+    force_utf8_stdout()
     parser = argparse.ArgumentParser(
         description="CIFAR-10 benchmark: no BNNR vs RandAugment vs BNNR branch search",
         epilog="""

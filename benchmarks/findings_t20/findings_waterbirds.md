@@ -1,7 +1,9 @@
 # SpuriousBench — Waterbirds findings
 
 **Status:** complete for the Waterbirds dataset. Equal-compute matrix (n=10) and equal-deployed-epoch extension (n=10) are final; the dynamics-trajectory subset (P6 figure material) is outstanding and does not affect any conclusion below.
-**Harness:** `benchmarks/spurious_repair.py` sha256 `1d063ac9…`, `benchmarks/summarize_spurious.py` sha256 `c8ec9734…`, tests `aef14919…`. bnnr 0.6.5, repo `0cfa96e`, branch `spurious-repair-benchmark`.
+**Harness (as run):** `benchmarks/spurious_repair.py` sha256 `1d063ac9…`, `benchmarks/summarize_spurious.py` sha256 `c8ec9734…`, tests `aef14919…`. bnnr 0.6.5. All three blobs are the versions committed at `33674bc` (branch `research/t20-benchmark-and-findings`), merged as `338b054` (#389). An earlier revision of this line cited repo `0cfa96e`, branch `spurious-repair-benchmark`; that commit does not contain these files at all, and the citation has been corrected — the three hashes themselves were always right.
+
+**Statistics republished (#398).** The raw records are unchanged; the summarizer is not. Every p-value, effect size and interval below was recomputed with `benchmarks/stats.py` (`3f1a539d…`) via `summarize_spurious.py` (`2505a3df…`), tests `e8c5cd4f…`. **Three contrasts moved, for two different reasons.** Two because tie detection changed: `bnnr_xai vs dfr` (§3.2) and `bnnr_xai(45) vs erm_continue(15)` (§4.2). The third, `bnnr_random(45) − bnnr_random(15)` (§4.2), did **not** — both the old and the new estimator return the same value for it, and the previously published number reproduces from neither. The itemised list, with the cause of each, is in §3.2.
 **Environment:** WSL2, RTX 5080 Laptop (sm_120), torch 2.12.1+cu130, Python 3.14.4. All numbers recomputed independently from the raw results JSON, not taken from the summarizer alone.
 
 ---
@@ -24,7 +26,7 @@ Falsifiable headline: at n=10 paired seeds, is there a detectable `bnnr_xai` −
 
 **Faithfulness.** EBPG + IoU@0.5 + Pointing Game against ground-truth masks, on normalised in-distribution inputs, 500 masks per group (2000-image probe), OptiCAM at batch size 1. Batched OptiCAM was implemented, tested and **rejected**: it is batch-size-dependent by construction (Adam on `-score.mean()` leaves the update scaled by `1/(√v̂ + B·eps)`), giving EBPG discrepancies of 0.036–0.047 against batch=1. Correctness was chosen over a 2.6× speedup.
 
-**Statistics.** Paired two-sided Wilcoxon on identical seeds; Holm-Bonferroni within each protocol's own contrast family (never pooled across protocols); bootstrap 95% CI on the paired median difference with the width stated; matched-pairs rank-biserial; Sagawa prevalence-weighted mean (weights from the training distribution, per their Appendix C.1); exact Wilcoxon by enumeration when n ≤ 25 with no ties or zeros, otherwise the tie-corrected normal approximation, labelled per contrast.
+**Statistics.** Paired two-sided Wilcoxon on identical seeds; Holm-Bonferroni within each protocol's own contrast family (never pooled across protocols); bootstrap 95% CI on the paired median difference with the width stated; matched-pairs rank-biserial; Sagawa prevalence-weighted mean (weights from the training distribution, per their Appendix C.1); exact Wilcoxon by enumeration when n ≤ 25 with no ties in |d|, otherwise the tie-corrected normal approximation, labelled per contrast. Zero differences are dropped and n reduced, which does not cost exactness — the signed-rank null is exact conditional on the number of non-zero differences — so "exact" here means exact given the reduced n, which is reported. Ties are detected with a relative tolerance rather than exact equality, because worst-group accuracies are `k/N` fractions whose mathematically equal differences can land ~1e-16 apart in floating point.
 
 ---
 
@@ -44,11 +46,31 @@ Falsifiable headline: at n=10 paired seeds, is there a detectable `bnnr_xai` −
 
 The ten paired differences (pp): +0.47, +0.47, −0.62, +0.31, +1.40, +0.47, −2.49, 0.00, +0.31, +5.30 — seven positive, two negative, one exact zero.
 
-**There is no detectable difference between XAI-guided and random candidate selection at n=10.** The whole contrast lives inside a ±1 pp band. Worst-group accuracy is quantised at 1/642 = 0.156 pp, so the detectability floor is roughly half a percentage point; effects below that cannot be resolved at this seed count, and the bootstrap CI is correspondingly lumpy. This extends T20's from-scratch null (Δ = −0.11 pp, p = 0.945) into the repair regime the method is advertised for.
+**There is no detectable difference between XAI-guided and random candidate selection at n=10.** The whole contrast lives inside a ±1 pp band. Worst-group accuracy is quantised at 1/642 = 0.156 pp, so the detectability floor is roughly half a percentage point; effects below that cannot be resolved at this seed count, and the bootstrap CI is correspondingly lumpy. This extends T20's from-scratch null (Δ = +0.00 pp, p = 0.945) into the repair regime the method is advertised for.
 
 ### 3.2 The only strong effect is the DFR-style baseline
 
-`dfr` beats every other condition on every one of the ten seeds: +17.99 pp over `erm_continue` (r = +1.000, exact p = 0.0020, Holm = 0.0098); `bnnr_xai` sits 18.22 pp below it (r = −1.000). It is the only contrast surviving Holm.
+`dfr` beats every other condition on every one of the ten seeds: +17.99 pp over `erm_continue` (r = +1.000, exact p = 0.0020, Holm = 0.0098); `bnnr_xai` sits 18.22 pp below it (r = −1.000, p = 0.0059, Holm = 0.0236). The two `dfr` contrasts are the only ones surviving Holm; nothing else does.
+
+> **Republished (#398): three contrasts moved, for two different reasons.**
+>
+> **Two moved because tie detection changed.** `bnnr_xai vs dfr` previously read *exact* p = 0.001953125, Holm = 0.0098, with 3 of 5 contrasts exact. It now reads p = 0.0059 on the tie-corrected approximation, Holm = 0.0236, with 2 of 5 exact. Two of its ten |d| values sit 7.2e-16 apart relative — `k/642` fractions that are mathematically equal but not bit-equal — so exact equality missed the tie and the contrast claimed an exact branch whose no-ties precondition it violated. The approximation is the correct call. `bnnr_xai(45) vs erm_continue(15)` in §4.2 moved the same way, and its previously published value has the additional problem that it reproduces from nothing (see §4.2). The conclusion is unchanged: `dfr` separates, decisively, and the effect size stays r = −1.000.
+>
+> **The third did not.** `bnnr_random(45) − bnnr_random(15)` carries a **bit-exact** tie, so exact equality already caught it: the pre-#398 estimator returns `approx` p = 0.042063 for this contrast, identical to the current one. Verified by running `upstream/main`'s `summarize_spurious.py` on the same pairing. The published 0.039 is 10/256, a forced-enumeration value that **neither estimator produces** — the same class of finding as the unreproducible 0.023, not a consequence of the tie-detection change. It is listed below because the published number is wrong, not because #398 changed it.
+>
+> The complete list of values in this document that differ from what was published:
+>
+> | where | value | was | now | why |
+> |---|---|---|---|---|
+> | §3.2 | `bnnr_xai vs dfr` p | 0.001953125 (`exact`) | 0.0058893 (`approx`) | tie tolerance |
+> | §3.2 | `bnnr_xai vs dfr` Holm | 0.0098 | 0.0236 | follows the p |
+> | summarizer footnote | contrasts on the exact branch | 3 of 5 | 2 of 5 | follows the p |
+> | §4.2 | `bnnr_xai(45) vs erm_continue(15)` p | 0.023 | 0.0247 (`approx`) | tie tolerance; old value also unreproducible |
+> | §4.2 | `bnnr_random(45) − bnnr_random(15)` p | 0.039 (= 10/256) | 0.0421 (`approx`) | old value unreproducible; **not** a #398 change |
+> | §4.2 | family best Holm-adjusted p | 0.094 | 0.099 | old value unreproducible; the estimator change alone moves 0.0625 → 0.0988 |
+> | §3.1 prose | T20 cross-reference Δ | −0.11 pp | +0.00 pp | the T20 estimand was unpaired (#390 defect 2) |
+>
+> Four of the seven follow from #398's estimator changes (the first four rows). Two — `0.039` and `0.094` — are values that do not follow from the committed records under *either* estimator, so they were wrong before this PR and are corrected here rather than changed by it. One is a cross-reference to a T20 number corrected in the same PR. **No Waterbirds median, effect size, confidence interval or sign count moved**, and no conclusion in this document depends on any of the seven.
 
 **This is a DFR-*style* baseline, not published DFR.** Ours reaches 83.4% (range 82.1–84.4) against a published 92.9 ± 0.2%. The 9.5 pp shortfall has four identified causes, three of them priced by the DFR paper's own ablations:
 1. **Our group-balanced subset is not in fact balanced** — an implementation defect. `group_balanced_subset` takes the first `per_group` items, so with 200 per group against validation groups of 467/466/133/133 the subset is 200/200/133/133, over-weighting the majority groups. Kirichenko et al. subsample every group down to the smallest; their Table 12 prices this axis at roughly 3.7 pp.
@@ -84,9 +106,32 @@ The disagreement seeds are high-variance rather than systematically favourable t
 
 ### 4.2 The equal-compute deficit was the epoch split (directional, n=8 figures)
 
-`bnnr_xai(45)` vs `erm_continue(15)`: median **+2.65 pp**, 7 positive / 1 negative, raw p = 0.023. `bnnr_random(45)` vs `erm_continue(15)`: median **+2.57 pp**, 6/2, raw p = 0.109. Under equal compute both arms sat 0.2–1.2 pp *below* `erm_continue`; matching deployed epochs moves them roughly 2.6 pp above it. **After Holm over this arm's four-contrast family nothing reaches significance** (best adjusted p = 0.094). The direction is consistent; the sample is the limit.
+All four contrasts pair budget-45 records against budget-15 records on the first eight seeds. Recomputed for #398 with `benchmarks/stats.py`, with the branch labelled per contrast:
 
-Mechanistically the cleanest contrast is within-arm, where only the epoch budget differs: `bnnr_xai(45) − bnnr_xai(15)` median +1.95 pp (6/2, raw p = 0.078) and `bnnr_random(45) − bnnr_random(15)` median +3.35 pp (6/2, raw p = 0.039). Both point the same way as the primary. This mirrors T20's budget 40→80 result: the deficit was the truncated deployed training, not the augmentation.
+| contrast | n | median Δ | +/− | raw p | method | p (Holm) |
+|---|---|---|---|---|---|---|
+| `bnnr_xai(45)` vs `erm_continue(15)` | 8 | **+2.65 pp** | 7/1 | 0.0247 | `approx` | 0.099 |
+| `bnnr_random(45)` vs `erm_continue(15)` | 8 | **+2.57 pp** | 6/2 | 0.109 | `exact` | 0.156 |
+| `bnnr_xai(45) − bnnr_xai(15)` | 8 | +1.95 pp | 6/2 | 0.078 | `exact` | 0.156 |
+| `bnnr_random(45) − bnnr_random(15)` | 8 | +3.35 pp | 6/2 | 0.0421 | `approx` | 0.126 |
+
+Under equal compute both arms sat 0.2–1.2 pp *below* `erm_continue`; matching deployed epochs moves them roughly 2.6 pp above it. **After Holm over this arm's four-contrast family nothing reaches significance** (best adjusted p = 0.099). The direction is consistent; the sample is the limit.
+
+Mechanistically the cleanest contrasts are the two within-arm rows, where only the epoch budget differs. Both point the same way as the primary. This mirrors T20's budget 40→80 result: the deficit was the truncated deployed training, not the augmentation.
+
+> **Republished (#398).** Both `approx` rows differ from what was published, but for different reasons, and only one of them is a #398 change.
+>
+> `bnnr_xai(45) vs erm_continue(15)` moved **because tie detection changed**, as in §3.2: it carries two near-ties in |d|, 3.0e-14 and 5.4e-15 apart relative, which exact equality missed and the relative tolerance catches.
+>
+> `bnnr_random(45) − bnnr_random(15)` did **not** move for that reason. Its tie is **bit-exact**, so exact equality already caught it — the pre-#398 estimator returns `approx` p = 0.042063 for this contrast, identical to the current one. The published 0.039 is exactly 10/256, a forced-enumeration value that neither estimator produces. Like the 0.023 below, it is a number that does not follow from the committed records, not a consequence of #398.
+>
+> The family's best adjusted p is now **0.099**, and the previously published **0.094 is a third value that reproduces from nothing**. Holm over this family gives 0.0625 under the pre-#398 estimator, 0.0988 under the current one, and 0.0920 over the four p-values exactly as they were published. None of the three is 0.094. What the estimator change alone did was move the family best from 0.0625 to 0.0988; the gap between either of those and 0.094 belongs to the same provenance problem as the 0.023 and the 0.039.
+>
+> The two `exact` rows are unchanged, and every median and sign count in the table is unchanged.
+>
+> **One previously published value could not be reproduced.** `bnnr_xai(45) vs erm_continue(15)` previously read raw p = 0.023. That value does not follow from the committed records under any estimator we tried: forced exact enumeration gives 4/256 = 0.015625, the current tie-corrected approximation gives 0.0247, and the normal approximation without continuity or tie correction gives 0.0173. 0.023 is 6/256, which implies W = 2, where the committed records give W⁺ = 34.5 and W⁻ = 1.5. We publish the recomputed 0.0247 and record the old number as unreproducible rather than reconstruct a provenance for it.
+>
+> **These four contrasts are not regenerated by any committed script.** `summarize_spurious.py` summarises one results file at a time and never pairs `results_waterbirds_b45.json` against `results_waterbirds_b15.json`, so no command in this repository emits the table above. The values were recomputed directly from the two committed JSONs using `benchmarks/stats.py`. This is the one section of this document whose numbers cannot be reproduced by a single stated command; automating the cross-protocol pairing is queued.
 
 **Base-drift control.** The two protocols retrain the base independently, so cross-protocol pairing shares seed and recipe but not the checkpoint. Measured drift in base worst-group accuracy: median −0.003 pp, maximum 1.24 pp (seed 4) — small against the +2.6 pp effect, so the pairing is defensible. Seed 4 carries both the largest drift and the large negative in §4.1 and is flagged accordingly.
 
