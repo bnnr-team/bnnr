@@ -110,6 +110,15 @@ class RunRecord:
     #: Why the selector landed where it did: ``"improved"``,
     #: ``"no_improvement"``, ``"indistinguishable"``, ``"no_candidates"``.
     selection_reason: str | None = None
+    #: The selector that was configured but not run, because the diagnosis was
+    #: not confident enough to act on. ``None`` on a run that used what it was
+    #: asked for. A reader must be able to tell a diagnosed run from a
+    #: defaulted one without re-deriving it from the config.
+    selection_fallback_from: str | None = None
+    #: The confidence that triggered it, so the threshold can be re-examined
+    #: later without re-running anything.
+    selection_fallback_confidence: float | None = None
+
     #: The paired bootstrap interval behind that reason, when one was computed.
     #: Recorded so a decision is auditable after the fact rather than only at
     #: the moment it was made, which is what T20 had to reconstruct by hand.
