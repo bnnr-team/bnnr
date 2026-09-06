@@ -62,6 +62,7 @@ _THIS = Path(__file__).resolve()
 _REPO = _THIS.parent.parent
 sys.path.insert(0, str(_REPO / "src"))
 sys.path.insert(0, str(_THIS.parent))
+from lib import force_utf8_stdout  # noqa: E402
 
 CONDITIONS = ["base_frozen", "erm_continue", "dfr", "bnnr_random", "bnnr_xai"]
 
@@ -334,75 +335,12 @@ def build_torch_ds(examples: list[Example], img_size: int, train: bool) -> Any:
     return _SpuriousDS(examples, tf, mtf, img_size)
 
 
-# =========================================================================== #
-# Statistics (shared with the diagnostic; kept dependency-light)
-# =========================================================================== #
-def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    if n == 0:
-        return (float("nan"), float("nan"))
-    p = k / n
-    d = 1 + z * z / n
-    c = (p + z * z / (2 * n)) / d
-    h = (z / d) * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
-    return (max(0.0, c - h), min(1.0, c + h))
-
-
-def bootstrap_paired_median(diffs: np.ndarray, n_boot: int = 10000,
-                            seed: int = 0, alpha: float = 0.05) -> tuple[float, float]:
-    if len(diffs) == 0:
-        return (float("nan"), float("nan"))
-    rng = np.random.default_rng(seed)
-    meds = np.empty(n_boot)
-    n = len(diffs)
-    for b in range(n_boot):
-        meds[b] = np.median(diffs[rng.integers(0, n, n)])
-    return (float(np.percentile(meds, 100 * alpha / 2)),
-            float(np.percentile(meds, 100 * (1 - alpha / 2))))
-
-
-def wilcoxon_signed_rank(a: np.ndarray, b: np.ndarray) -> tuple[float, float, float]:
-    """Return (statistic, p, rank_biserial_r). scipy if available."""
-    a = np.asarray(a, float)
-    b = np.asarray(b, float)
-    d = a - b
-    d = d[d != 0]
-    n = len(d)
-    if n == 0:
-        return (0.0, 1.0, 0.0)
-    try:
-        from scipy.stats import wilcoxon
-
-        res = wilcoxon(a, b, zero_method="wilcox", alternative="two-sided")
-        stat = float(res.statistic)
-    except Exception:
-        ranks = np.argsort(np.argsort(np.abs(d))) + 1
-        stat = float(min(ranks[d > 0].sum(), ranks[d < 0].sum()))
-    # rank-biserial r = 1 - 2W/(n(n+1)/2)... use T20 convention 1 - 2W/(n(n+1))
-    r = 1 - 2 * stat / (n * (n + 1))
-    # p: use scipy value if we had it, else normal approx
-    try:
-        from scipy.stats import wilcoxon
-
-        p = float(wilcoxon(a, b, alternative="two-sided").pvalue)
-    except Exception:
-        mu = n * (n + 1) / 4
-        sigma = math.sqrt(n * (n + 1) * (2 * n + 1) / 24)
-        z = (stat - mu) / sigma if sigma > 0 else 0.0
-        p = 2 * (1 - 0.5 * (1 + math.erf(abs(z) / math.sqrt(2))))
-    return (stat, min(1.0, p), r)
-
-
-def holm_bonferroni(pvals: dict[str, float]) -> dict[str, float]:
-    items = sorted(pvals.items(), key=lambda kv: kv[1])
-    m = len(items)
-    out: dict[str, float] = {}
-    prev = 0.0
-    for i, (k, p) in enumerate(items):
-        adj = min(1.0, (m - i) * p)
-        adj = max(adj, prev)
-        out[k] = adj
-        prev = adj
-    return out
+# A third copy of wilson_ci / bootstrap_paired_median / wilcoxon_signed_rank /
+# holm_bonferroni used to live here. It had zero call sites in this file and
+# carried the #390 defect verbatim (`r = 1 - 2*stat/(n*(n+1))`) plus a fallback
+# that ranked |d| with no tie handling at all. Deleted in #398: the estimators
+# live in benchmarks/stats.py, and "single implementation for the whole
+# benchmarks/ tree" is only true if the unused copies go too.
 
 
 # =========================================================================== #
@@ -1211,6 +1149,7 @@ def train_and_diagnose_base(spec: DatasetSpec, args: argparse.Namespace, seed: i
 # Main
 # =========================================================================== #
 def main() -> None:
+    force_utf8_stdout()
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--dataset", default="waterbirds",
