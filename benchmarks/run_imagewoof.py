@@ -65,6 +65,7 @@ from lib import (  # noqa: E402
     _run_plain_epochs,
     build_bnnr_candidate_augmentations,
     export_attention_maps,
+    force_utf8_stdout,
     git_head,
     load_results,
     save_results,
@@ -591,6 +592,7 @@ def _estimate(args: argparse.Namespace, n_seeds: int, conds: list[str]) -> str:
 
 
 def main() -> None:
+    force_utf8_stdout()
     parser = argparse.ArgumentParser(
         description="ResNet18 / Imagewoof augmentation benchmark (low-data, from-scratch)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
