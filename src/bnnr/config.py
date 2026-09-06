@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from bnnr.config_model import BNNRConfig
+from bnnr.config_model import BNNRConfig, DiagnosisConfig
 from bnnr.utils import _parse_fbeta
 
 
@@ -58,6 +58,63 @@ def load_config(config_path: Path) -> BNNRConfig:
         return BNNRConfig(**(data or {}))
     except ValidationError as exc:
         raise ValueError(f"Invalid BNNRConfig in {config_path}: {exc}") from exc
+
+
+def load_diagnosis_profile(profile_path: Path, name: str | None = None) -> DiagnosisConfig:
+    """Load a named set of calibrated diagnosis thresholds from a YAML file.
+
+    A profile file holds one or more named threshold sets::
+
+        imagewoof_resnet50:
+          concentration_lo: 0.31
+          concentration_hi: 0.58
+          border_mass_hi: 0.34
+          perturbation_shift_hi: 0.47
+          robustness_gap_hi: 0.12
+          min_confidence: 0.75
+
+    Thresholds are calibrated per model family and per saliency resolution, so
+    they travel as a file rather than as library defaults. This is what lets the
+    calibration study publish a profile without anything being hard-coded here.
+
+    With one profile in the file *name* may be omitted. With several it is
+    required, because picking one silently would be the same class of mistake
+    as a default threshold.
+
+    The result is not validated for completeness here: a partial profile is a
+    legitimate thing to load and then finish by hand. Completeness is checked
+    when a config that uses it asks for the ``diagnosis`` selector.
+    """
+    if not profile_path.exists():
+        raise FileNotFoundError(f"Diagnosis profile not found: {profile_path}")
+    try:
+        data = yaml.safe_load(profile_path.read_text())
+    except yaml.YAMLError as exc:
+        raise yaml.YAMLError(f"Invalid YAML in {profile_path}: {exc}") from exc
+
+    if not isinstance(data, dict) or not data:
+        raise ValueError(f"{profile_path} holds no named threshold profiles")
+
+    if name is None:
+        if len(data) > 1:
+            raise ValueError(
+                f"{profile_path} holds {len(data)} profiles ({', '.join(sorted(data))}); "
+                f"name the one you want rather than letting it be picked for you"
+            )
+        name = next(iter(data))
+    elif name not in data:
+        raise KeyError(
+            f"Profile {name!r} not in {profile_path}. Available: {sorted(data)}"
+        )
+
+    entry = data[name]
+    if not isinstance(entry, dict):
+        raise ValueError(f"Profile {name!r} in {profile_path} is not a mapping")
+
+    try:
+        return DiagnosisConfig(**entry)
+    except ValidationError as exc:
+        raise ValueError(f"Invalid diagnosis profile {name!r} in {profile_path}: {exc}") from exc
 
 
 def save_config(config: BNNRConfig, save_path: Path) -> None:
@@ -158,7 +215,10 @@ _XAI_PRESETS: dict[str, dict[str, Any]] = {
         "xai_enabled": True,
         "xai_method": "opticam",
         "dual_xai_report": True,
-        "xai_selection_weight": 0.1,
+        # Was 0.1. Zeroed in 0.x: it steered selection with a weight nobody
+        # measured, which is the path T20 traced its null result to. The XAI
+        # reporting this preset is actually for is unaffected.
+        "xai_selection_weight": 0.0,
         "xai_pruning_threshold": 0.15,
         "adaptive_icd_threshold": True,
     },
@@ -166,7 +226,8 @@ _XAI_PRESETS: dict[str, dict[str, Any]] = {
         "xai_enabled": True,
         "xai_method": "opticam",
         "dual_xai_report": False,
-        "xai_selection_weight": 0.15,
+        # Was 0.15, zeroed for the same reason as xai_full.
+        "xai_selection_weight": 0.0,
         "xai_pruning_threshold": 0.2,
         "adaptive_icd_threshold": True,
     },
@@ -202,12 +263,22 @@ def apply_xai_preset(config: BNNRConfig, preset: str) -> BNNRConfig:
 
     * ``"xai_light"`` – XAI enabled with defaults (no influence on
       training decisions).  Good for dashboards and reports.
-    * ``"xai_full"`` – All XAI features activated: composite selection
-      (10 % weight), XAI-based pruning, adaptive ICD thresholds, and
-      dual XAI report.
-    * ``"xai_adaptive"`` – XAI actively guides training: higher
-      composite selection weight (15 %), stricter pruning, and adaptive
-      ICD thresholds.
+    * ``"xai_full"`` – All XAI reporting activated: XAI-based pruning,
+      adaptive ICD thresholds, and dual XAI report. Composite selection
+      is **off** as of 0.x; see the note below.
+    * ``"xai_adaptive"`` – Stricter XAI-based pruning and adaptive ICD
+      thresholds. Composite selection is **off** as of 0.x.
+
+    .. note::
+       ``xai_full`` and ``xai_adaptive`` used to ship
+       ``xai_selection_weight`` of 0.1 and 0.15. Both are now 0.0. Those
+       weights blended a hand-weighted saliency scalar into candidate
+       selection, and T20 traced its null result to that path. Set the field
+       yourself if you want the old behaviour; it still works and warns.
+
+       ``xai_pruning_threshold`` is deprecated but left at its preset values,
+       since removing a candidate is reversible in a way that selecting the
+       wrong one is not.
 
     Parameters
     ----------

@@ -32,12 +32,144 @@ seed: 42
 - `metrics` (default: `['accuracy', 'f1_macro', 'loss']`)
 - `selection_metric` (default: `accuracy`) — the metric used to select the best augmentation branch. Can be any metric from the tables below.
 - `selection_mode` (`max` or `min`, default: `max`) — use `min` for metrics where lower is better (e.g. `loss`, `zero_one_loss`).
+- `selector` (default: `metric_argmax`) — which rule picks the winning candidate. See below.
 - `early_stopping_patience` (default: `2`)
 - `device` (`cuda`, `cpu`, `auto`; default: `auto`)
 - `seed` (default: `42`)
 - `save_checkpoints` (default: `true`)
 - `verbose` (default: `true`)
 - `log_file` (default: `null`)
+
+## Candidate selectors
+
+`selector` names the rule that picks the winning candidate once every candidate has been evaluated.
+
+| value | rule |
+|---|---|
+| `metric_argmax` (default) | greedy argmax on `selection_metric`, blended with XAI quality when `xai_selection_weight > 0` |
+| `random` | uniform pick among the candidates, seeded from `seed` |
+| `diagnosis` | picks the family the attention diagnosis recommends; see [diagnosis](diagnosis.md) |
+
+Both are gated the same way: whatever a selector picks is discarded unless it beat the baseline on `selection_metric`. That gate is deliberately shared, so a comparison between two selectors is a comparison of their ranking rules and nothing else. A selector that skipped it would look better purely by accepting runs the others reject.
+
+### Search policy
+
+- `search_policy` (default: `exhaustive`)
+
+How the candidate budget is spent. **The default does not change**, and `exhaustive` produces exactly the plan the loop used to hard-code.
+
+| value | what it does |
+|---|---|
+| `exhaustive` (default) | every candidate trains `m_epochs`, then the selector arbitrates |
+| `diagnosis_single` | the diagnosis names one candidate and it trains the whole budget |
+| `successive_halving` | the field halves each rung; weak branches die early |
+
+This addresses both defects the T20 benchmark found at once.
+
+**The selection criterion.** `exhaustive` arbitrates on selection-validation accuracy, which T20 found close to orthogonal to the objective. `diagnosis_single` does not arbitrate: the attention evidence names the arm.
+
+**The epoch split.** Under `exhaustive` with three candidates and `m_epochs: 6`, the run spends 18 epochs and the deployed model receives 6 — while a single-augmentation baseline on the same budget receives all 18. That is what made BNNR look worse than it is; matching deployed epochs closed a 4.46 pp gap to 0.09 pp on Imagewoof. `diagnosis_single` spends the same 18 and gives all of them to one arm. `successive_halving` costs no more than `exhaustive` and hands the eliminated branches' epochs to the survivors.
+
+`diagnosis_single` **refuses to run without calibrated thresholds**, the same gate as `selector: diagnosis`, and refuses again at plan time if no diagnosis was computed or if its recommendation matches no candidate. It does not fall back to argmax: a silent fallback would make a benchmark contrast between the policies measure a blend of them.
+
+The plan, including its rung structure and both epoch numbers, lands in the run record under `search_plan`. Note that the record's `total_gpu_epochs` and `deployed_epochs` are **counted as epochs run**, not read from the plan — candidate pruning can stop a rung early, and the measurement is what matters.
+
+### Indistinguishability test
+
+- `indistinguishable_resamples` (default: `2000`, validated `>= 100`)
+- `indistinguishable_confidence` (default: `0.95`, validated in `(0, 1)`)
+
+A candidate only replaces the baseline when the **paired bootstrap interval on the difference excludes zero** — not merely when its metric is a larger number.
+
+T20's central negative result is that the selector was picking between candidates that are not distinguishable on the criterion it uses. On Waterbirds the candidate accuracies were .8749 / .8816 / .8549 on a validation set whose binomial standard error is larger than that spread. A strict `>` on those numbers is a coin flip.
+
+When the interval covers zero, `SelectionResult.reason` becomes `"indistinguishable"` and **the baseline is kept**: it is the closest thing to what the data supports, and it is the cheapest in epochs. The interval lands in the run record so the decision is auditable afterwards rather than only at the moment it was made.
+
+The comparison is **paired**: both arms are evaluated on the same validation set, and each bootstrap draw indexes both arms together. Ignoring the pairing would inflate the interval with variance that comes from the validation set rather than from the arms, and make everything look indistinguishable.
+
+The statistic is the **mean** paired difference, not the median. At sample level the paired difference is in `{-1, 0, 1}`, where the median is degenerate; the mean of those differences *is* the accuracy difference. The seed-level convention in the benchmark summarizers is a median, because a per-seed metric is continuous — different level of aggregation, different right answer.
+
+The test runs only when per-sample predictions were cached for both the candidate and the baseline. Without them the raw metric comparison stands, so a caller that never cached predictions behaves exactly as before.
+
+### How the composite scales candidate differences
+
+When `xai_selection_weight > 0` (deprecated, see below), the metric term is scaled by the **binomial standard error** `sqrt(p(1-p)/n)` of the selection metric, where `n` is the validation sample count.
+
+It used to be min-max normalised across the candidates. That stretches whatever spread the candidates happened to have across the full `[0, 1]` range, so a spread of 0.2 pp and a spread of 20 pp both produce a metric term running 0 to 1, and the blending weight means something different in every iteration. On a saturated metric it was applied to scatter rather than to signal.
+
+A normalised difference of `1.0` now means "one standard error better than the weakest candidate", in every iteration. A sub-noise spread produces a term well below 1; a spread of several standard errors exceeds 1 and dominates, which is correct because that difference is real.
+
+The unit falls back to the observed spread when the sample size is unknown or the metric is not a proportion (a loss, say), since the binomial form claims nothing there.
+
+**Standard deviation across the candidates is deliberately not used.** Three points is a poor estimator of anything, and on the runs this was written for it would have been an estimator of the very noise it was supposed to divide out.
+
+### Deprecated XAI selection knobs
+
+`xai_selection_weight` and `xai_pruning_threshold` are **deprecated as of 0.x**. Both keep working and both emit a `DeprecationWarning` when you set them to a non-zero value.
+
+Both are built on `compute_xai_quality_score`, a hand-weighted scalar whose component weights were chosen by hand and never calibrated against an outcome. The T20 benchmark traced its null result to exactly this path.
+
+There were two separate defects:
+
+**Accuracy was counted twice.** The quality score carried accuracy at 25 %, and `select_best_path` then blended that score against the normalised selection metric — which is accuracy. The effective accuracy weight of the composite was a number nobody chose, and the two copies were not even the same quantity: one min-max normalised across candidates, the other the raw probe-set fraction. Accuracy is no longer part of the weighted sum; it remains in the breakdown as an observation.
+
+**The score encodes a prior.** It rewards high Gini and penalises `edge_ratio` unconditionally, so it hard-codes "concentrated, central saliency is good". That is precisely the question [the diagnosis](diagnosis.md) answers per case — and for a Waterbirds-like model the built-in prior points the wrong way, since a model reading background context has diffuse, border-heavy attention and needs ICD, which this score ranks last.
+
+**Preset change.** `xai_full` and `xai_adaptive` shipped `xai_selection_weight` of 0.1 and 0.15. Both are now `0.0`. Everything those presets are actually for — XAI reporting, dual XAI, adaptive ICD thresholds — is unchanged. Set the field yourself if you want the old behaviour.
+
+`xai_pruning_threshold` keeps its preset values, since dropping a candidate is recoverable in a way that selecting the wrong one is not.
+
+### Shadow mode
+
+- `shadow_mode` (default: `true`)
+
+Records the attention evidence on every run and lets none of it influence selection. For each candidate of each iteration it writes the saliency statistics, the robustness metrics, and whether that candidate was the one the run kept, to `shadow_records.jsonl` in the run directory.
+
+It is on by default because it costs nothing beyond maps the run already produces. It does nothing when `xai_enabled` is `false`, since there are no maps to read.
+
+**Records are raw statistics, never a regime.** Writing a regime would need thresholds, and the thresholds are exactly what these records exist to calibrate. It needs no `diagnosis:` block and guesses nothing.
+
+**Every candidate is recorded, not only the winner.** A calibration set containing only winning arms cannot answer "would the other choice have been better", which is the question the whole exercise turns on.
+
+`perturbation_shift` is deliberately not computed here: it needs a second explainer pass, and shadow mode's claim is that it is free. The three statistics that come from maps the run already made are what get recorded.
+
+### Diagnosis thresholds
+
+`selector: diagnosis` requires a `diagnosis:` block, and **every field in it starts unset**:
+
+```yaml
+selector: diagnosis
+diagnosis:
+  concentration_lo: 0.31
+  concentration_hi: 0.58
+  border_mass_hi: 0.34
+  perturbation_shift_hi: 0.47
+  robustness_gap_hi: 0.12
+  min_confidence: 0.75        # optional
+```
+
+Asking for the selector with any of the first five unset raises at **config construction**, not mid-run, so the failure lands before any GPU time is spent. There is deliberately no default: shipping one would repeat the mistake that produced `xai_selection_weight` and its preset 0.1 and 0.15.
+
+Thresholds are calibrated per model family and per saliency resolution, so they travel as a file rather than as library defaults:
+
+```python
+from bnnr.config import load_diagnosis_profile
+
+thresholds = load_diagnosis_profile(Path("profiles.yaml"), "imagewoof_resnet50")
+config = BNNRConfig(selector="diagnosis", diagnosis=thresholds)
+```
+
+A profile file holds one or more named sets. With several in the file the name is required — picking one silently would be the same class of mistake as a default threshold.
+
+Setting the block without setting `selector` is harmless and is what shadow mode does: it records the raw statistics and needs no thresholds at all.
+
+`hard_quantile_q` is **not** part of this block. It lives at the top level because `hard_quantile_acc` and `robustness_gap` are worth watching with no diagnosis configured; the calibration study sweeps it alongside these thresholds, which does not make it one.
+
+`diagnosis` needs calibrated thresholds and a `Diagnosis` for the iteration. Without one it selects nothing rather than falling back to argmax, because a silent fallback would make a benchmark contrast between the two measure a blend of them.
+
+`random` is not a joke setting. It is the arm the T20 benchmark ran `metric_argmax` against, and `metric_argmax` did not beat it at n=10 across two datasets; having it as a named selector is what makes that contrast reproducible rather than something the benchmark harness improvises.
+
+Changing `selector` does not change what `select_best_path()` is called or how — the function is now a thin adapter over the registry, so existing code picks up the setting without modification.
 
 ## Available metrics
 

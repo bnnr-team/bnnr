@@ -513,10 +513,17 @@ def _result_entry(
     xai_meta: dict[str, Any],
     baseline_val: float | None = None,
     gain_pp: float | None = None,
+    run_record: Any | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     sel = cfg.selection_metric
     agg = xai_meta.get("aggregate_stats") or {}
+    # Conditions that never build a BNNRTrainer (plain training, RandAugment)
+    # have no run record, but they still have to carry the compute fields or
+    # they cannot be placed on an equal-compute axis at all. For them the two
+    # epoch counts coincide: there is no search, so every epoch trained is an
+    # epoch the deployed model received.
+    record = _record_fields(run_record, cfg=cfg, condition=condition)
     return {
         "condition": condition.id,
         "strategy": condition.strategy,
@@ -541,8 +548,34 @@ def _result_entry(
         "wall_clock_s": round(elapsed_s, 1),
         "report_json": _rel(report_path),
         "run_dir": _rel(run_dir),
+        **record,
         **(extra or {}),
     }
+
+
+def _record_fields(
+    run_record: Any | None, *, cfg: Any, condition: ConditionSpec
+) -> dict[str, Any]:
+    """The FIX-3-1 mandatory fields, for a row with or without a BNNR run.
+
+    Without a run record this is a non-search condition, so the deployed model
+    got every epoch that was trained and the two counts are the same number.
+    That is a fact about the condition, not a fallback: a plain-training row
+    with ``deployed_epochs != total_gpu_epochs`` would be a bug.
+    """
+    if run_record is None:
+        epochs = int(cfg.m_epochs)
+        return {
+            "deployed_epochs": epochs,
+            "total_gpu_epochs": epochs,
+            "search_policy": "none",
+            "selector": None,
+            "selected_candidate": [],
+            "diagnosis": None,
+            "hard_quantile_q": getattr(cfg, "hard_quantile_q", None),
+            "augmentation_modes": {},
+        }
+    return run_record.to_dict()
 
 
 def run_no_bnnr(
@@ -682,6 +715,7 @@ def run_bnnr_branch_search(
         xai_meta=xai_meta,
         baseline_val=baseline_val,
         gain_pp=gain,
+        run_record=result.run_record,
         extra={
             "selected_augmentations": selected,
             "augmentation_names": [a.name for a in augmentations],
@@ -747,3 +781,31 @@ def run_condition(
         condition=spec, seed=seed, device=device,
         config_path=config_path, output_root=output_root,
     )
+
+
+def force_utf8_stdout() -> None:
+    """Re-encode stdout/stderr as UTF-8 so a cp1252 console cannot kill a report.
+
+    These scripts print Δ, W⁺, W⁻, ≈, ≤, →, ±, § as a matter of course. Python
+    takes stdout's encoding from the platform; on Windows that is cp1252, which
+    encodes none of them, so the run dies with UnicodeEncodeError partway through
+    the output. Pre-existing on main — see benchmarks/summarize_grand.py's Δ
+    columns — and invisible to CI until a test ran a summarizer as a subprocess.
+
+    The fix belongs to the tool, not the caller: requiring PYTHONIOENCODING would
+    leave a Windows user with a traceback and no explanation.
+
+    Call from ``main()``, not at import: importing a summarizer as a library (the
+    test suite does) must not reconfigure the importing process's streams.
+    Anything reading these scripts' output must decode UTF-8 explicitly rather
+    than rely on the platform default, or it fails on the same platform for the
+    mirror-image reason.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except (ValueError, OSError):  # detached, closed, or not a TextIOWrapper
+            pass

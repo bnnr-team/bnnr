@@ -2,10 +2,88 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+if TYPE_CHECKING:
+    from bnnr.analysis.diagnosis import DiagnosisThresholds
+
+#: Knobs whose value came from nobody's measurement, with what to do instead.
+#: They keep working; the warning exists so a run that depends on one says so.
+_DEPRECATED_XAI_KNOBS = {
+    "xai_selection_weight": (
+        "Use selector='diagnosis' with calibrated thresholds to let attention "
+        "decide, or leave it at 0.0 to select on the metric alone."
+    ),
+    "xai_pruning_threshold": (
+        "Use candidate_pruning_relative_threshold, which prunes on the metric "
+        "being optimised rather than on a hand-weighted saliency scalar."
+    ),
+}
+
+#: Selectors that cannot run without calibrated thresholds. A diagnosis-driven
+#: search policy (#413) joins this set rather than growing a second check.
+_DIAGNOSIS_DRIVEN_SELECTORS = frozenset({"diagnosis"})
+
+
+class DiagnosisConfig(BaseModel):
+    """Cut points for the attention diagnosis. Every one starts unset.
+
+    There is deliberately no numeric default anywhere in this model. Shipping
+    one would repeat exactly the mistake that produced ``xai_selection_weight``
+    and its preset values of 0.1 and 0.15: a number nobody measured, driving
+    selection for every user. Calibration is a separate pre-registered study,
+    and until it reports, requesting the ``diagnosis`` selector fails at config
+    construction rather than at some point mid-run.
+
+    **Shadow mode needs none of these.** It records the raw saliency statistics
+    rather than a regime, so it collects calibration samples from runs that
+    were going to happen anyway, at no extra GPU cost, before any threshold
+    exists.
+
+    ``hard_quantile_q`` is deliberately *not* here. It lives on
+    :class:`BNNRConfig` because the metrics it produces, ``hard_quantile_acc``
+    and ``robustness_gap``, are worth watching with no diagnosis configured at
+    all. The calibration study sweeps it alongside these, which does not make
+    it a diagnosis field.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    concentration_lo: Optional[float] = None  # noqa: UP045
+    concentration_hi: Optional[float] = None  # noqa: UP045
+    border_mass_hi: Optional[float] = None  # noqa: UP045
+    perturbation_shift_hi: Optional[float] = None  # noqa: UP045
+    robustness_gap_hi: Optional[float] = None  # noqa: UP045
+    min_confidence: Optional[float] = None  # noqa: UP045
+
+    def to_thresholds(self) -> DiagnosisThresholds:
+        """Convert to the :class:`~bnnr.analysis.diagnosis.DiagnosisThresholds`
+        the rule consumes. Imported lazily to keep config import-light."""
+        from bnnr.analysis.diagnosis import DiagnosisThresholds
+
+        return DiagnosisThresholds(
+            concentration_lo=self.concentration_lo,
+            concentration_hi=self.concentration_hi,
+            border_mass_hi=self.border_mass_hi,
+            perturbation_shift_hi=self.perturbation_shift_hi,
+            robustness_gap_hi=self.robustness_gap_hi,
+            min_confidence=self.min_confidence,
+        )
+
+    def missing(self) -> tuple[str, ...]:
+        """Required thresholds still unset, in declaration order."""
+        return self.to_thresholds().missing()
+
+    @field_validator("min_confidence")
+    @classmethod
+    def validate_min_confidence(cls, value: float | None) -> float | None:
+        if value is not None and not (0.0 <= value <= 1.0):
+            raise ValueError("min_confidence must be in [0, 1]")
+        return value
 
 
 class BNNRConfig(BaseModel):
@@ -26,6 +104,21 @@ class BNNRConfig(BaseModel):
     metrics: list[str] = Field(default_factory=lambda: ["accuracy", "f1_macro", "loss"])
     selection_metric: str = "accuracy"
     selection_mode: str = "max"
+    # Which rule picks the winning candidate. "metric_argmax" is what BNNR has
+    # always done and stays the default; see bnnr.training.selection.SELECTORS.
+    selector: str = "metric_argmax"
+    #: How the candidate budget is spent. "exhaustive" is what BNNR has always
+    #: done and stays the default until the calibration study says otherwise;
+    #: see bnnr.training.search_policy.SEARCH_POLICIES.
+    search_policy: str = "exhaustive"
+    #: Cut points for the ``diagnosis`` selector. Unset by design; see
+    #: DiagnosisConfig and docs/diagnosis.md.
+    diagnosis: DiagnosisConfig = Field(default_factory=DiagnosisConfig)
+    #: Bootstrap settings for the indistinguishability test. The resampling is
+    #: over a boolean vector rather than over the model, so it is cheap enough
+    #: to run on every iteration.
+    indistinguishable_resamples: int = Field(default=2000, ge=100)
+    indistinguishable_confidence: float = 0.95
 
     # NOTE: For detection tasks, use selection_metric="map_50" (or "map_50_95")
     # and metrics=["map_50", "map_50_95", "loss"].  The model_validator below
@@ -33,6 +126,11 @@ class BNNRConfig(BaseModel):
     checkpoint_dir: Path = Path("checkpoints")
     report_dir: Path = Path("reports")
     xai_enabled: bool = True
+    #: Record the attention evidence on every run without letting it decide
+    #: anything, so calibration has something to calibrate on. Costs nothing
+    #: beyond maps the run already produces, hence on by default; it does
+    #: nothing when xai_enabled is False, since there are no maps to read.
+    shadow_mode: bool = True
     xai_samples: int = 4
     xai_method: str = "opticam"
     device: str = "auto"
@@ -148,6 +246,98 @@ class BNNRConfig(BaseModel):
     def validate_detection_xai_controls(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("detection_xai_* controls must be > 0")
+        return value
+
+    @model_validator(mode="after")
+    def warn_on_uncalibrated_xai_knobs(self) -> BNNRConfig:
+        """Warn when a run is steered by a weight nobody measured.
+
+        Both knobs are built on ``compute_xai_quality_score``, a hand-weighted
+        scalar whose components were chosen by hand and never calibrated
+        against an outcome. T20 traced its null result to exactly this path.
+        They keep working, since we stay in 0.x, but a run that relies on them
+        should say so out loud.
+
+        The warning fires only when the field was explicitly supplied.
+        ``model_fields_set`` is what makes that distinguishable from the
+        default, so a user who never touched the knob is never nagged about it.
+        """
+        for field, replacement in _DEPRECATED_XAI_KNOBS.items():
+            if field not in self.model_fields_set:
+                continue
+            value = getattr(self, field)
+            if not value:
+                continue
+            warnings.warn(
+                f"{field}={value} is deprecated: it is built on an uncalibrated "
+                f"hand-weighted quality score, which is what T20 traced its null "
+                f"result to. {replacement} See docs/diagnosis.md.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_diagnosis_is_calibrated(self) -> BNNRConfig:
+        """Refuse a diagnosis-driven run whose thresholds were never measured.
+
+        This fires at config construction, so the failure lands before any GPU
+        time is spent rather than at the first selection round. A run that got
+        several epochs in before discovering it cannot decide anything is the
+        worst version of this error.
+        """
+        from bnnr.training.search_policy import DIAGNOSIS_DRIVEN_POLICIES
+
+        needs_thresholds = (
+            self.selector in _DIAGNOSIS_DRIVEN_SELECTORS
+            or self.search_policy in DIAGNOSIS_DRIVEN_POLICIES
+        )
+        if needs_thresholds:
+            requested = (
+                f"selector={self.selector!r}"
+                if self.selector in _DIAGNOSIS_DRIVEN_SELECTORS
+                else f"search_policy={self.search_policy!r}"
+            )
+            absent = self.diagnosis.missing()
+            if absent:
+                raise ValueError(
+                    f"{requested} needs calibrated diagnosis thresholds; "
+                    f"{', '.join(absent)} {'is' if len(absent) == 1 else 'are'} unset. "
+                    f"There is deliberately no default: an uncalibrated cut point driving "
+                    f"selection is the defect this replaces. Supply them under the "
+                    f"'diagnosis:' key, or load a profile with "
+                    f"bnnr.config.load_diagnosis_profile(). See docs/diagnosis.md."
+                )
+        return self
+
+    @field_validator("indistinguishable_confidence")
+    @classmethod
+    def validate_indistinguishable_confidence(cls, value: float) -> float:
+        if not (0.0 < value < 1.0):
+            raise ValueError("indistinguishable_confidence must be in (0, 1)")
+        return value
+
+    @field_validator("search_policy")
+    @classmethod
+    def validate_search_policy(cls, value: str) -> str:
+        from bnnr.training.search_policy import SEARCH_POLICIES
+
+        if value not in SEARCH_POLICIES:
+            raise ValueError(
+                f"search_policy must be one of {sorted(SEARCH_POLICIES)}, got {value!r}"
+            )
+        return value
+
+    @field_validator("selector")
+    @classmethod
+    def validate_selector(cls, value: str) -> str:
+        # Imported here rather than at module scope: selection imports the
+        # config for typing only, but a top-level import would still be a cycle
+        # waiting for the first runtime import either side adds.
+        from bnnr.training.selection import SELECTORS
+
+        if value not in SELECTORS:
+            raise ValueError(f"selector must be one of {sorted(SELECTORS)}, got {value!r}")
         return value
 
     @field_validator("selection_mode")
