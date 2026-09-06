@@ -300,3 +300,34 @@ distinction in its own statistical notes. Estimators: [`stats.py`](stats.py).
 
 Regenerated after #398, which fixed the rank-biserial sign and made the Δ and CI
 paired. Do not hand-write numbers here.
+
+## Search-policy conditions
+
+Two conditions test the search policies from FIX-4-1 against the existing matrices, with no new baselines.
+
+| condition | policy | what it isolates |
+|---|---|---|
+| `bnnr_sh` | `successive_halving` | the epoch split, holding the selection rule fixed |
+| `bnnr_diagnosis` | `diagnosis_single` | the selection criterion, holding compute fixed |
+
+```bash
+# successive halving, grand benchmark
+python benchmarks/run_grand_benchmark.py --dataset imagewoof --conditions bnnr_sh
+
+# successive halving, SpuriousBench
+python benchmarks/spurious_repair.py --conditions bnnr_sh
+
+# diagnosis-driven: needs calibrated thresholds, refuses without them
+python benchmarks/run_grand_benchmark.py --dataset imagewoof \
+    --conditions bnnr_diagnosis --diagnosis-profile profiles.yaml:imagewoof_resnet18
+```
+
+**`bnnr_sh` spends the same total budget as `bnnr_xai`, not less.** Early rungs are short because their job is to eliminate, not to train; every epoch they do not spend goes to the survivors. With three candidates at `m_epochs=4`: exhaustive spends 12 epochs and its winner receives 4, while successive halving spends the same 12 and its survivor receives 10. Spending *less* would be a different policy ("do less"), and would not test what this condition is for.
+
+**`bnnr_diagnosis` does not run yet, by design.** It requires calibrated thresholds via `--diagnosis-profile`, and the harness does not yet compute the baseline saliency statistics the diagnosis reads. Both are FIX-7-2 (#417). The condition exists, resumes and is documented so that #417 has somewhere to put its results; until then it refuses with an explanation rather than inventing a regime.
+
+### Resume keys
+
+The grand benchmark resumes on `(condition, seed, regime, fill_strategy)` and SpuriousBench on `(condition, seed)`. The new conditions have their own ids, so they do not collide with `bnnr_xai`.
+
+**They do not include budget, target layer, or any policy parameter.** Two runs of the same condition that differ only in `--budget`, or in a future `min_confidence`, share a key and the second is skipped as already done. Give each protocol variant its own `--output-root` and its own results file.

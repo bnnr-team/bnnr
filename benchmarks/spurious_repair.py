@@ -20,6 +20,10 @@ SAME extra compute budget B, differ only in what they do with it):
   dfr          : retrain last layer on group-balanced data (Kirichenko 2022 baseline)
   bnnr_random  : BNNR branch-search, candidate chosen at random (XAI ablation)
   bnnr_xai     : BNNR branch-search, candidate chosen by selection-val (method under test)
+  bnnr_sh      : BNNR under search_policy='successive_halving'. Same pool and same
+                 total budget as bnnr_xai, but weak branches die after a short rung
+                 so the survivor gets more training. Isolates the epoch split from
+                 the selection rule.
 
 Metrics:
   Robustness : worst-group accuracy (WGA), avg-minus-worst gap, prevalence-weighted mean acc
@@ -64,7 +68,9 @@ sys.path.insert(0, str(_REPO / "src"))
 sys.path.insert(0, str(_THIS.parent))
 from lib import force_utf8_stdout  # noqa: E402
 
-CONDITIONS = ["base_frozen", "erm_continue", "dfr", "bnnr_random", "bnnr_xai"]
+CONDITIONS = [
+    "base_frozen", "erm_continue", "dfr", "bnnr_random", "bnnr_xai", "bnnr_sh",
+]
 
 
 # =========================================================================== #
@@ -886,7 +892,7 @@ def run_condition(condition: str, base_state: dict[str, Any], spec: DatasetSpec,
             if args.dynamics:
                 ebpg_curve.append(_log_ebpg())
 
-    elif condition in ("bnnr_xai", "bnnr_random"):
+    elif condition in ("bnnr_xai", "bnnr_random", "bnnr_sh"):
         selected = _run_bnnr_repair(adapter, base_state, train_loader, val_ex,
                                     test_loader, spec, args, condition,
                                     wga_curve, _log_wga, ebpg_curve, _log_ebpg,
@@ -1028,9 +1034,12 @@ def _run_bnnr_repair(adapter: Any, base_state: dict, train_loader: Any,
         return c / max(1, t)
 
     cand_names = ["ICD", "AICD", "ChurchNoise"]
-    cand_states, cand_scores = [], []
-    cand_wga_curves: list[list[float]] = []
-    cand_ebpg_curves: list[list[float]] = []
+    # Preallocated and indexed rather than appended: under a rung policy a
+    # candidate is revisited across rungs, so append would duplicate it.
+    cand_states: list[dict | None] = [None] * n_cand
+    cand_scores: list[float] = [float("-inf")] * n_cand
+    cand_wga_curves: list[list[float]] = [[] for _ in range(n_cand)]
+    cand_ebpg_curves: list[list[float]] = [[] for _ in range(n_cand)]
     prevalence = spec.train_group_prevalence()
     n_groups = len(spec.group_names)
     dynamics = args.dynamics and dyn_probe is not None
@@ -1039,9 +1048,34 @@ def _run_bnnr_repair(adapter: Any, base_state: dict, train_loader: Any,
         pg = eval_groups(ad, test_loader, device, n_groups)
         return summarize_group_acc(pg, prevalence)["worst_group_acc"]
 
-    for i in range(n_cand):
-        ad = build_adapter(spec.num_classes, device, args.lr, per, pretrained=not args.no_pretrained)
-        ad.model.load_state_dict(base_state["model"])
+    # The rung structure comes from the library's own policy, so a benchmark
+    # condition cannot drift from what BNNR actually does. bnnr_xai and
+    # bnnr_random are structurally exhaustive and differ only in the pick.
+    from bnnr.config_model import BNNRConfig
+    from bnnr.training.search_policy import plan_search
+
+    _policy = "successive_halving" if condition == "bnnr_sh" else "exhaustive"
+    plan = plan_search(
+        tuple(cand_names), BNNRConfig(m_epochs=per, search_policy=_policy)
+    )
+    cand_epochs = [0] * n_cand
+    if _policy != "exhaustive":
+        print(
+            f"  [policy {plan.policy}] {len(plan.rungs)} rung(s), "
+            f"{plan.total_epochs} candidate epochs, "
+            f"{plan.deployed_epochs} to a survivor",
+            flush=True,
+        )
+
+    for rung in plan.rungs:
+      for _cname in rung.candidates:
+        i = cand_names.index(_cname)
+        per_rung = rung.epochs
+        ad = build_adapter(spec.num_classes, device, args.lr, per_rung, pretrained=not args.no_pretrained)
+        # A survivor continues from its own weights, not from the base model.
+        ad.model.load_state_dict(
+            cand_states[i]["model"] if cand_states[i] is not None else base_state["model"]
+        )
         model, layers = ad.get_model(), ad.get_target_layers()
         aug = [
             ICD(model=model, target_layers=layers, threshold_percentile=75.0,
@@ -1055,7 +1089,7 @@ def _run_bnnr_repair(adapter: Any, base_state: dict, train_loader: Any,
         ][i]
         w_curve: list[float] = []
         e_curve: list[float] = []
-        for ep in range(per):
+        for ep in range(per_rung):
             # Emit the pixel-change proof only on the very first epoch of the
             # very first candidate to keep the log clean.
             proof = args.verbose and ep == 0 and i == 0
@@ -1068,17 +1102,19 @@ def _run_bnnr_repair(adapter: Any, base_state: dict, train_loader: Any,
                 # T3/D-DYN: the EBPG probe stays gated - it is the expensive one.
                 e_curve.append(ebpg_on_probe(ad, dyn_probe, device, args.img_size,
                                              n_groups, args.faith_batch_size))
-        cand_states.append(copy.deepcopy(ad.model.state_dict()))
-        cand_scores.append(_val_acc(ad))
-        cand_wga_curves.append(w_curve)
-        cand_ebpg_curves.append(e_curve)
+        cand_states[i] = {"model": copy.deepcopy(ad.model.state_dict())}
+        cand_scores[i] = _val_acc(ad)
+        cand_wga_curves[i].extend(w_curve)
+        cand_ebpg_curves[i].extend(e_curve)
+        cand_epochs[i] += per_rung
         print(f"  [{cand_names[i]}] val_acc={cand_scores[i]:.4f}", flush=True)
 
-    if condition == "bnnr_xai":
+    if condition in ("bnnr_xai", "bnnr_sh"):
+        # bnnr_sh picks the best survivor; eliminated arms never scored.
         best = int(max(range(n_cand), key=lambda k: cand_scores[k]))
     else:
         best = random.Random(seed).randint(0, n_cand - 1)
-    adapter.model.load_state_dict(cand_states[best])
+    adapter.model.load_state_dict(cand_states[best]["model"])
     # T0/D-ETT-UNGATE: the WINNER's per-epoch WGA trajectory is kept ALWAYS
     # (last point == deployed endpoint, so no extra eval is needed here).
     # NOTE: the curve spans the winner's budget//3 candidate epochs, NOT the

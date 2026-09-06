@@ -166,21 +166,29 @@ def _successive_halving(
 
     budget = config.m_epochs * n
     n_rungs = max(1, int(math.floor(math.log2(n))) + 1)
-    # Split the budget evenly across rungs, so each rung's survivors get a
-    # comparable slice of training rather than the last rung taking everything.
-    per_rung = max(1, budget // (n_rungs * n))
+    # Early rungs are deliberately short: their job is to eliminate, not to
+    # train. One epoch per candidate is enough to separate a branch that is
+    # already behind, and every epoch not spent there is an epoch a survivor
+    # gets instead.
+    early_epochs = max(1, config.m_epochs // n_rungs // 2)
 
     rungs: list[SearchRung] = []
     alive = candidates
+    spent = 0
     for index in range(n_rungs):
         last = index == n_rungs - 1
-        survivors = len(alive) if last else max(1, len(alive) // 2)
-        # Survivors of a shrinking field can afford longer rungs; give the
-        # remaining budget to the final one rather than leaving it unspent.
-        epochs = per_rung if not last else max(1, config.m_epochs - per_rung * index)
-        rungs.append(SearchRung(alive, epochs, survivors=survivors))
         if last:
+            # The whole remaining budget goes to the survivors. This is the
+            # point of the policy: what the eliminated branches did not spend
+            # is handed to the arms still in contention, so a survivor ends up
+            # with *more* training than exhaustive would have given it, not the
+            # same amount at a lower total cost.
+            epochs = max(1, (budget - spent) // max(len(alive), 1))
+            rungs.append(SearchRung(alive, epochs, survivors=len(alive)))
             break
+        survivors = max(1, len(alive) // 2)
+        rungs.append(SearchRung(alive, early_epochs, survivors=survivors))
+        spent += len(alive) * early_epochs
         alive = alive[:survivors]
     return SearchPlan("successive_halving", tuple(rungs))
 
