@@ -771,6 +771,60 @@ def _key_comparison_section(
 # ---------------------------------------------------------------------------
 
 
+def _diagnosis_fallback_section(
+    all_runs: list[dict[str, Any]],
+    datasets: list[str],
+    *,
+    strategy: str = "none",
+) -> None:
+    """How often the diagnosis was not confident enough to be acted on.
+
+    Fallback frequency is itself a calibration signal. A rule that fires on
+    every run tells you nothing; one that never fires means ``min_confidence``
+    is set too low to be doing any work. Neither is visible from accuracy.
+
+    Only runs that requested a diagnosis-driven selector or policy can fall
+    back, so the denominator is those runs and not every row.
+    """
+    rows_by_ds: dict[str, tuple[int, int, list[float]]] = {}
+    for ds in datasets:
+        eligible = 0
+        fell_back = 0
+        confidences: list[float] = []
+        for r in all_runs:
+            if r.get("dataset") != ds:
+                continue
+            # Absent in records written before FIX-4-2, and absent on runs that
+            # never asked for a diagnosis. Both are "not eligible", not "did
+            # not fall back", and conflating them would understate the rate.
+            requested = r.get("selector") or r.get("search_policy")
+            if requested not in {"diagnosis", "diagnosis_single"}:
+                continue
+            eligible += 1
+            if r.get("selection_fallback_from"):
+                fell_back += 1
+                conf = r.get("selection_fallback_confidence")
+                if conf is not None:
+                    confidences.append(float(conf))
+        if eligible:
+            rows_by_ds[ds] = (fell_back, eligible, confidences)
+
+    if not rows_by_ds:
+        return
+
+    print("\n" + "=" * 70)
+    print(f"  DIAGNOSIS FALLBACK RATE  |  fill={strategy}")
+    print("  how often confidence fell below min_confidence and the run defaulted")
+    print("=" * 70)
+    for ds, (fell_back, eligible, confidences) in rows_by_ds.items():
+        rate = fell_back / eligible
+        line = f"  {ds}: {fell_back}/{eligible} ({rate:.0%})"
+        if confidences:
+            line += f"  median confidence when it fired: {statistics.median(confidences):.2f}"
+        print(line)
+    print()
+
+
 def _compute_transparency_section(
     all_runs: list[dict[str, Any]],
     datasets: list[str],
@@ -1227,6 +1281,7 @@ def main() -> None:
 
         # 5. Compute transparency
         _compute_transparency_section(view, datasets, strategy=strategy)
+        _diagnosis_fallback_section(view, datasets, strategy=strategy)
 
     _which_fill_is_best_section(
         all_runs, datasets, strategies,

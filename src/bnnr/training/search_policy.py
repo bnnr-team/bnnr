@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DIAGNOSIS_DRIVEN_POLICIES",
+    "FALLBACK_POLICY",
     "SEARCH_POLICIES",
     "SearchPlan",
     "SearchRung",
@@ -70,6 +71,11 @@ class SearchPlan:
 
     policy: str
     rungs: tuple[SearchRung, ...]
+    #: The policy that was configured but not run, when confidence fell below
+    #: ``min_confidence``. ``None`` on a run that used what it was asked for.
+    fallback_from: str | None = None
+    #: The confidence that triggered the fallback.
+    fallback_confidence: float | None = None
 
     @property
     def total_epochs(self) -> int:
@@ -88,6 +94,8 @@ class SearchPlan:
     def to_dict(self) -> dict[str, Any]:
         return {
             "policy": self.policy,
+            "fallback_from": self.fallback_from,
+            "fallback_confidence": self.fallback_confidence,
             "total_epochs": self.total_epochs,
             "deployed_epochs": self.deployed_epochs,
             "rungs": [
@@ -214,18 +222,47 @@ SEARCH_POLICIES = {
 DIAGNOSIS_DRIVEN_POLICIES = frozenset({"diagnosis_single"})
 
 
+#: What a diagnosis-driven policy falls back to when the diagnosis is not
+#: confident enough to act on. exhaustive is today's behaviour, so falling back
+#: to it means falling back to a known quantity.
+FALLBACK_POLICY = "exhaustive"
+
+
 def plan_search(
     candidates: tuple[str, ...],
     config: BNNRConfig,
     *,
     diagnosis: Diagnosis | None = None,
 ) -> SearchPlan:
-    """Build the plan for one iteration under the configured policy."""
+    """Build the plan for one iteration under the configured policy.
+
+    Below ``min_confidence`` a diagnosis-driven policy falls back to
+    ``exhaustive`` and the plan says so in its ``policy`` field, so a reader can
+    tell a diagnosed run from a defaulted one without inspecting the config.
+    """
+    policy = _resolve_policy(config, diagnosis)
     try:
-        builder = SEARCH_POLICIES[config.search_policy]
+        builder = SEARCH_POLICIES[policy]
     except KeyError:
         raise ValueError(
-            f"Unknown search_policy {config.search_policy!r}. "
-            f"Available: {sorted(SEARCH_POLICIES)}"
+            f"Unknown search_policy {policy!r}. Available: {sorted(SEARCH_POLICIES)}"
         ) from None
-    return builder(candidates, config, diagnosis)
+    plan = builder(candidates, config, diagnosis)
+    if policy == config.search_policy:
+        return plan
+    return SearchPlan(
+        plan.policy,
+        plan.rungs,
+        fallback_from=config.search_policy,
+        fallback_confidence=diagnosis.confidence if diagnosis is not None else None,
+    )
+
+
+def _resolve_policy(config: BNNRConfig, diagnosis: Diagnosis | None) -> str:
+    """Which policy actually runs, given how confident the diagnosis is."""
+    if config.search_policy not in DIAGNOSIS_DRIVEN_POLICIES:
+        return config.search_policy
+    threshold = config.diagnosis.min_confidence
+    if threshold is None or diagnosis is None:
+        return config.search_policy
+    return config.search_policy if diagnosis.confidence >= threshold else FALLBACK_POLICY

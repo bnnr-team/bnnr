@@ -662,7 +662,14 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
                 diagnosis=trainer._last_diagnosis,
             )
             trainer._last_search_plan = plan
-            if plan.policy != "exhaustive":
+            if plan.fallback_from is not None:
+                trainer.console.print(
+                    f"  (diagnosis confidence {plan.fallback_confidence:.2f} is below "
+                    f"min_confidence; search_policy fell back from "
+                    f"'{plan.fallback_from}' to '{plan.policy}')",
+                    flush=True,
+                )
+            elif plan.policy != "exhaustive":
                 trainer.console.print(
                     f"  search_policy={plan.policy}: {len(plan.rungs)} rung(s), "
                     f"{plan.total_epochs} epochs total, "
@@ -842,6 +849,13 @@ def run(trainer: BNNRTrainer) -> BNNRRunResult:
         )
         selected_name = selection.best
         trainer._last_selection = selection
+        if selection.fallback_from is not None:
+            trainer.console.print(
+                f"  (diagnosis confidence {selection.fallback_confidence:.2f} is below "
+                f"min_confidence; selector fell back from "
+                f"'{selection.fallback_from}' to '{selection.selector}')",
+                flush=True,
+            )
         if selection.reason == "indistinguishable" and selection.interval is not None:
             trainer.console.print(
                 f"  (candidates indistinguishable from baseline: "
@@ -1080,6 +1094,16 @@ def _build_run_record(
         search_plan=(
             trainer._last_search_plan.to_dict()
             if trainer._last_search_plan is not None
+            else None
+        ),
+        selection_fallback_from=(
+            trainer._last_selection.fallback_from
+            if trainer._last_selection is not None
+            else None
+        ),
+        selection_fallback_confidence=(
+            trainer._last_selection.fallback_confidence
+            if trainer._last_selection is not None
             else None
         ),
         selection_interval=(
