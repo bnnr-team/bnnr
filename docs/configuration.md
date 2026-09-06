@@ -52,6 +52,23 @@ seed: 42
 
 Both are gated the same way: whatever a selector picks is discarded unless it beat the baseline on `selection_metric`. That gate is deliberately shared, so a comparison between two selectors is a comparison of their ranking rules and nothing else. A selector that skipped it would look better purely by accepting runs the others reject.
 
+### Confidence fallback
+
+Set `diagnosis.min_confidence` and a diagnosis-driven run that is not confident enough defaults to known behaviour instead of acting on a rule nobody has validated yet.
+
+| requested | falls back to |
+|---|---|
+| `selector: diagnosis` | `metric_argmax` |
+| `search_policy: diagnosis_single` | `exhaustive` |
+
+Both record what they fell back *from* and the confidence that triggered it, in `run_record.selection_fallback_from` and in `search_plan.fallback_from`. A user can tell a diagnosed run from a defaulted one without re-deriving it from the config.
+
+The check sits in the policy layer, not inside the selector. It is a policy about when to trust the rule, not part of the rule — a selector that quietly second-guessed itself would make a benchmark contrast between it and argmax measure a blend of the two.
+
+**With `min_confidence` unset there is no fallback.** You have not said where the line is, and inventing one would be another uncalibrated number of exactly the kind this programme removes.
+
+The grand-benchmark summarizer prints the fallback rate per dataset. That frequency is itself a calibration signal: a rule that fires on every run tells you nothing, and one that never fires means the threshold is too low to be doing any work. Neither is visible from accuracy.
+
 ### Search policy
 
 - `search_policy` (default: `exhaustive`)

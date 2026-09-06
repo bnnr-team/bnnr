@@ -104,6 +104,8 @@ The fields a run must carry for its result to be comparable with another run. Wr
 | `augmentation_modes` | `{name: mode}` for augmentations whose transform depends on a mode |
 | `selection_reason` | `improved`, `no_improvement`, `indistinguishable`, `no_candidates` |
 | `selection_interval` | the paired bootstrap interval behind that reason, when one was computed |
+| `selection_fallback_from` | the selector that was configured but not run, when confidence fell short |
+| `selection_fallback_confidence` | the confidence that triggered that fallback |
 
 **The two epoch counts are the point.** They differ whenever a branch search runs, and confusing them is what made BNNR look worse than it was: under "equal compute" the deployed model trained for a third of the budget while single-augmentation baselines trained all of it. Matching deployed epochs instead closed a 4.46 pp gap to 0.09 pp. They are equal only for a run with no search.
 

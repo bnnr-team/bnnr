@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import math
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Protocol
 
 from bnnr.training.paired import PairedInterval, paired_bootstrap_ci
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from bnnr.config_model import BNNRConfig
 
 __all__ = [
+    "FALLBACK_SELECTOR",
     "SELECTORS",
     "CandidateReport",
     "CandidateSelector",
@@ -86,6 +87,13 @@ class SelectionResult:
     #: baseline, when one could be computed. Recorded so the decision is
     #: auditable after the fact rather than only at the moment it was made.
     interval: PairedInterval | None = None
+    #: The selector that was configured but not run, when confidence fell below
+    #: ``min_confidence``. ``None`` on a run that used what it was asked for.
+    #: A user must be able to tell a diagnosed run from a defaulted one.
+    fallback_from: str | None = None
+    #: The confidence that triggered the fallback, so the threshold can be
+    #: re-examined later without re-running anything.
+    fallback_confidence: float | None = None
 
     @property
     def best(self) -> str | None:
@@ -445,7 +453,9 @@ def run_selector(
         )
         for name, metrics in results.items()
     ]
-    return get_selector(config.selector).select(
+    requested = config.selector
+    effective, fallback_confidence = _resolve_selector(requested, config, diagnosis)
+    result = get_selector(effective).select(
         candidates,
         baseline_metrics,
         config,
@@ -453,3 +463,48 @@ def run_selector(
         baseline_correct=baseline_correct,
         n_val=n_val,
     )
+    if effective == requested:
+        return result
+    return replace(
+        result,
+        fallback_from=requested,
+        fallback_confidence=fallback_confidence,
+    )
+
+
+#: What a diagnosis-driven selector falls back to when it is not confident
+#: enough to act. metric_argmax is today's behaviour, and therefore the one
+#: known quantity available to fall back to.
+FALLBACK_SELECTOR = "metric_argmax"
+
+
+def _resolve_selector(
+    requested: str, config: BNNRConfig, diagnosis: Diagnosis | None
+) -> tuple[str, float | None]:
+    """Which selector actually runs, and the confidence that decided it.
+
+    The decision rule is unvalidated until the calibration study says
+    otherwise, and an unvalidated automatic path is worse than an explicit
+    flag. Below ``min_confidence`` the run uses ``metric_argmax``, which is
+    today's behaviour and therefore a known quantity.
+
+    The check lives here rather than inside ``DiagnosisSelector`` on purpose:
+    it is a policy about when to trust the rule, not part of the rule. A
+    selector that quietly second-guessed itself would make a benchmark contrast
+    between it and argmax measure a blend of the two.
+
+    With ``min_confidence`` unset there is no fallback: the caller has not said
+    where the line is, and inventing one would be another uncalibrated number.
+    """
+    if requested not in _DIAGNOSIS_DRIVEN:
+        return requested, None
+    threshold = config.diagnosis.min_confidence
+    if threshold is None or diagnosis is None:
+        return requested, None
+    if diagnosis.confidence >= threshold:
+        return requested, None
+    return FALLBACK_SELECTOR, diagnosis.confidence
+
+
+#: Selectors whose decision the confidence gate applies to.
+_DIAGNOSIS_DRIVEN = frozenset({"diagnosis"})
