@@ -276,3 +276,40 @@ class TestRealRunUnderEachPolicy:
         record = self._run(tmp_path, "count").run_record
         assert record.total_gpu_epochs > 0
         assert record.deployed_epochs <= record.total_gpu_epochs
+
+
+class TestHalvingActuallyReallocates:
+    """The property the original tests were too loose to pin.
+
+    "Costs no more than exhaustive" was satisfied by a plan that simply spent
+    less, which is not what the policy is for. What matters is that the epochs
+    the eliminated branches did not spend are *handed to the survivors*.
+    """
+
+    def test_a_survivor_gets_more_than_exhaustive_would_give_it(self) -> None:
+        candidates = tuple(f"aug_{i}" for i in range(3))
+        halving = plan_search(candidates, _config("successive_halving", m_epochs=4))
+        exhaustive = plan_search(candidates, _config(m_epochs=4))
+        assert halving.deployed_epochs > exhaustive.deployed_epochs
+
+    def test_the_budget_is_spent_not_saved(self) -> None:
+        """Underspending would be a different policy: 'do less'."""
+        candidates = tuple(f"aug_{i}" for i in range(3))
+        halving = plan_search(candidates, _config("successive_halving", m_epochs=4))
+        exhaustive = plan_search(candidates, _config(m_epochs=4))
+        assert halving.total_epochs == exhaustive.total_epochs
+
+    @pytest.mark.parametrize("n", [2, 3, 4, 8, 16])
+    @pytest.mark.parametrize("m_epochs", [2, 4, 10])
+    def test_it_never_overspends(self, n: int, m_epochs: int) -> None:
+        candidates = tuple(f"aug_{i}" for i in range(n))
+        halving = plan_search(candidates, _config("successive_halving", m_epochs=m_epochs))
+        exhaustive = plan_search(candidates, _config(m_epochs=m_epochs))
+        assert halving.total_epochs <= exhaustive.total_epochs
+
+    def test_early_rungs_are_short(self) -> None:
+        """Their job is to eliminate, not to train."""
+        plan = plan_search(
+            tuple(f"aug_{i}" for i in range(8)), _config("successive_halving", m_epochs=8)
+        )
+        assert plan.rungs[0].epochs < plan.rungs[-1].epochs
