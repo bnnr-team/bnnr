@@ -201,7 +201,22 @@ This is the trade-off the benchmark's own methodology anticipated — that a met
 
 ### 6.4 Two measurement caveats that bound §6.3
 
-**The faithfulness noise floor is unavailable from this matrix.** The design intended to obtain one for free by comparing the base diagnosis against `base_frozen` — identical weights, nominally two independent OptiCAM passes. The data refute the assumption: paired |ΔEBPG| has a median of 0.0002 and a maximum of 0.0004, far too small for independent runs of a randomly-initialised optimiser, indicating that `base_frozen` reuses the cached diagnosis maps. We therefore **do not report a floor**, and we do not claim that a 0.013 EBPG difference exceeds measurement noise on that basis. The support for §6.3 comes instead from complete separation under randomised assignment, agreement across three metrics, and 3/3 consistency in the paired cut. A proper floor requires a design that forces two independent OptiCAM passes and is queued.
+**Caveat 1 - the faithfulness noise floor (resolved).** The design intended to obtain a noise floor for free by comparing the base diagnosis against `base_frozen` — identical weights, nominally two independent OptiCAM passes. The observed paired |ΔEBPG| (median 0.0002, maximum 0.0004) was suspiciously small, and was initially attributed to `base_frozen` reusing the cached diagnosis maps rather than genuinely recomputing them.
+
+A forced-independent reproduction was built to test this directly: two separate OptiCAM passes on identical, fixed model weights, over a real, group-balanced Waterbirds probe set (500 images per group, 2000 total, matching the harness's own `faith_batch_size=1` and input-normalization convention), with no caching mechanism present in the code path used. The measured floor:
+
+| measure | EBPG | IoU@0.5 | Pointing Game |
+|---|---|---|---|
+| per-image noise | 0.0061 | 0.0016 | 0.1575 |
+| averaged over 2000 images | 0.0004 | 0.00015 | 0.0035 |
+
+The averaged values closely match the originally observed |ΔEBPG|, without any cache in the path — confirming this is the expected effect of averaging faithfulness over ~2000 largely independent per-image measurements, not a caching defect. We therefore **do report a measured floor**, and can re-state §6.3 against it:
+
+- **EBPG** — floor 0.0004. The three pairwise differences between ICD, AICD and ChurchNoise (0.0131, 0.0080, 0.0051) are 13–33× the floor — confidently significant.
+- **IoU@0.5** — floor 0.00015. The three differences (0.0184, 0.0066, 0.0118) are 44–123× the floor — confidently significant.
+- **Pointing Game** — floor 0.0035. The three differences (0.0469, 0.0300, 0.0169) are 5–13× the floor — significant, though with a smaller margin than the other two metrics.
+
+One limitation of this comparison: the floor above is measured as per-image variance within a single model (N=2000 images, one seed), while the §6.3 table pools medians across n=12/6/2 winning runs. These are different axes of averaging, so this is a directional check on the order of magnitude rather than a formal statistical test of the §6.3 differences themselves.
 
 **The dynamic range of EBPG on this dataset is unquantified.** All EBPG values cluster in 0.26–0.30. For a perfectly uniform saliency map, EBPG equals the mask's pixel fraction, so the informative question is how far these values sit above that baseline — which requires the per-image mask-coverage distribution. That distribution is computable at zero GPU cost from the persisted saliency artefacts and `_probe_reference.npz`, and should be computed before the faithfulness axis is interpreted quantitatively in any follow-up.
 
