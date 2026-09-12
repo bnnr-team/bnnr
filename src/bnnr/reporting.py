@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from bnnr.core import BNNRConfig
 from bnnr.events import JsonlEventSink
+from bnnr.training.run_record import RunRecord
 from bnnr.utils import ensure_dir, get_timestamp, portable_path
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,10 @@ class BNNRRunResult:
     report_json_path: Path
     report_html_path: Path | None
     analysis: dict[str, Any] = field(default_factory=dict)
+    #: Mandatory comparison fields: the two epoch counts, the decision path and
+    #: the diagnosis. Defaulted so a result built by older code still
+    #: constructs; see bnnr.training.run_record for why each field is required.
+    run_record: RunRecord = field(default_factory=RunRecord)
 
 
 class Reporter:
@@ -541,6 +546,7 @@ class Reporter:
             ],
             "iteration_summaries": self._iteration_summaries,
             "analysis": result.analysis,
+            "run_record": result.run_record.to_dict(),
         }
         _atomic_write_text(json_path, json.dumps(payload, indent=2), encoding="utf-8")
         return json_path
@@ -551,6 +557,7 @@ class Reporter:
         best_metrics: dict[str, float],
         selected_augmentations: list[str],
         analysis: dict[str, Any] | None = None,
+        run_record: RunRecord | None = None,
     ) -> BNNRRunResult:
         if self._config is None or self._start_time is None:
             raise RuntimeError("Reporter.start() must be called before finalize()")
@@ -567,6 +574,7 @@ class Reporter:
             report_json_path=placeholder_json,
             report_html_path=None,
             analysis=analysis or {},
+            run_record=run_record or RunRecord(),
         )
 
         if self.save_json:

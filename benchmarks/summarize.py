@@ -16,12 +16,20 @@ import argparse
 import json
 import math
 import statistics
+import sys
 from collections import defaultdict
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+# Sibling import: same guard as the other benchmarks/ entry points. Appended,
+# not prepended, so benchmarks/ cannot shadow the stdlib for the whole process.
 BENCHMARKS_DIR = Path(__file__).resolve().parent
+if str(BENCHMARKS_DIR) not in sys.path:
+    sys.path.append(str(BENCHMARKS_DIR))
+
+from lib import force_utf8_stdout  # noqa: E402
+
 DEFAULT_RESULTS = BENCHMARKS_DIR / "results_resnet50.json"
 
 DISPLAY = {
@@ -100,6 +108,7 @@ def _sig_stars(p: float | None) -> str:
 
 
 def main() -> None:
+    force_utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--results",

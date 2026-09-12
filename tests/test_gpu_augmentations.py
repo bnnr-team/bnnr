@@ -378,3 +378,197 @@ class TestChurchNoiseModes:
         tensor_std = float((tensor_out - images)[0, 0].numpy().std())
 
         assert tensor_std == pytest.approx(cpu_std, rel=0.35)
+
+
+def _rgb_image(h: int = 64, w: int = 64, seed: int = 0) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    return rng.integers(0, 256, (h, w, 3), dtype=np.uint8)
+
+
+def _as_batch(image: np.ndarray) -> torch.Tensor:
+    return torch.as_tensor(image / 255.0, dtype=torch.float32).permute(2, 0, 1)[None]
+
+
+def _cpu_then_tensor(aug_cls, image: np.ndarray, **kwargs):
+    """Run both paths on the same seed and return them as [0, 1] arrays.
+
+    ``apply_tensor_native`` spends one draw on the probability check that
+    ``apply`` does not, since the numpy path is gated by ``apply_batch``. Burn
+    it on the numpy side so both paths see the same RNG state.
+    """
+    cpu_aug = aug_cls(probability=1.0, **kwargs)
+    cpu_aug._rnd.random()
+    cpu = cpu_aug.apply(image).astype(np.float32) / 255.0
+
+    tensor_aug = aug_cls(probability=1.0, **kwargs)
+    tensor = tensor_aug.apply_tensor_native(_as_batch(image))[0].permute(1, 2, 0).numpy()
+    return cpu, tensor
+
+
+class TestDifPresetsParity:
+    """CPU and tensor paths must run the same transform (FIX-0-9)."""
+
+    def test_circles_is_the_default(self) -> None:
+        assert DifPresets().effect_mode == "circles"
+
+    def test_invalid_mode_rejected(self) -> None:
+        with pytest.raises(ValueError, match="effect_mode"):
+            DifPresets(effect_mode="sometimes")
+
+    def test_mode_is_in_the_repr(self) -> None:
+        assert "effect_mode=global" in repr(DifPresets(effect_mode="global"))
+
+    @pytest.mark.parametrize("mode", ["circles", "global"])
+    @pytest.mark.parametrize("seed", [3, 7, 21])
+    def test_both_paths_agree(self, mode: str, seed: int) -> None:
+        cpu, tensor = _cpu_then_tensor(
+            DifPresets, _rgb_image(seed=seed), random_state=seed, effect_mode=mode
+        )
+        # uint8 quantisation on the numpy side and a different Gaussian kernel
+        # implementation are the only differences left.
+        assert np.abs(cpu - tensor).mean() < 0.02
+        assert np.abs(cpu - tensor).max() < 0.1
+
+    def test_circle_params_reach_the_tensor_path(self) -> None:
+        """num_circles_range, radius_range and feather used to be inert there."""
+        image = _rgb_image()
+        few = DifPresets(probability=1.0, random_state=5, num_circles_range=(1, 1))
+        many = DifPresets(probability=1.0, random_state=5, num_circles_range=(6, 6))
+        out_few = few.apply_tensor_native(_as_batch(image))
+        out_many = many.apply_tensor_native(_as_batch(image))
+        assert not torch.equal(out_few, out_many)
+
+    def test_circle_mode_is_localized_on_the_tensor_path(self) -> None:
+        """One small circle must leave most of the image untouched."""
+        image = _rgb_image(h=128, w=128)
+        aug = DifPresets(
+            probability=1.0,
+            random_state=4,
+            num_circles_range=(1, 1),
+            radius_range=(10, 10),
+            feather=3,
+        )
+        batch = _as_batch(image)
+        changed = (aug.apply_tensor_native(batch) - batch).abs().amax(dim=1)[0] > 1e-4
+        assert 0.0 < float(changed.float().mean()) < 0.25
+
+    def test_global_mode_touches_the_whole_image(self) -> None:
+        image = np.full((32, 32, 3), 120, dtype=np.uint8)
+        aug = DifPresets(probability=1.0, random_state=1, effect_mode="global")
+        batch = _as_batch(image)
+        changed = (aug.apply_tensor_native(batch) - batch).abs().amax(dim=1)[0] > 1e-4
+        assert float(changed.float().mean()) > 0.99
+
+    def test_shifts_are_applied_in_rgb_order(self) -> None:
+        """The numpy path used to apply the offsets in reversed channel order,
+        so warm cooled the image and cold warmed it."""
+        image = np.full((16, 16, 3), 120, dtype=np.uint8)
+        params = {"shifts": (30.0, 10.0, -10.0)}
+        out = DifPresets(probability=1.0)._effect_numpy(image, "warm", params)
+        assert [int(out[..., c].mean()) for c in range(3)] == [150, 130, 110]
+
+    def test_tensor_shifts_match_the_numpy_ones(self) -> None:
+        image = np.full((16, 16, 3), 120, dtype=np.uint8)
+        params = {"shifts": (30.0, 10.0, -10.0)}
+        aug = DifPresets(probability=1.0)
+        tensor = aug._effect_tensor(_as_batch(image), "warm", params)[0]
+        assert [round(float(tensor[c].mean()) * 255) for c in range(3)] == [150, 130, 110]
+
+    def test_warm_and_cold_move_the_image_in_opposite_directions(self) -> None:
+        image = np.full((16, 16, 3), 120, dtype=np.uint8)
+        aug = DifPresets(probability=1.0, random_state=0)
+        warm = aug._effect_numpy(image, "warm", aug._effect_params("warm"))
+        cold = aug._effect_numpy(image, "cold", aug._effect_params("cold"))
+        warm_bias = float(warm[..., 0].mean()) - float(warm[..., 2].mean())
+        cold_bias = float(cold[..., 0].mean()) - float(cold[..., 2].mean())
+        assert warm_bias > 0 > cold_bias
+
+    def test_tensor_path_is_deterministic_for_a_seed(self) -> None:
+        batch = _as_batch(_rgb_image())
+        first = DifPresets(probability=1.0, random_state=9).apply_tensor_native(batch)
+        second = DifPresets(probability=1.0, random_state=9).apply_tensor_native(batch)
+        assert torch.equal(first, second)
+
+    def test_output_stays_in_range(self) -> None:
+        batch = _as_batch(_rgb_image())
+        out = DifPresets(probability=1.0, random_state=2).apply_tensor_native(batch)
+        assert float(out.min()) >= 0.0
+        assert float(out.max()) <= 1.0
+
+
+class TestProCAMParity:
+    """CPU and tensor paths must run the same transform (FIX-0-9)."""
+
+    def test_profile_is_the_default(self) -> None:
+        assert ProCAM().camera_mode == "profile"
+
+    def test_invalid_mode_rejected(self) -> None:
+        with pytest.raises(ValueError, match="camera_mode"):
+            ProCAM(camera_mode="polaroid")
+
+    def test_mode_is_in_the_repr(self) -> None:
+        assert "camera_mode=wb_gamma" in repr(ProCAM(camera_mode="wb_gamma"))
+
+    @pytest.mark.parametrize("mode", ["profile", "wb_gamma"])
+    @pytest.mark.parametrize("seed", [1, 6, 13, 29])
+    def test_both_paths_agree(self, mode: str, seed: int) -> None:
+        cpu, tensor = _cpu_then_tensor(
+            ProCAM, _rgb_image(seed=seed), random_state=seed, camera_mode=mode
+        )
+        assert np.abs(cpu - tensor).mean() < 0.02
+        assert np.abs(cpu - tensor).max() < 0.1
+
+    def test_every_profile_is_reachable_on_the_tensor_path(self) -> None:
+        """The tensor path had no profiles at all; all five must run."""
+        seen = set()
+        for seed in range(60):
+            aug = ProCAM(probability=1.0, random_state=seed)
+            aug._rnd.random()  # the probability draw apply_tensor_native makes
+            profile, _params = aug._camera_plan()
+            seen.add(profile)
+        assert seen == {"cheap", "smartphone", "pro", "webcam", "darkroom"}
+
+    def test_profile_and_wb_gamma_are_different_transforms(self) -> None:
+        batch = _as_batch(_rgb_image())
+        full = ProCAM(probability=1.0, random_state=8).apply_tensor_native(batch)
+        simple = ProCAM(
+            probability=1.0, random_state=8, camera_mode="wb_gamma"
+        ).apply_tensor_native(batch)
+        assert not torch.equal(full, simple)
+
+    def test_white_balance_uses_rgb_order(self) -> None:
+        image = np.full((16, 16, 3), 100, dtype=np.uint8)
+        out = ProCAM(probability=1.0)._adjust_wb(image, (20.0, 0.0, -20.0))
+        assert int(out[..., 0].mean()) == 120
+        assert int(out[..., 1].mean()) == 100
+        assert int(out[..., 2].mean()) == 80
+
+    def test_tensor_path_is_deterministic_for_a_seed(self) -> None:
+        batch = _as_batch(_rgb_image())
+        first = ProCAM(probability=1.0, random_state=12).apply_tensor_native(batch)
+        second = ProCAM(probability=1.0, random_state=12).apply_tensor_native(batch)
+        assert torch.equal(first, second)
+
+    def test_output_stays_in_range(self) -> None:
+        batch = _as_batch(_rgb_image())
+        out = ProCAM(probability=1.0, random_state=3).apply_tensor_native(batch)
+        assert float(out.min()) >= 0.0
+        assert float(out.max()) <= 1.0
+
+
+class TestFeatherKernelFitsSmallImages:
+    """A feather wider than the image used to crash torch's reflect padding."""
+
+    @pytest.mark.parametrize("size", [16, 32, 48])
+    def test_default_feather_runs_on_small_images(self, size: int) -> None:
+        batch = _as_batch(_rgb_image(h=size, w=size))
+        out = DifPresets(probability=1.0, random_state=1).apply_tensor_native(batch)
+        assert out.shape == batch.shape
+        assert torch.isfinite(out).all()
+
+    @pytest.mark.parametrize("size", [32, 48])
+    def test_both_paths_still_agree_when_the_kernel_is_capped(self, size: int) -> None:
+        cpu, tensor = _cpu_then_tensor(
+            DifPresets, _rgb_image(h=size, w=size, seed=1), random_state=5
+        )
+        assert np.abs(cpu - tensor).mean() < 0.02

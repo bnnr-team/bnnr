@@ -69,6 +69,7 @@ from lib import (  # noqa: E402
     _result_entry,
     _run_config,
     export_attention_maps,
+    force_utf8_stdout,
     git_head,
     load_results,
     save_results,
@@ -106,13 +107,14 @@ DATASET_DEFAULTS: dict[str, dict[str, Any]] = {
 # Default conditions per dataset
 _GENERALIZATION_CONDITIONS = [
     "no_aug", "randaugment", "icd_only", "aicd_only", "bnnr_random", "bnnr_xai",
+    "bnnr_sh", "bnnr_diagnosis",
 ]
 
 DATASET_DEFAULT_CONDITIONS: dict[str, list[str]] = {
     "imagewoof": [
         "no_aug", "randaugment", "trivialaugment", "autoaugment",
         "churchnoise_only", "icd_only", "aicd_only", "icd_aicd_fixed",
-        "bnnr_random", "bnnr_xai",
+        "bnnr_random", "bnnr_xai", "bnnr_sh", "bnnr_diagnosis",
     ],
     "pets":      _GENERALIZATION_CONDITIONS,
     "flowers102":_GENERALIZATION_CONDITIONS,
@@ -248,9 +250,40 @@ CONDITIONS: dict[str, ConditionSpec] = {
         augmentation_names=("ICD", "AICD", "ChurchNoise"),
         max_iterations=N_CANDIDATES,
     ),
+    "bnnr_sh": ConditionSpec(
+        id="bnnr_sh",
+        label="BNNR successive halving (equal compute)",
+        strategy="bnnr_branch_search",
+        description=(
+            "BNNR branch search under search_policy='successive_halving'. "
+            "Same augmentation pool and same total budget as bnnr_xai, but weak "
+            "branches die after a short rung instead of each taking a flat B/(1+N), "
+            "so the surviving candidate receives more training. "
+            "bnnr_xai vs bnnr_sh isolates the epoch split from the selection rule."
+        ),
+        augmentation_names=("ICD", "AICD", "ChurchNoise"),
+        max_iterations=N_CANDIDATES,
+    ),
+    "bnnr_diagnosis": ConditionSpec(
+        id="bnnr_diagnosis",
+        label="BNNR diagnosis-driven (equal compute)",
+        strategy="bnnr_branch_search",
+        description=(
+            "BNNR under search_policy='diagnosis_single': the attention diagnosis "
+            "names one candidate and it trains the entire budget. No arbitration on "
+            "selection-validation accuracy, and no epochs spent on arms that are "
+            "thrown away. Requires calibrated thresholds via --diagnosis-profile; "
+            "refuses to run without them."
+        ),
+        augmentation_names=("ICD", "AICD", "ChurchNoise"),
+        max_iterations=N_CANDIDATES,
+    ),
 }
 
-FILL_USING_CONDITIONS = {"icd_only", "aicd_only", "icd_aicd_fixed", "bnnr_random", "bnnr_xai"}
+FILL_USING_CONDITIONS = {
+    "icd_only", "aicd_only", "icd_aicd_fixed",
+    "bnnr_random", "bnnr_xai", "bnnr_sh", "bnnr_diagnosis",
+}
 
 
 _POLICY_BY_CONDITION = {
@@ -1044,61 +1077,81 @@ def _run_bnnr_equal_compute(
     )
     print(f"  [XAI cache] {n_cached} maps cached to {xai_cache_dir}", flush=True)
 
-    # ---- Phases 1..N_CANDIDATES ----
-    candidate_scores: list[float] = []
-    candidate_states: list[dict[str, Any]] = []
-    candidate_val_metrics: list[dict[str, float]] = []
+    # ---- Candidate phases, structured by the search policy ----
+    # The plan comes from bnnr.training.search_policy rather than being
+    # rebuilt here, so a benchmark condition cannot drift from the policy the
+    # library ships. xai and random are both "exhaustive" in structure and
+    # differ only in how the winner is picked at the end.
+    plan = _plan_for_mode(selection_mode, epochs_per_phase, args)
+    print(
+        f"  [policy {plan.policy}] {len(plan.rungs)} rung(s), "
+        f"{plan.total_epochs} candidate epochs, "
+        f"{plan.deployed_epochs} to a surviving candidate",
+        flush=True,
+    )
 
-    for i in range(N_CANDIDATES):
-        cand_name = _CANDIDATE_NAMES[i]
-        print(
-            f"  [Phase {i+1}/{N_CANDIDATES} — {cand_name}] {epochs_per_phase} epochs...",
-            flush=True,
-        )
-        cand_adapter = _build_adapter(
-            arch=args.arch,
-            num_classes=num_classes,
-            pretrained=args.pretrained,
-            lr=args.lr,
-            device=cfg.device,
-            epochs=epochs_per_phase,
-        )
-        # Restore only model weights; fresh optimizer+scheduler per phase
-        cand_adapter.model.load_state_dict(baseline_state["model"])
+    candidate_scores: list[float] = [float("-inf")] * N_CANDIDATES
+    candidate_states: list[dict[str, Any] | None] = [None] * N_CANDIDATES
+    candidate_val_metrics: list[dict[str, float]] = [{} for _ in range(N_CANDIDATES)]
+    candidate_epochs: list[int] = [0] * N_CANDIDATES
 
-        from bnnr.augmentations import ChurchNoise
-        from bnnr.icd import AICD, ICD
+    for rung_idx, rung in enumerate(plan.rungs):
+        for cand_name in rung.candidates:
+            i = _CANDIDATE_NAMES.index(cand_name)
+            rung_epochs = rung.epochs
+            print(
+                f"  [Rung {rung_idx+1}/{len(plan.rungs)} — {cand_name}] "
+                f"{rung_epochs} epochs...",
+                flush=True,
+            )
+            cand_adapter = _build_adapter(
+                arch=args.arch,
+                num_classes=num_classes,
+                pretrained=args.pretrained,
+                lr=args.lr,
+                device=cfg.device,
+                epochs=rung_epochs,
+            )
+            # A survivor continues from its own weights; a first-rung candidate
+            # starts from the baseline. Successive halving is about giving
+            # survivors *more* training, not repeating the first rung.
+            resume = candidate_states[i] or baseline_state
+            cand_adapter.model.load_state_dict(resume["model"])
 
-        _cand_model = cand_adapter.get_model()
-        _cand_layers = cand_adapter.get_target_layers()
-        phase_candidates = [
-            ICD(model=_cand_model, target_layers=_cand_layers,
-                threshold_percentile=75.0, probability=0.5,
-                random_state=seed, cache=xai_cache,
-                fill_strategy=args.fill_strategy),
-            AICD(model=_cand_model, target_layers=_cand_layers,
-                 threshold_percentile=75.0, probability=0.5,
-                 random_state=seed + 1, cache=xai_cache,
-                 fill_strategy=args.fill_strategy),
-            ChurchNoise(probability=0.5, intensity=0.5,
-                        noise_strength_range=(3.0, 8.0), random_state=seed + 2),
-        ]
-        aug = phase_candidates[i]
+            from bnnr.augmentations import ChurchNoise
+            from bnnr.icd import AICD, ICD
 
-        val_metrics, _, state = _run_epochs_on_loader(
-            adapter=cand_adapter,
-            train_loader=train_loader,
-            eval_loader=selection_val_loader,
-            augmentations=[aug],
-            epochs=epochs_per_phase,
-            selection_metric="accuracy",
-            log_prefix=f"[{cand_name}] ",
-        )
-        score = float(val_metrics.get("accuracy", 0.0))
-        candidate_scores.append(score)
-        candidate_states.append(copy.deepcopy(cand_adapter.state_dict()))
-        candidate_val_metrics.append(copy.deepcopy(val_metrics))
-        print(f"  [{cand_name}] selection_val accuracy={score:.4f}", flush=True)
+            _cand_model = cand_adapter.get_model()
+            _cand_layers = cand_adapter.get_target_layers()
+            phase_candidates = [
+                ICD(model=_cand_model, target_layers=_cand_layers,
+                    threshold_percentile=75.0, probability=0.5,
+                    random_state=seed, cache=xai_cache,
+                    fill_strategy=args.fill_strategy),
+                AICD(model=_cand_model, target_layers=_cand_layers,
+                     threshold_percentile=75.0, probability=0.5,
+                     random_state=seed + 1, cache=xai_cache,
+                     fill_strategy=args.fill_strategy),
+                ChurchNoise(probability=0.5, intensity=0.5,
+                            noise_strength_range=(3.0, 8.0), random_state=seed + 2),
+            ]
+            aug = phase_candidates[i]
+
+            val_metrics, _, state = _run_epochs_on_loader(
+                adapter=cand_adapter,
+                train_loader=train_loader,
+                eval_loader=selection_val_loader,
+                augmentations=[aug],
+                epochs=rung_epochs,
+                selection_metric="accuracy",
+                log_prefix=f"[{cand_name}] ",
+            )
+            score = float(val_metrics.get("accuracy", 0.0))
+            candidate_scores[i] = score
+            candidate_states[i] = copy.deepcopy(cand_adapter.state_dict())
+            candidate_val_metrics[i] = copy.deepcopy(val_metrics)
+            candidate_epochs[i] += rung_epochs
+            print(f"  [{cand_name}] selection_val accuracy={score:.4f}", flush=True)
 
     # ---- Selection ----
     if selection_mode == "xai":
@@ -1116,6 +1169,31 @@ def _run_bnnr_equal_compute(
         print(
             f"  [Random selection] chosen={selected_candidate} (idx={best_idx})  "
             f"score={selection_val_metric:.4f}",
+            flush=True,
+        )
+    elif selection_mode == "successive_halving":
+        # The policy already spent the budget; the surviving candidate with the
+        # best score wins. Only rung survivors have a score, so eliminated arms
+        # cannot be selected.
+        best_idx = int(max(range(N_CANDIDATES), key=lambda k: candidate_scores[k]))
+        selected_candidate = _CANDIDATE_NAMES[best_idx]
+        selection_val_metric = candidate_scores[best_idx]
+        print(
+            f"  [Successive halving] survivor={selected_candidate}  "
+            f"score={selection_val_metric:.4f}  epochs={candidate_epochs[best_idx]}",
+            flush=True,
+        )
+    elif selection_mode == "diagnosis_single":
+        # The plan already narrowed to one candidate, so there is nothing to
+        # arbitrate. Picking by score here would reintroduce exactly the
+        # criterion this condition exists to avoid.
+        trained = [k for k in range(N_CANDIDATES) if candidate_states[k] is not None]
+        best_idx = trained[0]
+        selected_candidate = _CANDIDATE_NAMES[best_idx]
+        selection_val_metric = candidate_scores[best_idx]
+        print(
+            f"  [Diagnosis] candidate={selected_candidate}  "
+            f"score={selection_val_metric:.4f}  epochs={candidate_epochs[best_idx]}",
             flush=True,
         )
     else:
@@ -1252,6 +1330,18 @@ def run_condition(
             condition=spec, seed=seed, args=args,
             output_root=run_output_root, selection_mode="random", num_classes=num_classes,
         )
+    if condition_id == "bnnr_sh":
+        return _run_bnnr_equal_compute(
+            condition=spec, seed=seed, args=args,
+            output_root=run_output_root, selection_mode="successive_halving",
+            num_classes=num_classes,
+        )
+    if condition_id == "bnnr_diagnosis":
+        return _run_bnnr_equal_compute(
+            condition=spec, seed=seed, args=args,
+            output_root=run_output_root, selection_mode="diagnosis_single",
+            num_classes=num_classes,
+        )
 
     # ICD/AICD conditions use warmup+aug design so saliency comes from a
     # trained (not random-weight) model — methodologically equivalent to
@@ -1376,6 +1466,7 @@ def _estimate(args: argparse.Namespace, n_seeds: int, conds: list[str], n_strate
 
 
 def main() -> None:
+    force_utf8_stdout()
     parser = argparse.ArgumentParser(
         description="Grand benchmark: BNNR across 6 datasets × 2 regimes (paper-quality)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1413,6 +1504,14 @@ def main() -> None:
         help="Comma-separated seeds (default: dataset-specific)",
     )
     parser.add_argument("--arch", default="resnet18", choices=["resnet18", "resnet50"])
+    parser.add_argument(
+        "--diagnosis-profile",
+        default=None,
+        help=(
+            "PATH or PATH:NAME of a calibrated diagnosis threshold profile. "
+            "Required by the bnnr_diagnosis condition; there is deliberately no default."
+        ),
+    )
     parser.add_argument(
         "--fill-strategy", "--fill-strategies",
         dest="fill_strategy",
@@ -1662,3 +1761,76 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def _plan_for_mode(selection_mode: str, epochs_per_phase: int, args: argparse.Namespace):
+    """Rung plan for a benchmark condition, from the library's own policies.
+
+    ``xai`` and ``random`` are structurally identical to ``exhaustive`` — every
+    candidate trains ``epochs_per_phase`` — and differ only in how the winner is
+    picked afterwards. The two new conditions map onto the policies of the same
+    name.
+
+    ``diagnosis_single`` needs a diagnosis, which needs calibrated thresholds.
+    There are none by default and this refuses rather than guessing, so the
+    condition is runnable only once ``--diagnosis-profile`` names a calibrated
+    set. That is the intended sequencing: the harness is ready before the
+    thresholds exist.
+    """
+    from bnnr.config_model import BNNRConfig
+    from bnnr.training.search_policy import plan_search
+
+    policy = {
+        "xai": "exhaustive",
+        "random": "exhaustive",
+        "successive_halving": "successive_halving",
+        "diagnosis_single": "diagnosis_single",
+    }.get(selection_mode)
+    if policy is None:
+        raise ValueError(f"Unknown selection_mode {selection_mode!r}")
+
+    diagnosis = None
+    kwargs: dict[str, Any] = {"m_epochs": epochs_per_phase, "search_policy": policy}
+    if policy == "diagnosis_single":
+        profile = getattr(args, "diagnosis_profile", None)
+        if not profile:
+            raise SystemExit(
+                "condition 'bnnr_diagnosis' needs calibrated diagnosis thresholds. "
+                "Pass --diagnosis-profile PATH[:NAME]. There is deliberately no "
+                "default: an uncalibrated cut point driving selection is the defect "
+                "this programme exists to remove. See docs/diagnosis.md."
+            )
+        kwargs["diagnosis"] = _load_profile(profile)
+        diagnosis = _harness_diagnosis(kwargs["diagnosis"])
+
+    return plan_search(
+        tuple(_CANDIDATE_NAMES), BNNRConfig(**kwargs), diagnosis=diagnosis
+    )
+
+
+def _load_profile(spec: str):
+    """Load a named threshold profile from ``PATH`` or ``PATH:NAME``."""
+    from bnnr.config import load_diagnosis_profile
+
+    path, _, name = spec.partition(":")
+    return load_diagnosis_profile(Path(path), name or None)
+
+
+def _harness_diagnosis(diagnosis_config):
+    """Placeholder diagnosis so the plan can be built before #417 exists.
+
+    The harness does not yet compute saliency statistics on the baseline model,
+    so there is nothing real to diagnose from. Rather than fabricate a regime,
+    this raises: a benchmark row produced from an invented diagnosis would be
+    worse than no row.
+
+    Wiring the real computation is the first thing FIX-7-2 (#417) does, and it
+    needs the calibrated thresholds this same flag supplies. Until then the
+    condition exists, resumes and is documented, but does not run.
+    """
+    raise SystemExit(
+        "condition 'bnnr_diagnosis' is wired but cannot run yet: the harness does "
+        "not compute the baseline saliency statistics the diagnosis reads. That is "
+        "FIX-7-2 (#417), which also supplies the thresholds. Refusing rather than "
+        "inventing a regime."
+    )
