@@ -749,9 +749,10 @@ def group_balanced_subset(examples: list[Example], seed: int, per_group: int
     for e in examples:
         by_g.setdefault(e.group, []).append(e)
     out: list[Example] = []
+    actual_per_group = min(per_group, min(len(lst) for lst in by_g.values()))
     for g, lst in by_g.items():
         rng.shuffle(lst)
-        out.extend(lst[:per_group])
+        out.extend(lst[:actual_per_group])
     rng.shuffle(out)
     return out
 
@@ -883,6 +884,14 @@ def run_condition(condition: str, base_state: dict[str, Any], spec: DatasetSpec,
 
     elif condition == "dfr":
         # retrain last layer on a group-balanced subset of the *val* split
+        #
+        # Known deviations from the published DFR method,
+        # which is why this arm reaches ~83 worst-group accuracy against the
+        # published 92.9:
+        #   - no l1 regularisation on the retrained last layer
+        #   - no averaging over multiple retrains
+        #   - a weaker base feature extractor than the original paper's
+
         bal = group_balanced_subset(val_ex, seed, args.dfr_per_group)
         bal_loader = DataLoader(build_torch_ds(bal, args.img_size, True),
                                 batch_size=args.batch_size, shuffle=True, num_workers=nw)

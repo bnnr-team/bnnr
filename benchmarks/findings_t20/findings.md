@@ -129,9 +129,9 @@ On Waterbirds the within-arm contrast — same arm, same selection rule, only th
 
 ## III.6 Absolute context, and the assumption asymmetry
 
-Published worst-group accuracies on Waterbirds: ERM 63.7–74.9 · JTT 86.7 · CnC 88.5 · SSA 89.0 · SUBG 89.1 · Group DRO 91.4 · DFR 92.9. Ours: base 59.1 · erm_continue 65.1 · bnnr_random 63.9 · bnnr_xai 64.9 · dfr-style 83.4.
+Published worst-group accuracies on Waterbirds: ERM 63.7–74.9 · JTT 86.7 · CnC 88.5 · SSA 89.0 · SUBG 89.1 · Group DRO 91.4 · DFR 92.9. Ours: base 59.1 · erm_continue 65.1 · bnnr_random 63.9 · bnnr_xai 64.9 · dfr-style 85.75 (post-fix).
 
-**Every one of our repair conditions falls below the published mitigation range, and the BNNR arms fall far below it.** "BNNR matches continued ERM" is a within-protocol relative statement; it does not mean BNNR is competitive on Waterbirds. Our DFR-style baseline is itself ~9.5 pp below published DFR, for four identified reasons — a group-balancing implementation defect, no ℓ1 regularisation, no averaging over retrains, and a weaker base extractor — three of which the DFR paper's own ablations price.
+**Every one of our repair conditions falls below the published mitigation range, and the BNNR arms fall far below it.** "BNNR matches continued ERM" is a within-protocol relative statement; it does not mean BNNR is competitive on Waterbirds. Our DFR-style baseline is itself ~7.2 pp below published DFR, for three remaining reasons — no ℓ1 regularisation, no averaging over retrains, and a weaker base extractor (all three priced by the DFR paper's own ablations) — after fixing a group-balancing implementation defect that previously accounted for part of the gap (see `findings_waterbirds.md` §3.2).
 
 **The asymmetry runs the other way, and it matters.** These methods consume different supervision: DFR trains its last layer on a group-labelled, group-balanced held-out set; Group DRO uses group labels during training; JTT and CnC use them for tuning. **BNNR uses no group labels anywhere.** It sits in a strictly weaker-assumption class than every method in that table, so the 18 pp gap to DFR is not an apples-to-apples defeat. This is the strongest legitimate framing available and it costs nothing in honesty — but it also defines the constraint that any fix must respect (Part IV).
 

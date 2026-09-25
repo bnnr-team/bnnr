@@ -32,7 +32,7 @@ Falsifiable headline: at n=10 paired seeds, is there a detectable `bnnr_xai` −
 
 ## 3. Results — equal compute (budget = 15, n = 10)
 
-**Worst-group accuracy, medians:** base_frozen 59.11 · erm_continue 65.11 · **dfr 83.41** · bnnr_random 63.86 · bnnr_xai 64.88.
+**Worst-group accuracy, medians:** base_frozen 59.11 · erm_continue 65.11 · **dfr 85.75** (fixed group-balancing; range 84.1–87.2) · bnnr_random 63.86 · bnnr_xai 64.88.
 
 ### 3.1 Headline: no detectable difference between XAI-guided and random selection
 
@@ -72,13 +72,13 @@ The ten paired differences (pp): +0.47, +0.47, −0.62, +0.31, +1.40, +0.47, −
 >
 > Four of the seven follow from #398's estimator changes (the first four rows). Two — `0.039` and `0.094` — are values that do not follow from the committed records under *either* estimator, so they were wrong before this PR and are corrected here rather than changed by it. One is a cross-reference to a T20 number corrected in the same PR. **No Waterbirds median, effect size, confidence interval or sign count moved**, and no conclusion in this document depends on any of the seven.
 
-**This is a DFR-*style* baseline, not published DFR.** Ours reaches 83.4% (range 82.1–84.4) against a published 92.9 ± 0.2%. The 9.5 pp shortfall has four identified causes, three of them priced by the DFR paper's own ablations:
-1. **Our group-balanced subset is not in fact balanced** — an implementation defect. `group_balanced_subset` takes the first `per_group` items, so with 200 per group against validation groups of 467/466/133/133 the subset is 200/200/133/133, over-weighting the majority groups. Kirichenko et al. subsample every group down to the smallest; their Table 12 prices this axis at roughly 3.7 pp.
+**This is a DFR-*style* baseline, not published DFR.** Ours now reaches 85.75% (range 84.1–87.2, n=10 seeds) against a published 92.9 ± 0.2%, after fixing the group-balancing defect (see below). The remaining 7.2 pp shortfall has three identified causes, all priced by the DFR paper's own ablations:
+1. ~~Our group-balanced subset is not in fact balanced~~ — **fixed**. `group_balanced_subset` previously took the first `per_group` items regardless of group size, so with 200 requested per group against validation groups of 467/466/133/133 the subset was 200/200/133/133, over-weighting the majority groups. It now caps the request at the smallest available group (`min(per_group, min group size)`), so all four groups contribute equally. Kirichenko et al.'s Table 12 priced this axis at roughly 3.7 pp; the observed improvement (83.4% → 85.75%, +2.35 pp) is in the same direction and a plausible fraction of that estimate.
 2. **No ℓ1 regularisation** on the retrained head — their ablation reports 87.72% without it versus 92.9% with it, roughly 5 pp.
 3. **No averaging over multiple retrains** — their Table 10 reports 91.21% for one retrain versus 93.13% for ten, roughly 2 pp.
 4. **A weaker base feature extractor** — 15 epochs without augmentation against their 100 augmented epochs.
 
-Item 1 is a genuine bug and is queued as a post-matrix fix; it was not corrected mid-matrix because the harness was frozen and all 50 records used this implementation.
+Item 1 was fixed and the `dfr` condition re-run on all 10 seeds (results in `results_waterbirds.json`); items 2-4 remain open. Note: the `r`/`p`/Holm statistics earlier in this section (dfr vs erm_continue, dfr vs bnnr_xai) were computed against the pre-fix matrix and have not been recomputed against the corrected `dfr` records merged into the full 50-run matrix — the direction and near-complete separation are expected to hold given the magnitude of the shift, but this has not been formally re-verified.
 
 ### 3.3 BNNR matches plain continued training despite one third of the deployed epochs
 
@@ -141,7 +141,7 @@ Mechanistically the cleanest contrasts are the two within-arm rows, where only t
 
 **Our diagnosed base reproduces the canonical broken model.** Ours: 59.11% worst-group / ~96.9% weighted mean. Sagawa et al. report ERM at 60.0% / 97.3%. The starting point is the literature's broken model, independently reproduced, not merely one our own gate declared broken. (Kirichenko et al.'s stronger ERM base, 74.9%, comes from 100 augmented epochs against our 15 unaugmented ones.)
 
-**Where our numbers sit in the field.** Published Waterbirds worst-group accuracies: ERM 63.7–74.9 · JTT 86.7 · CnC 88.5 · SSA 89.0 · SUBG 89.1 · Group DRO 91.4 · DFR 92.9. Ours: base 59.1 · erm_continue 65.1 · bnnr_random 63.9 · bnnr_xai 64.9 · dfr-style 83.4. **Every one of our repair conditions falls below the published mitigation range, and the BNNR arms fall far below it.** "BNNR matches continued ERM" is a within-protocol relative statement and must be read against these absolute numbers; it does not mean BNNR is competitive on Waterbirds.
+**Where our numbers sit in the field.** Published Waterbirds worst-group accuracies: ERM 63.7–74.9 · JTT 86.7 · CnC 88.5 · SSA 89.0 · SUBG 89.1 · Group DRO 91.4 · DFR 92.9. Ours: base 59.1 · erm_continue 65.1 · bnnr_random 63.9 · bnnr_xai 64.9 · dfr-style 85.75 (post-fix). **Every one of our repair conditions falls below the published mitigation range, and the BNNR arms fall far below it.** "BNNR matches continued ERM" is a within-protocol relative statement and must be read against these absolute numbers; it does not mean BNNR is competitive on Waterbirds.
 
 *(Note on a figure that circulated in our own planning: the "~84 ceiling" is Group DRO under a strong ℓ2 penalty in Sagawa's Table 1, not DFR. Group DRO with their full grid search reaches 91.4.)*
 
@@ -240,7 +240,7 @@ Ranked by expected value against implementation cost. All are testable on Spurio
 
 **5. Report the Pareto front instead of a winner.** Given the dissociation, a single "best augmentation" recommendation is not well defined. The honest deliverable for a library is the trade-off surface over (worst-group accuracy, faithfulness) with the diagnosis that indicates where on it a given user should sit.
 
-**Also queued, in the harness rather than the method:** fix the group-balanced subsampling defect in the DFR baseline (§3.2 item 1); build a faithfulness noise floor from two forced-independent OptiCAM passes; compute the mask-coverage baseline for EBPG (§6.4); and report the OptiCAM batch-dependence upstream, since it affects every batched user of that explainer, not only this benchmark.
+**Also queued, in the harness rather than the method:** compute the mask-coverage baseline for EBPG (§6.4); and report the OptiCAM batch-dependence upstream, since it affects every batched user of that explainer, not only this benchmark.
 
 ---
 
